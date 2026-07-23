@@ -211,6 +211,11 @@ export default defineConfig({
               priority: 11,
             },
             {
+              name: "vendor-beautiful-mermaid",
+              test: /[\\/](?:beautiful-mermaid|elkjs|entities)(?:@|[\\/])/,
+              priority: 13,
+            },
+            {
               name: "ui-primitives",
               test: /src[\\/]components[\\/]ui[\\/]/,
               priority: 10,

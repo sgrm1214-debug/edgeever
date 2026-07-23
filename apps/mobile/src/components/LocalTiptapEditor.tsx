@@ -1,6 +1,7 @@
 'use dom';
 
 import "mermaid/dist/mermaid.min.js";
+import { renderMermaidSVG, THEMES } from "beautiful-mermaid";
 import Image from "@tiptap/extension-image";
 import CodeBlock from "@tiptap/extension-code-block";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -78,6 +79,21 @@ const CHANGE_IDLE_MS = 500;
 const TRANSIENT_IMAGE_UPLOAD_META = "edgeeverImageUploadPlaceholder";
 const ignoreSearchResult = async () => undefined;
 
+const getMobileMermaidTheme = (theme: "light" | "dark") => THEMES[theme === "dark" ? "zinc-dark" : "zinc-light"];
+
+const renderWithBeautifulMermaid = (source: string, theme: "light" | "dark") => {
+  try {
+    return renderMermaidSVG(source, {
+      ...getMobileMermaidTheme(theme),
+      transparent: true,
+      font: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      padding: 24,
+    });
+  } catch {
+    return null;
+  }
+};
+
 export default function LocalTiptapEditor(props: LocalTiptapEditorProps | MermaidRendererProps) {
   return props.mode === "mermaid-renderer"
     ? <MermaidRenderRuntime {...props} />
@@ -112,6 +128,11 @@ const MermaidRenderRuntime = (props: MermaidRendererProps) => {
       const results: Array<{ source: string; svg: string | null }> = [];
       for (const source of sources) {
         try {
+          const beautifulSvg = renderWithBeautifulMermaid(source, props.theme);
+          if (beautifulSvg) {
+            results.push({ source, svg: inlineMermaidSvgStyles(beautifulSvg) });
+            continue;
+          }
           const valid = await mermaid.parse(source, { suppressErrors: true });
           if (!valid) {
             throw new Error("Invalid Mermaid diagram");
@@ -854,6 +875,10 @@ const createMobileCodeBlockExtension = (
           preview.replaceChildren(message);
           void loadMermaid()
             .then(async (mermaid) => {
+              const beautifulSvg = renderWithBeautifulMermaid(source, theme);
+              if (beautifulSvg) {
+                return { svg: beautifulSvg };
+              }
               mermaid.initialize({
                 startOnLoad: false,
                 securityLevel: "strict",

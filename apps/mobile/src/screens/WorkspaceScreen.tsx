@@ -3102,9 +3102,30 @@ const SystemInfoCard = ({ embedded = false }: { embedded?: boolean }) => {
           <ActionButton label={copied ? "已复制" : "复制信息"} onPress={copySystemInfo}>
             {copied ? <ShieldCheck color="#047857" size={16} /> : <Copy color="#0f172a" size={16} />}
           </ActionButton>
-          {infoItems.map((item) => (
-            <PanelRow key={item.label} label={item.label} value={item.value} />
-          ))}
+          <View style={styles.systemInfoRows}>
+            {Array.from({ length: Math.ceil(infoItems.length / 3) }, (_, rowIndex) => {
+              const rowItems = infoItems.slice(rowIndex * 3, rowIndex * 3 + 3);
+
+              return (
+                <View
+                  key={`system-info-row-${rowIndex}`}
+                  style={[styles.systemInfoRow, rowIndex === Math.ceil(infoItems.length / 3) - 1 && styles.systemInfoRowLast]}
+                >
+                  {rowItems.map((item, itemIndex) => (
+                    <View
+                      key={item.label}
+                      style={[styles.systemInfoCell, itemIndex < rowItems.length - 1 && styles.systemInfoCellDivider]}
+                    >
+                      <Text numberOfLines={1} style={styles.panelLabel}>{item.label}</Text>
+                      <Text numberOfLines={1} selectable style={styles.systemInfoListValue}>
+                        {item.value}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
         </View>
       ) : null}
     </View>
@@ -7126,6 +7147,35 @@ const baseWorkspaceStyles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     padding: 14,
+  },
+  systemInfoRows: {
+    borderTopColor: "#e2e8f0",
+    borderTopWidth: 1,
+  },
+  systemInfoRow: {
+    borderBottomColor: "#e2e8f0",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+  },
+  systemInfoRowLast: {
+    borderBottomWidth: 0,
+  },
+  systemInfoCell: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+  },
+  systemInfoCellDivider: {
+    borderRightColor: "#e2e8f0",
+    borderRightWidth: 1,
+  },
+  systemInfoListValue: {
+    color: "#0f172a",
+    fontFamily: "monospace",
+    fontSize: 12,
+    fontWeight: "700",
   },
   panelLinkRow: {
     alignItems: "center",

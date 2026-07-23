@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "./ThemeProvider";
 
 type MermaidModule = typeof import("mermaid")["default"];
+type BeautifulMermaidModule = typeof import("beautiful-mermaid");
 
 let mermaidModulePromise: Promise<MermaidModule> | null = null;
 let mermaidRenderSequence = 0;
+let beautifulMermaidModulePromise: Promise<BeautifulMermaidModule> | null = null;
 
 const loadMermaid = () => {
   if (!mermaidModulePromise) {
@@ -17,8 +20,16 @@ const loadMermaid = () => {
   return mermaidModulePromise;
 };
 
+const loadBeautifulMermaid = () => {
+  if (!beautifulMermaidModulePromise) {
+    beautifulMermaidModulePromise = import("beautiful-mermaid");
+  }
+  return beautifulMermaidModulePromise;
+};
+
 export const MermaidCodeBlock = ({ editor, node }: NodeViewProps) => {
   const { t } = useTranslation();
+  const { mermaidTheme } = useTheme();
   const language = typeof node.attrs.language === "string" ? node.attrs.language.toLowerCase() : "plaintext";
   const source = node.textContent.trim();
   const isMermaid = language === "mermaid";
@@ -37,42 +48,56 @@ export const MermaidCodeBlock = ({ editor, node }: NodeViewProps) => {
     const timer = window.setTimeout(() => {
       setRenderState("loading");
 
-      void loadMermaid()
-        .then(async (mermaid) => {
-          const dark = document.documentElement.classList.contains("dark");
-          const ink = dark ? "#cbd5e1" : "#26384a";
-          const surface = dark ? "#0f172a" : "#ffffff";
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: "strict",
-            suppressErrorRendering: true,
-            theme: "base",
-            themeVariables: {
-              background: "transparent",
-              primaryColor: surface,
-              primaryTextColor: ink,
-              primaryBorderColor: ink,
-              lineColor: ink,
-              textColor: ink,
-              mainBkg: surface,
-              nodeBorder: ink,
-              edgeLabelBackground: surface,
-              actorBkg: surface,
-              actorBorder: ink,
-              actorTextColor: ink,
-              signalColor: ink,
-              signalTextColor: ink,
-            },
-          });
-          const valid = await mermaid.parse(source, { suppressErrors: true });
-          if (!valid) {
-            throw new Error("Invalid Mermaid diagram");
+      void loadBeautifulMermaid()
+        .then(({ renderMermaidSVG, THEMES }) => {
+          try {
+            return renderMermaidSVG(source, {
+              ...THEMES[mermaidTheme],
+              transparent: true,
+              font: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+              padding: 24,
+            });
+          } catch {
+            return null;
           }
-
-          mermaidRenderSequence += 1;
-          return mermaid.render(`edgeever-mermaid-${mermaidRenderSequence}`, source);
         })
-        .then(({ svg: nextSvg }) => {
+        .then((beautifulSvg) => {
+          if (beautifulSvg) return beautifulSvg;
+          return loadMermaid().then(async (mermaid) => {
+            const palette = (await loadBeautifulMermaid()).THEMES[mermaidTheme];
+            mermaid.initialize({
+              startOnLoad: false,
+              securityLevel: "strict",
+              suppressErrorRendering: true,
+              theme: "base",
+              themeVariables: {
+                background: palette.bg,
+                primaryColor: palette.surface ?? palette.bg,
+                primaryTextColor: palette.fg,
+                primaryBorderColor: palette.border ?? palette.fg,
+                lineColor: palette.line ?? palette.fg,
+                textColor: palette.fg,
+                mainBkg: palette.bg,
+                nodeBorder: palette.border ?? palette.fg,
+                edgeLabelBackground: palette.bg,
+                actorBkg: palette.surface ?? palette.bg,
+                actorBorder: palette.border ?? palette.fg,
+                actorTextColor: palette.fg,
+                signalColor: palette.line ?? palette.fg,
+                signalTextColor: palette.fg,
+              },
+            });
+            const valid = await mermaid.parse(source, { suppressErrors: true });
+            if (!valid) {
+              throw new Error("Invalid Mermaid diagram");
+            }
+
+            mermaidRenderSequence += 1;
+            const { svg: fallbackSvg } = await mermaid.render(`edgeever-mermaid-${mermaidRenderSequence}`, source);
+            return fallbackSvg;
+          });
+        })
+        .then((nextSvg) => {
           if (!cancelled) {
             setSvg(nextSvg);
             setRenderState("ready");
@@ -90,7 +115,7 @@ export const MermaidCodeBlock = ({ editor, node }: NodeViewProps) => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isMermaid, source]);
+  }, [isMermaid, mermaidTheme, source]);
 
   return (
     <NodeViewWrapper

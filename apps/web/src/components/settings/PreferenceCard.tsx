@@ -13,6 +13,7 @@ import {
   type AppLocalePreference,
 } from "@/i18n";
 import { ShortcutSettingsItem } from "./ShortcutSettingsItem";
+import { MERMAID_THEME_NAMES, useTheme } from "../ThemeProvider";
 
 interface PreferenceCardProps {
   imageCompressionEnabled: boolean;
@@ -28,6 +29,7 @@ export const PreferenceCard = ({
   onShortcutSettingsChange,
 }: PreferenceCardProps) => {
   const { t } = useTranslation();
+  const { mermaidTheme, setMermaidTheme } = useTheme();
   const [activeLocalePreference, setActiveLocalePreference] = useState<AppLocalePreference>(() => getAppLocalePreference());
 
   const handleLocalePreferenceChange = (preference: AppLocalePreference) => {
@@ -62,6 +64,27 @@ export const PreferenceCard = ({
                 {supportedLocales.map((locale) => (
                   <SelectItem key={locale} value={locale}>
                     {localeLabels[locale]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="flex min-h-16 flex-col items-start gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-900">{t("settings.mermaidThemeTitle")}</div>
+            <div className="mt-0.5 text-xs leading-4 text-slate-500">{t("settings.mermaidThemeDescription")}</div>
+          </div>
+          <div className="w-full shrink-0 sm:w-44">
+            <Select value={mermaidTheme} onValueChange={(value) => setMermaidTheme(value as typeof mermaidTheme)}>
+              <SelectTrigger aria-label={t("settings.mermaidThemeTitle")} className="h-9 bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MERMAID_THEME_NAMES.map((theme) => (
+                  <SelectItem key={theme} value={theme}>
+                    {t(`settings.mermaidThemes.${theme}`)}
                   </SelectItem>
                 ))}
               </SelectContent>

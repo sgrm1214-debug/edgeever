@@ -8,12 +8,17 @@ const rootPackage = JSON.parse(readFileSync(resolve(import.meta.dir, "../package
   version: string;
 };
 
-const latestReleaseTag = (() => {
+const currentReleaseTag = (() => {
   try {
-    return execFileSync("git", ["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*"], {
-      cwd: resolve(import.meta.dir, ".."),
-      encoding: "utf8",
-    }).trim();
+    return execFileSync(
+      "git",
+      ["describe", "--tags", "--exact-match", "--match", "v[0-9]*.[0-9]*.[0-9]*"],
+      {
+        cwd: resolve(import.meta.dir, ".."),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }
+    ).trim();
   } catch {
     return null;
   }
@@ -29,12 +34,12 @@ describe("web build metadata", () => {
   });
 
   test("falls back to package metadata when Git tags are unavailable", () => {
-    expect(resolveAppVersion("1.5.5", null)).toBe("1.5.5");
-    expect(resolveAppVersion("1.5.5", "not-a-release")).toBe("1.5.5");
+    expect(resolveAppVersion("1.5.6", null)).toBe("1.5.6");
+    expect(resolveAppVersion("1.5.6", "not-a-release")).toBe("1.5.6");
   });
 
-  test("keeps package metadata aligned with the latest release tag when tags are available", () => {
-    if (!latestReleaseTag) return;
-    expect(rootPackage.version).toBe(latestReleaseTag.replace(/^v/, ""));
+  test("keeps package metadata aligned on a tagged release commit", () => {
+    if (!currentReleaseTag) return;
+    expect(rootPackage.version).toBe(currentReleaseTag.replace(/^v/, ""));
   });
 });

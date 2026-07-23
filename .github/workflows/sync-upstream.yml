@@ -1,13 +1,10 @@
 name: Sync upstream
-
 on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch: {}
-
 permissions:
   contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -15,18 +12,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Configure git identity
-         run: |
-           git config user.email "actions@github.com"
-           git config user.name "GitHub Actions"
-           
-       - name: Add upstream remote
-         run: git remote add upstream https://github.com/tianma-if/edgeever.git
-         
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/tianma-if/edgeever.git
       - name: Fetch upstream
         run: git fetch upstream
-
       - name: Merge upstream/main into main
         run: |
           git checkout main
@@ -34,6 +27,5 @@ jobs:
             echo "自动合并失败，存在冲突，请手动处理";
             exit 1;
           }
-
       - name: Push changes
         run: git push origin main

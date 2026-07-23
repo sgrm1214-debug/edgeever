@@ -16,9 +16,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Add upstream remote
-        run: git remote add upstream https://github.com/tianma-if/edgeever.git
-
+      - name: Configure git identity
+         run: |
+           git config user.email "actions@github.com"
+           git config user.name "GitHub Actions"
+           
+       - name: Add upstream remote
+         run: git remote add upstream https://github.com/tianma-if/edgeever.git
+         
       - name: Fetch upstream
         run: git fetch upstream
 

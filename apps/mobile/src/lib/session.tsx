@@ -1,9 +1,21 @@
 import { createEdgeEverClient } from "@edgeever/client";
 import type { AuthUser } from "@edgeever/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 const SESSION_KEY = "edgeever.mobile.session";
+const DEVICE_ID_KEY = "edgeever.mobile.device-id";
+
+const getOrCreateDeviceId = async () => {
+  const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  if (existing) return existing;
+
+  const randomPart = `${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  const deviceId = `mobile-${Date.now().toString(36)}-${randomPart}`;
+  await SecureStore.setItemAsync(DEVICE_ID_KEY, deviceId);
+  return deviceId;
+};
 
 export type MobileSession = {
   baseUrl: string;
@@ -22,6 +34,7 @@ type SessionContextValue = {
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 export const SessionProvider = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<MobileSession | null>(null);
 
@@ -56,18 +69,21 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
       baseUrl: session.baseUrl,
       token: session.token,
       onUnauthorized: () => {
+        queryClient.clear();
         setSession(null);
         void SecureStore.deleteItemAsync(SESSION_KEY);
       },
     });
-  }, [session]);
+  }, [queryClient, session]);
 
   const signIn = useCallback(async (input: { baseUrl: string; username: string; password: string }) => {
     const baseUrl = normalizeInstanceUrl(input.baseUrl);
+    const deviceId = await getOrCreateDeviceId();
     const loginClient = createEdgeEverClient({ baseUrl });
     const authSession = await loginClient.login({
       username: input.username,
       password: input.password,
+      deviceId,
     });
 
     if (!authSession.authenticated || !authSession.sessionToken) {
@@ -80,18 +96,20 @@ export const SessionProvider = ({ children }: { children: ReactNode }) => {
       user: authSession.user,
     };
 
+    queryClient.clear();
     await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(nextSession));
     setSession(nextSession);
-  }, []);
+  }, [queryClient]);
 
   const signOut = useCallback(async () => {
     if (client) {
       await client.logout().catch(() => undefined);
     }
 
+    queryClient.clear();
     await SecureStore.deleteItemAsync(SESSION_KEY);
     setSession(null);
-  }, [client]);
+  }, [client, queryClient]);
 
   const value = useMemo(
     () => ({

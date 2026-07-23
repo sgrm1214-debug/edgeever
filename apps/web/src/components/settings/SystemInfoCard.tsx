@@ -7,7 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { copyTextToClipboard } from "./settings-utils";
 
-type SystemInfoItem = {
+export type SystemInfoItem = {
   label: string;
   value: string;
 };
@@ -53,38 +53,45 @@ const detectOperatingSystem = (userAgent: string, platform: string) => {
   return null;
 };
 
+export const getWebSystemInfoItems = (
+  t: (key: string) => string,
+  language: string
+): SystemInfoItem[] => {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || t("systemInfo.unknown");
+  const userAgent = navigator.userAgent;
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as NavigatorWithStandalone).standalone === true;
+
+  return [
+    { label: t("systemInfo.version"), value: `v${__EDGEEVER_APP_VERSION__}` },
+    { label: t("systemInfo.build"), value: __EDGEEVER_BUILD_LABEL__ },
+    {
+      label: t("systemInfo.browser"),
+      value: detectBrowser(userAgent) ?? t("systemInfo.unknown"),
+    },
+    {
+      label: t("systemInfo.os"),
+      value: detectOperatingSystem(userAgent, navigator.platform) ?? t("systemInfo.unknown"),
+    },
+    { label: t("systemInfo.language"), value: navigator.language || language },
+    { label: t("systemInfo.timeZone"), value: timeZone },
+    {
+      label: t("systemInfo.installMode"),
+      value: standalone ? t("systemInfo.standalone") : t("systemInfo.browserMode"),
+    },
+  ];
+};
+
 export const SystemInfoCard = () => {
   const { t, i18n } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  const infoItems = useMemo<SystemInfoItem[]>(() => {
-    const language = navigator.language || i18n.language;
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || t("systemInfo.unknown");
-    const userAgent = navigator.userAgent;
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as NavigatorWithStandalone).standalone === true;
-
-    return [
-      { label: t("systemInfo.version"), value: `v${__EDGEEVER_APP_VERSION__}` },
-      { label: t("systemInfo.build"), value: __EDGEEVER_BUILD_LABEL__ },
-      {
-        label: t("systemInfo.browser"),
-        value: detectBrowser(userAgent) ?? t("systemInfo.unknown"),
-      },
-      {
-        label: t("systemInfo.os"),
-        value: detectOperatingSystem(userAgent, navigator.platform) ?? t("systemInfo.unknown"),
-      },
-      { label: t("systemInfo.language"), value: language },
-      { label: t("systemInfo.timeZone"), value: timeZone },
-      {
-        label: t("systemInfo.installMode"),
-        value: standalone ? t("systemInfo.standalone") : t("systemInfo.browserMode"),
-      },
-    ];
-  }, [i18n.language, t]);
+  const infoItems = useMemo<SystemInfoItem[]>(
+    () => getWebSystemInfoItems(t, i18n.language),
+    [i18n.language, t]
+  );
 
   const handleCopy = async () => {
     const details = infoItems.map((item) => `${item.label}: ${item.value}`).join("\n");

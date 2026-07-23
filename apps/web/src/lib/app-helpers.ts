@@ -1,5 +1,6 @@
 import type { MemoSummary, Notebook, TiptapDoc } from "@edgeever/shared";
 import { DEFAULT_MEMO_TITLE } from "@edgeever/shared";
+import { getMobileNotebookSearchVisibleIds } from "@edgeever/shared/mobile-ui";
 import { buildNotebookTree, type NotebookNode, type NotebookNodeComparator } from "./utils";
 import * as React from "react";
 import type { ReactNode } from "react";
@@ -117,30 +118,24 @@ export const getExpandableNotebookIds = (nodes: NotebookNode[]) => {
 };
 
 export const filterNotebookTree = (nodes: NotebookNode[], search: string): NotebookNode[] => {
-  const query = search.trim().toLocaleLowerCase("zh-CN");
-
-  if (!query) {
+  if (!search.trim()) {
     return nodes;
   }
 
-  const walk = (items: NotebookNode[]): NotebookNode[] => {
-    const filteredNodes: NotebookNode[] = [];
-
+  const notebooks: Notebook[] = [];
+  const collectNotebooks = (items: NotebookNode[]) => {
     for (const node of items) {
-      const children = walk(node.children);
-      const matched = node.name.toLocaleLowerCase("zh-CN").includes(query);
-
-      if (matched) {
-        filteredNodes.push({ ...node, children: node.children });
-        continue;
-      }
-
-      if (children.length > 0) {
-        filteredNodes.push({ ...node, children });
-      }
+      notebooks.push(node);
+      collectNotebooks(node.children);
     }
+  };
+  collectNotebooks(nodes);
+  const visibleIds = getMobileNotebookSearchVisibleIds(notebooks, search);
 
-    return filteredNodes;
+  const walk = (items: NotebookNode[]): NotebookNode[] => {
+    return items
+      .filter((node) => visibleIds.has(node.id))
+      .map((node) => ({ ...node, children: walk(node.children) }));
   };
 
   return walk(nodes);
@@ -150,6 +145,7 @@ export { buildNotebookTree, type NotebookNode };
 export { DEFAULT_MEMO_TITLE };
 
 export const IMAGE_COMPRESSION_STORAGE_KEY = "edgeever.imageCompressionEnabled";
+export const DESKTOP_FOCUS_MODE_STORAGE_KEY = "edgeever.desktopFocusMode";
 export const MEMO_LIST_DENSITY_STORAGE_KEY = "edgeever.memoListDensity";
 export const MEMO_LIST_WIDTH_STORAGE_KEY = "edgeever.memoListWidth";
 export const NOTEBOOK_SORT_STORAGE_KEY = "edgeever.notebookSort";
@@ -214,6 +210,10 @@ export const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
   focusReplace: { key: "h", ctrlOrMeta: true, shift: false, alt: false },
 };
 
+const SHORTCUT_ALIASES: Partial<Record<ShortcutAction, ShortcutBinding[]>> = {
+  focusReplace: [{ key: "h", ctrlOrMeta: true, shift: true, alt: false }],
+};
+
 const SHORTCUT_ACTION_VALUES: ShortcutAction[] = ["createMemo", "createNotebook", "focusSearch", "focusReplace"];
 
 export const getMemoTitle = (title: string | null | undefined) => title?.trim() || DEFAULT_MEMO_TITLE;
@@ -250,6 +250,22 @@ export const readImageCompressionPreference = () => {
 export const writeImageCompressionPreference = (enabled: boolean) => {
   try {
     window.localStorage.setItem(IMAGE_COMPRESSION_STORAGE_KEY, enabled ? "true" : "false");
+  } catch {
+    // Local storage can be unavailable in private or restricted browser contexts.
+  }
+};
+
+export const readDesktopFocusModePreference = () => {
+  try {
+    return window.localStorage.getItem(DESKTOP_FOCUS_MODE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+};
+
+export const writeDesktopFocusModePreference = (enabled: boolean) => {
+  try {
+    window.localStorage.setItem(DESKTOP_FOCUS_MODE_STORAGE_KEY, enabled ? "true" : "false");
   } catch {
     // Local storage can be unavailable in private or restricted browser contexts.
   }
@@ -403,7 +419,10 @@ export const getShortcutActionForEvent = (event: KeyboardEvent, settings: Shortc
     return null;
   }
 
-  return SHORTCUT_ACTION_VALUES.find((action) => shortcutBindingsEqual(settings[action], eventBinding)) ?? null;
+  return SHORTCUT_ACTION_VALUES.find((action) =>
+    shortcutBindingsEqual(settings[action], eventBinding) ||
+    (SHORTCUT_ALIASES[action] ?? []).some((binding) => shortcutBindingsEqual(binding, eventBinding))
+  ) ?? null;
 };
 
 export const compareDateDesc = (first: string, second: string) => {
@@ -506,18 +525,6 @@ export const getNotebookMoveOptions = (notebooks: Notebook[]) => {
 
   walk(buildNotebookTree(notebooks), 0);
   return options;
-};
-
-export const toggleMemoSelection = (current: Set<string>, memoId: string) => {
-  const next = new Set(current);
-
-  if (next.has(memoId)) {
-    next.delete(memoId);
-  } else {
-    next.add(memoId);
-  }
-
-  return next;
 };
 
 export const hasMemoDragData = (dataTransfer: DataTransfer) => Array.from(dataTransfer.types).includes(MEMO_DRAG_MIME);

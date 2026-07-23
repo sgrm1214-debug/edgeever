@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss";
 import tailwindAnimate from "tailwindcss-animate";
+import { MOBILE_UI_METRICS } from "@edgeever/shared/mobile-ui";
 
 const brandGreen = (shade: number) => `rgb(var(--brand-green-${shade}-rgb) / <alpha-value>)`;
 const slate = (shade: number) => `rgb(var(--slate-${shade}-rgb) / <alpha-value>)`;
@@ -29,7 +30,14 @@ export default {
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
+        "mobile-sheet": `${MOBILE_UI_METRICS.floatingSheetCornerRadius}px`,
         sm: "calc(var(--radius) - 4px)",
+      },
+      spacing: {
+        "mobile-bottom-nav": `${MOBILE_UI_METRICS.bottomNavigationHeight}px`,
+        "mobile-control": `${MOBILE_UI_METRICS.compactControlHeight}px`,
+        "mobile-fab": `${MOBILE_UI_METRICS.floatingCreateButtonSize}px`,
+        "mobile-touch": `${MOBILE_UI_METRICS.minimumTouchTarget}px`,
       },
       colors: {
         slate: {

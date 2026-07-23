@@ -24,30 +24,9 @@ CREATE INDEX idx_notebooks_parent
 CREATE INDEX idx_notebooks_deleted
   ON notebooks(is_deleted, updated_at);
 
-CREATE TRIGGER trg_notebooks_prevent_cycles
-BEFORE UPDATE OF parent_id ON notebooks
-FOR EACH ROW
-WHEN NEW.parent_id IS NOT NULL
-BEGIN
-  WITH RECURSIVE ancestors(id, parent_id) AS (
-    SELECT id, parent_id
-    FROM notebooks
-    WHERE id = NEW.parent_id
-
-    UNION ALL
-
-    SELECT n.id, n.parent_id
-    FROM notebooks n
-    INNER JOIN ancestors a ON n.id = a.parent_id
-    WHERE a.parent_id IS NOT NULL
-  )
-  SELECT RAISE(ABORT, 'notebook cycle detected')
-  WHERE EXISTS (
-    SELECT 1
-    FROM ancestors
-    WHERE id = NEW.id
-  );
-END;
+-- Keep triggers on one physical line. Remote D1 currently misparses
+-- multi-line CREATE TRIGGER statements even though local D1 accepts them.
+CREATE TRIGGER trg_notebooks_prevent_cycles BEFORE UPDATE OF parent_id ON notebooks FOR EACH ROW WHEN NEW.parent_id IS NOT NULL BEGIN WITH RECURSIVE ancestors(id, parent_id) AS (SELECT id, parent_id FROM notebooks WHERE id = NEW.parent_id UNION ALL SELECT n.id, n.parent_id FROM notebooks n INNER JOIN ancestors a ON n.id = a.parent_id WHERE a.parent_id IS NOT NULL) SELECT RAISE(ABORT, 'notebook cycle detected') WHERE EXISTS (SELECT 1 FROM ancestors WHERE id = NEW.id); END;
 
 CREATE TABLE memos (
   id TEXT PRIMARY KEY,

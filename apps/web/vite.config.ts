@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { resolveAppVersion } from "./build-metadata";
 
 const readPackageVersion = () => {
   try {
@@ -25,8 +26,20 @@ const readGitCommit = () => {
   }
 };
 
-const buildId = process.env.CF_PAGES_COMMIT_SHA?.slice(0, 12) ?? process.env.GITHUB_SHA?.slice(0, 12) ?? readGitCommit() ?? "local";
-const appVersion = readPackageVersion();
+const readGitDescription = () => {
+  try {
+    return execSync('git describe --tags --long --match "v[0-9]*.[0-9]*.[0-9]*" HEAD', { encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
+};
+
+const buildId = process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 12)
+  ?? process.env.CF_PAGES_COMMIT_SHA?.slice(0, 12)
+  ?? process.env.GITHUB_SHA?.slice(0, 12)
+  ?? readGitCommit()
+  ?? "local";
+const appVersion = resolveAppVersion(readPackageVersion(), readGitDescription());
 
 export default defineConfig({
   root: "apps/web",
@@ -183,13 +196,30 @@ export default defineConfig({
               priority: 12,
             },
             {
+              name: "vendor-mermaid-d3",
+              test: /[\\/](?:d3(?:-[^\\/@]+)?|internmap|delaunator|robust-predicates)(?:@|[\\/])/,
+              priority: 11,
+            },
+            {
+              name: "vendor-mermaid-layout",
+              test: /[\\/](?:cytoscape(?:-[^\\/@]+)?|dagre-d3-es|graphlib|roughjs|khroma|@upsetjs[\\/]venn\.js)(?:@|[\\/])/,
+              priority: 11,
+            },
+            {
+              name: "vendor-mermaid-render",
+              test: /[\\/](?:@mermaid-js[\\/](?:parser|tiny)|katex|dompurify|stylis|dayjs|@iconify[\\/]utils)(?:@|[\\/])/,
+              priority: 11,
+            },
+            {
               name: "ui-primitives",
               test: /src[\\/]components[\\/]ui[\\/]/,
               priority: 10,
             },
             {
               name: "vendor",
-              test: /node_modules[\\/]/,
+              // Keep Mermaid's internally lazy-loaded diagram modules out of the
+              // catch-all vendor chunk so they remain on-demand.
+              test: /^(?!.*(?:[\\/]mermaid@|node_modules[\\/]mermaid[\\/])).*node_modules[\\/]/,
               priority: 5,
             },
           ],

@@ -1,7 +1,12 @@
 import type {
   AuthSession,
+  LoginDeviceSession,
+  InstanceUser,
   ApiToken,
   CreatedApiToken,
+  JsonBackupMemo,
+  JsonBackupNotebook,
+  JsonBackupRevision,
   MemoDetail,
   MemoEditSession,
   MemoRevision,
@@ -43,6 +48,32 @@ type ListApiTokensResponse = {
   availableScopes: string[];
 };
 
+type ListUsersResponse = { users: InstanceUser[] };
+type UserResponse = { user: InstanceUser };
+type ListLoginDeviceSessionsResponse = { sessions: LoginDeviceSession[] };
+
+const WEB_DEVICE_ID_STORAGE_KEY = "edgeever.web.device-id";
+
+const createWebDeviceId = () => {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return uuid
+    ? `web-${uuid}`
+    : `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+};
+
+const getOrCreateWebDeviceId = () => {
+  try {
+    const existing = window.localStorage.getItem(WEB_DEVICE_ID_STORAGE_KEY);
+    if (existing) return existing;
+
+    const deviceId = createWebDeviceId();
+    window.localStorage.setItem(WEB_DEVICE_ID_STORAGE_KEY, deviceId);
+    return deviceId;
+  } catch {
+    return createWebDeviceId();
+  }
+};
+
 type MemoResponse = {
   memo: MemoDetail;
 };
@@ -53,6 +84,17 @@ type NotebookResponse = {
 
 type ResourceResponse = {
   resource: Resource;
+};
+
+export type MarkdownExportPage = {
+  memos: MemoDetail[];
+  resources: Resource[];
+  totalCount: number;
+  nextOffset: number | null;
+};
+
+export type JsonBackupPage = MarkdownExportPage & {
+  revisions: JsonBackupRevision[];
 };
 
 export class ApiRequestError extends Error {
@@ -101,15 +143,38 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 export const api = {
   getSession: () => request<AuthSession>("/api/v1/auth/session"),
 
+  listLoginDeviceSessions: () =>
+    request<ListLoginDeviceSessionsResponse>("/api/v1/auth/sessions"),
+
+  revokeLoginDeviceSession: (sessionId: string) =>
+    request<{ ok: true }>(`/api/v1/auth/sessions/${sessionId}`, { method: "DELETE" }),
+
+  revokeOtherLoginDeviceSessions: () =>
+    request<{ ok: true }>("/api/v1/auth/sessions", { method: "DELETE" }),
+
   login: (payload: { username: string; password: string }) =>
     request<AuthSession>("/api/v1/auth/login", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, deviceId: getOrCreateWebDeviceId() }),
     }),
 
   changePassword: (payload: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
     request<{ ok: true }>("/api/v1/auth/change-password", {
       method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  listUsers: () => request<ListUsersResponse>("/api/v1/users"),
+
+  createUser: (payload: { username: string; displayName?: string | null; password: string }) =>
+    request<UserResponse>("/api/v1/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (userId: string, payload: { displayName?: string | null; password?: string; isDisabled?: boolean }) =>
+    request<UserResponse>(`/api/v1/users/${userId}`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     }),
 
@@ -166,6 +231,7 @@ export const api = {
 
   listMemos: (params: {
     notebookId?: string | null;
+    includeDescendants?: boolean;
     q?: string;
     trash?: boolean;
     sort?: MemoSortMode;
@@ -177,6 +243,10 @@ export const api = {
 
     if (params.notebookId) {
       search.set("notebookId", params.notebookId);
+    }
+
+    if (params.includeDescendants) {
+      search.set("includeDescendants", "1");
     }
 
     if (params.q?.trim()) {
@@ -257,6 +327,48 @@ export const api = {
 
   listResources: () => request<ListResourcesResponse>("/api/v1/resources"),
 
+  getMarkdownExportPage: (offset = 0, limit = 50) =>
+    request<MarkdownExportPage>(`/api/v1/exports/markdown?offset=${offset}&limit=${limit}`),
+
+  getJsonBackupPage: (offset = 0, limit = 25) =>
+    request<JsonBackupPage>(`/api/v1/backups/json?offset=${offset}&limit=${limit}`),
+
+  restoreJsonNotebooks: (notebooks: JsonBackupNotebook[]) =>
+    request<{ ok: true }>("/api/v1/restores/json/notebooks", {
+      method: "POST",
+      body: JSON.stringify({ notebooks }),
+    }),
+
+  restoreJsonMemos: (memos: JsonBackupMemo[]) =>
+    request<{ ok: true }>("/api/v1/restores/json/memos", {
+      method: "POST",
+      body: JSON.stringify({ memos }),
+    }),
+
+  restoreJsonResource: (resourceId: string, metadata: JsonBackupMemo["resources"][number], file: Blob) => {
+    const form = new FormData();
+    form.append("metadata", JSON.stringify(metadata));
+    form.append("file", file, metadata.filename || metadata.id);
+    return request<{ ok: true }>(`/api/v1/restores/json/resources/${encodeURIComponent(resourceId)}`, {
+      method: "PUT",
+      body: form,
+    });
+  },
+
+  getResourceBlob: async (resourceUrl: string) => {
+    const response = await fetch(resourceUrl, { credentials: "include" });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent("edgeever:unauthorized"));
+      }
+
+      throw new ApiRequestError(response.statusText || "Resource download failed", response.status);
+    }
+
+    return response.blob();
+  },
+
   uploadMemoResource: (memoId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -310,5 +422,10 @@ export const api = {
     request<MemoResponse>("/api/v1/memos/merge", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  resetDemo: () =>
+    request<{ success: true }>("/api/v1/demo/reset", {
+      method: "POST",
     }),
 };

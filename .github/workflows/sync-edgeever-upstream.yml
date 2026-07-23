@@ -1,0 +1,118 @@
+name: Update deployed EdgeEver
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Update channel for this run
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - edge
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: edgeever-upstream-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository != 'tianma-if/edgeever'
+    name: Sync, verify, and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UPSTREAM_REPOSITORY: tianma-if/edgeever
+      UPDATE_CHANNEL: ${{ inputs.channel || vars.EDGE_EVER_UPDATE_CHANNEL || 'stable' }}
+
+    steps:
+      - name: Checkout deployed repository
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve upstream version
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
+          git fetch upstream main --tags
+
+          case "${UPDATE_CHANNEL}" in
+            stable)
+              target_ref="$(gh api "repos/${UPSTREAM_REPOSITORY}/releases/latest" --jq '.tag_name')"
+              ;;
+            edge)
+              target_ref="upstream/main"
+              ;;
+            *)
+              echo "Unsupported update channel: ${UPDATE_CHANNEL}" >&2
+              exit 1
+              ;;
+          esac
+
+          target_commit="$(git rev-parse "${target_ref}^{commit}")"
+          if git merge-base --is-ancestor "${target_commit}" HEAD; then
+            update_required=false
+          else
+            update_required=true
+          fi
+
+          {
+            echo "target_ref=${target_ref}"
+            echo "target_commit=${target_commit}"
+            echo "update_required=${update_required}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Merge upstream update
+        if: steps.upstream.outputs.update_required == 'true'
+        env:
+          TARGET_COMMIT: ${{ steps.upstream.outputs.target_commit }}
+          TARGET_REF: ${{ steps.upstream.outputs.target_ref }}
+        run: |
+          git config user.name "edgeever-updater[bot]"
+          git config user.email "edgeever-updater[bot]@users.noreply.github.com"
+          git merge --no-edit -m "chore: update EdgeEver from ${TARGET_REF}" "${TARGET_COMMIT}"
+
+      - name: Set up Bun
+        if: steps.upstream.outputs.update_required == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Verify update
+        if: steps.upstream.outputs.update_required == 'true'
+        run: |
+          bun install --frozen-lockfile
+          bun run db:migrate:local
+          bun test
+          bun run typecheck
+          bun run build
+
+      - name: Publish update
+        if: steps.upstream.outputs.update_required == 'true'
+        run: git push origin HEAD:main
+
+      - name: Report an update failure
+        if: failure()
+        continue-on-error: true
+        env:
+          TARGET_REF: ${{ steps.upstream.outputs.target_ref || 'unknown' }}
+        run: |
+          title="EdgeEver automatic update requires attention"
+          existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [ -z "${existing}" ]; then
+            gh issue create \
+              --title "${title}" \
+              --body "The daily update from \`${UPSTREAM_REPOSITORY}\` (${TARGET_REF}) could not be merged or verified. The current production deployment was left unchanged. Open the failed **Update deployed EdgeEver** workflow run for details, then retry it manually after resolving the problem."
+          fi

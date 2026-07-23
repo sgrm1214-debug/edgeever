@@ -6,6 +6,7 @@ import { GitHubRepositoryLink } from "@/components/GitHubRepositoryLink";
 import { Input } from "@/components/ui/input";
 
 interface LoginScreenProps {
+  configurationError: string | null;
   error: string | null;
   isSubmitting: boolean;
   onSubmit: (payload: { username: string; password: string }) => void;
@@ -23,7 +24,7 @@ const getDefaultLoginCredentials = () => {
   return isDemoHost ? DEMO_LOGIN_CREDENTIALS : { username: "admin", password: "" };
 };
 
-export const LoginScreen = ({ error, isSubmitting, onSubmit }: LoginScreenProps) => {
+export const LoginScreen = ({ configurationError, error, isSubmitting, onSubmit }: LoginScreenProps) => {
   const { t } = useTranslation();
   const [username, setUsername] = useState(() => getDefaultLoginCredentials().username);
   const [password, setPassword] = useState(() => getDefaultLoginCredentials().password);
@@ -55,7 +56,11 @@ export const LoginScreen = ({ error, isSubmitting, onSubmit }: LoginScreenProps)
           </div>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
+        {configurationError ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium leading-6 text-amber-900">
+            {configurationError}
+          </div>
+        ) : <form className="space-y-5" onSubmit={handleSubmit}>
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">{t("login.username")}</span>
             <Input
@@ -93,7 +98,7 @@ export const LoginScreen = ({ error, isSubmitting, onSubmit }: LoginScreenProps)
             <LockKeyhole className="h-4 w-4 mr-1" />
             {isSubmitting ? t("login.submitting") : t("login.submit")}
           </Button>
-        </form>
+        </form>}
       </section>
     </main>
   );

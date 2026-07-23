@@ -11,38 +11,31 @@ on:
       - "packages/shared/**"
       - "package.json"
       - "bun.lock"
+      - "scripts/build-android-local.sh"
       - ".github/workflows/mobile-build.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: edgeever-mobile-android-${{ github.ref }}
+  group: edgeever-mobile-android-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
-  android-debug:
-    name: Build Android debug APK
-    runs-on: ubuntu-latest
+  android:
+    if: github.repository == 'tianma-if/edgeever' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    name: Build Android packages
+    runs-on: [self-hosted, macOS, ARM64, edgeever-mobile]
     timeout-minutes: 45
+    env:
+      ANDROID_HOME: /opt/homebrew/share/android-commandlinetools
+      ANDROID_SDK_ROOT: /opt/homebrew/share/android-commandlinetools
+      JAVA_HOME: /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          clean: true
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -53,17 +46,68 @@ jobs:
       - name: Typecheck
         run: bun run typecheck:mobile
 
-      - name: Generate Android native project
-        run: bunx expo prebuild --platform android --non-interactive --clean
-        working-directory: apps/mobile
+      - name: Reset Metro cache for this checkout
+        run: bun --cwd apps/mobile expo export --platform android --clear --max-workers 1 --output-dir "$RUNNER_TEMP/edgeever-metro-warmup"
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build fast test APK
+        if: github.event_name == 'push'
+        run: bun run build:android:fast
+
+      - name: Restore Android upload keystore
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | openssl base64 -d -A > "$RUNNER_TEMP/edgeever-upload.p12"
+          chmod 600 "$RUNNER_TEMP/edgeever-upload.p12"
+
+      - name: Build signed release AAB
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/edgeever-upload.p12
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bun run build:android:play
+
+      - name: Verify release AAB signature
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          "$JAVA_HOME/bin/jarsigner" -verify app/build/outputs/bundle/release/*.aab
+        working-directory: apps/mobile/android
+
+      - name: Verify R8 deobfuscation mapping
+        if: github.event_name == 'workflow_dispatch'
+        run: test -s app/build/outputs/mapping/release/mapping.txt
         working-directory: apps/mobile/android
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
         with:
-          name: edgeever-android-debug-apk
-          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          name: edgeever-android-test-release-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload release AAB
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: edgeever-android-release-aab
+          path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload R8 deobfuscation mapping
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: edgeever-android-release-mapping
+          path: apps/mobile/android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+
+      - name: Remove temporary upload keystore
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: rm -f "$RUNNER_TEMP/edgeever-upload.p12"

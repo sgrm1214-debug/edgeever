@@ -4,7 +4,7 @@ export const defaultSiteLocale: SiteLocale = "zh-CN";
 export const siteLocaleStorageKey = "edgeever.site.locale";
 export const siteLocaleDataAttribute = "data-edgeever-site-locale";
 export const siteTaglines = {
-  "zh-CN": "无需服务器、0 费用、开源且原生支持 AI Agent 的自托管『印象笔记』替代品",
+  "zh-CN": "无需服务器、零费用、开源且原生支持 AI Agent 的自托管『印象笔记』替代品",
   "en-US": "A serverless, 100% free, open-source, and AI-native self-hosted Evernote alternative on Cloudflare.",
 } as const satisfies Record<SiteLocale, string>;
 
@@ -45,6 +45,7 @@ export const siteCopy = {
       advancedPlay: "搭配AI Agent的玩法",
       blog: "博客",
       contact: "联系我们",
+      privacy: "隐私政策",
       demo: "在线演示",
       language: "语言",
       languageMenu: "切换语言",
@@ -56,7 +57,7 @@ export const siteCopy = {
     hero: {
       slogan: siteTaglines["zh-CN"],
       demo: "在线演示",
-      agentInstall: "通过AI Agent部署",
+      agentInstall: "部署 EdgeEver",
       imageAlt: "EdgeEver product preview",
       badgeText: "💡 支持印象笔记、Notion、Memos 零成本平替，双 MCP 自动搬家",
     },
@@ -93,9 +94,10 @@ export const siteCopy = {
         },
         {
           title: "数据开放，迁移和导出不被绑架",
-          summary: "笔记内容以结构化 JSON、Markdown 与纯文本多形态保存，便于编辑器、API、搜索和 Agent 分别使用。",
+          summary: "笔记内容以结构化 JSON、Markdown 与纯文本多形态保存，并支持原生 EdgeEver ZIP 导入导出，兼顾编辑、API、搜索、Agent 与完整恢复。",
           points: [
             "内容存放在基于标准 SQLite 的 Cloudflare D1 中，可通过 API、MCP 或 CLI 按需读取。",
+            "支持原生 EdgeEver ZIP 导入导出，归档包含 Markdown、Front Matter、嵌套笔记本结构、附件与历史版本，可跨实例完整恢复。",
             "支持印象笔记数据导入能力，降低从旧笔记库迁移过来的成本。",
             "Markdown 面向导入导出和 Agent 使用，降低未来再次迁移的成本。",
           ],
@@ -109,6 +111,15 @@ export const siteCopy = {
             "已有笔记支持离线编辑草稿和本地同步队列，弱网时也能先写后同步。",
           ],
         },
+        {
+          title: "一个实例，多账户独立空间",
+          summary: "为家人或小团队成员创建账号，每个人都拥有彼此隔离的私人笔记工作区。",
+          points: [
+            "实例管理员可以创建、停用成员账号或重置密码，实例不开放公众注册。",
+            "每个成员的笔记本、笔记、附件、回收站和导入导出数据完全隔离。",
+            "MCP Token 也按成员空间隔离，AI Agent 只能访问被明确授权的数据。",
+          ],
+        },
       ],
     },
     guides: {
@@ -117,8 +128,8 @@ export const siteCopy = {
       description: "把最关键的上手路径放到显眼位置：先部署自己的实例，再把旧笔记迁过来，最后用 MCP 接入 AI Agent 整理长期知识库。",
       items: [
         {
-          title: "AI Agent 一句话部署",
-          summary: "按仓库推荐流程，让 Codex、Claude Code、Cursor 等助手协助完成 Cloudflare 部署。",
+          title: "三种方式部署 EdgeEver",
+          summary: "Cloudflare 一键部署、AI Agent 和手动部署三种方案任选其一，使用同一套可靠的部署流程。",
           href: "/blog/ai-agent-deploy-cloudflare",
           cta: "查看部署指南",
         },
@@ -157,6 +168,7 @@ export const siteCopy = {
       advancedPlay: "AI Agent plays",
       blog: "Blog",
       contact: "Contact",
+      privacy: "Privacy",
       demo: "Demo",
       language: "Language",
       languageMenu: "Change language",
@@ -168,7 +180,7 @@ export const siteCopy = {
     hero: {
       slogan: siteTaglines["en-US"],
       demo: "Live demo",
-      agentInstall: "Install with AI Agent",
+      agentInstall: "Deploy EdgeEver",
       imageAlt: "EdgeEver product preview",
       badgeText: "💡 Serverless: Migrate from Evernote, Notion & Memos via Dual-MCP",
     },
@@ -205,9 +217,10 @@ export const siteCopy = {
         },
         {
           title: "Open data, easier migration",
-          summary: "Notes are stored as structured JSON, Markdown, and plain text for editors, APIs, search, and agents.",
+          summary: "Notes remain available as structured JSON, Markdown, and plain text, with native EdgeEver ZIP import and export for editing, APIs, search, agents, and complete recovery.",
           points: [
             "Content lives in Cloudflare D1, based on standard SQLite, and can be read via API, MCP, or CLI.",
+            "Native EdgeEver ZIP import and export includes Markdown, Front Matter, nested notebooks, attachments, and revision history for complete recovery between instances.",
             "Evernote import support lowers the cost of moving from an existing notes library.",
             "Markdown keeps import, export, and agent workflows portable.",
           ],
@@ -221,6 +234,15 @@ export const siteCopy = {
             "Existing notes support offline drafts and a local sync queue for weak network conditions.",
           ],
         },
+        {
+          title: "One instance, isolated accounts",
+          summary: "Create accounts for family or a small team while giving each person a separate private notes workspace.",
+          points: [
+            "The owner can create or disable member accounts and reset passwords; public registration stays closed.",
+            "Each member has isolated notebooks, notes, attachments, Trash, and import/export data.",
+            "MCP tokens are isolated by workspace, so AI Agents only access explicitly authorized data.",
+          ],
+        },
       ],
     },
     guides: {
@@ -229,8 +251,8 @@ export const siteCopy = {
       description: "The fastest paths into EdgeEver: deploy your own instance, move an existing Evernote archive, then connect MCP-powered AI workflows.",
       items: [
         {
-          title: "Deploy with an AI Agent",
-          summary: "Follow the repository-backed flow for Codex, Claude Code, Cursor, and similar assistants to deploy on Cloudflare.",
+          title: "Three ways to deploy EdgeEver",
+          summary: "Choose Cloudflare one-click, an AI Agent, or manual deployment—all three use the same reliable deployment pipeline.",
           href: "/blog/ai-agent-deploy-cloudflare",
           cta: "Read deployment guide",
         },

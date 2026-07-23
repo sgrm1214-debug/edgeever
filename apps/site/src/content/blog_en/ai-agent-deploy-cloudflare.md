@@ -1,10 +1,10 @@
 ---
 draft: false
-title: "Deploy EdgeEver to Cloudflare with one AI Agent prompt"
-snippet: "Give your EdgeEver fork URL to an AI Agent and deploy to Cloudflare with notes on free quotas and possible Visa card verification."
+title: "Deploy EdgeEver to Cloudflare: choose one of three options"
+snippet: "Choose Cloudflare one-click, an AI Agent, or manual deployment to run EdgeEver in your own Cloudflare account."
 image: {
     src: "/images/agent-deploy.jpg",
-    alt: "AI Agent deploying EdgeEver to Cloudflare"
+    alt: "Three ways to deploy EdgeEver to Cloudflare"
 }
 publishDate: "2026-07-02 00:50"
 category: "Deployment"

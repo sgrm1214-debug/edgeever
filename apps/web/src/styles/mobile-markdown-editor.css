@@ -237,6 +237,14 @@ input {
   color: #334155;
 }
 
+.mobile-editor-table-menu-trigger {
+  gap: 6px;
+  width: auto;
+  padding-inline: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .mobile-editor-sheet-backdrop {
   position: fixed;
   inset: 0;
@@ -246,7 +254,8 @@ input {
   background: rgb(15 23 42 / 0.22);
 }
 
-.mobile-editor-notebook-sheet {
+.mobile-editor-notebook-sheet,
+.mobile-editor-table-sheet {
   width: 100%;
   max-height: 68dvh;
   overflow: hidden;
@@ -269,7 +278,8 @@ input {
 :root.dark .mobile-editor-header,
 :root.dark .mobile-editor-title,
 :root.dark .mobile-editor-tags,
-:root.dark .mobile-editor-notebook-sheet {
+:root.dark .mobile-editor-notebook-sheet,
+:root.dark .mobile-editor-table-sheet {
   background: #1e293b;
   color: #f8fafc;
 }
@@ -382,6 +392,48 @@ input {
   color: #047857;
 }
 
+.mobile-editor-table-action-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+}
+
+.mobile-editor-table-action-list button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.mobile-editor-table-action-list button:active {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.mobile-editor-table-action-list button:disabled {
+  color: #94a3b8;
+  opacity: 0.55;
+}
+
+.mobile-editor-table-action-list button.is-destructive {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+:root.dark .mobile-editor-table-action-list button {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+:root.dark .mobile-editor-table-action-list button.is-destructive {
+  background: #4c0519;
+  color: #fda4af;
+}
+
 .mobile-editor-notebook-option:active {
   background: #f1f5f9;
 }
@@ -395,7 +447,7 @@ input {
   min-height: calc(100dvh - 14rem);
   outline: none;
   padding: 18px 12px 32px;
-  color: #0f172a;
+  color: #020617;
   font-size: 17px;
   line-height: 1.7;
   -webkit-user-select: text;
@@ -442,10 +494,184 @@ input {
   margin: 1.2rem 0;
 }
 
+.edgeever-mobile-tiptap-content .edgeever-code-source {
+  overflow-x: auto;
+  border: 1px solid #d9eadf;
+  border-radius: 8px;
+  background: #f7fbf8;
+  padding: 0.9rem 1rem;
+  color: #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+  white-space: pre;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-code-block {
+  margin: 18px 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-preview {
+  display: flex;
+  min-height: 6rem;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 1rem 0.25rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-svg {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-svg svg {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 440px;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-source {
+  display: none;
+  margin-top: 0.5rem;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-code-block.is-source-visible .edgeever-mermaid-source {
+  display: block;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-message,
+.edgeever-mobile-tiptap-content .edgeever-mermaid-error {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.edgeever-mobile-tiptap-content .edgeever-mermaid-error {
+  color: #be123c;
+}
+
 .edgeever-mobile-tiptap-content img {
   height: auto;
   max-width: 100%;
   border-radius: 8px;
+}
+
+.edgeever-mobile-tiptap-content .tableWrapper {
+  --mobile-table-column-width: clamp(5.5rem, calc((100vw - 3rem) / 3), 14rem);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  margin-top: 1.25rem;
+  margin-right: auto;
+  margin-bottom: 1.25rem;
+  margin-left: 0;
+  border: 1px solid #d8d8d8;
+  border-radius: 2px;
+  background: #fff;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: rgb(100 116 139 / 0.28) transparent;
+}
+
+.edgeever-mobile-tiptap-content table {
+  width: max-content;
+  min-width: 100% !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.edgeever-mobile-tiptap-content table col {
+  width: var(--mobile-table-column-width) !important;
+}
+
+.edgeever-mobile-tiptap-content th,
+.edgeever-mobile-tiptap-content td {
+  position: relative;
+  width: var(--mobile-table-column-width);
+  min-width: var(--mobile-table-column-width);
+  border: 0;
+  border-right: 1px solid #dedede;
+  border-bottom: 1px solid #dedede;
+  padding: 0.42rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  transition: background-color 120ms ease;
+}
+
+.edgeever-mobile-tiptap-content th {
+  background: #f0f0f0;
+  color: #111827;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.edgeever-mobile-tiptap-content th:last-child,
+.edgeever-mobile-tiptap-content td:last-child {
+  border-right: 0;
+}
+
+.edgeever-mobile-tiptap-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.edgeever-mobile-tiptap-content tbody tr:nth-child(even) td {
+  background: #f8f8f8;
+}
+
+.edgeever-mobile-tiptap-content tbody tr:hover td {
+  background: #f3f4f6;
+}
+
+.edgeever-mobile-tiptap-content th p,
+.edgeever-mobile-tiptap-content td p {
+  margin: 0;
+}
+
+.edgeever-mobile-tiptap-content .selectedCell::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: rgb(16 185 129 / 0.14);
+}
+
+:root.dark .edgeever-mobile-tiptap-content th {
+  background: #27303f;
+  color: #f8fafc;
+}
+
+:root.dark .edgeever-mobile-tiptap-content .edgeever-code-source {
+  border-color: #166534;
+  background: #13261a;
+  color: #cbd5e1;
+}
+
+:root.dark .edgeever-mobile-tiptap-content .tableWrapper {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+:root.dark .edgeever-mobile-tiptap-content th,
+:root.dark .edgeever-mobile-tiptap-content td {
+  border-color: #334155;
+}
+
+:root.dark .edgeever-mobile-tiptap-content tbody tr:nth-child(even) td {
+  background: #182235;
+}
+
+:root.dark .edgeever-mobile-tiptap-content tbody tr:hover td {
+  background: #202b3d;
 }
 
 .edgeever-mobile-tiptap-content p.is-editor-empty:first-child::before {

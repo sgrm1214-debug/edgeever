@@ -6,32 +6,45 @@
 
 涉及本项目的背景、定位、部署信息与技术栈说明时，请优先参考 `README.md`。
 
+## 中英文文档同步约束
+
+修改中文文档时，必须同步更新对应的英文文档，确保内容一致。
+
 ## Git 分支约束
 
 严禁创建新的 Git 分支；所有修改、提交和推送都必须直接在 `main` 分支上完成。
 
-## Cloudflare 自动部署约束
+## GitHub Issue 与 Release 约束
 
-当用户要求“根据 GitHub 项目链接把本项目安装部署到 Cloudflare”时，应优先按 `docs/agent-deploy-cloudflare.md` 执行。
+正式版本遵循 Semantic Versioning，标签与 Release 标题统一使用 `vX.Y.Z`。发布前检查远端标签与实际 GitHub Release；孤立标签不作为发布基线，每个正式标签最终都应有对应 Release。
 
-推荐流程：
+Release 以上一个实际发布的正式 Release 为基线，审计完整提交区间并面向用户汇总所有可感知变化。Release 说明必须使用英文。标签必须指向 `main` 上经过验证的提交，默认发布为非 Draft、非 Prerelease。功能或修复 Release 须关联带对应 Label 的 Issue；发布后回链并关闭 Issue。正文结构：
 
-```sh
-bun install
-EDGE_EVER_PASSWORD='<首次登录密码>' bun run deploy:setup
-bun run deploy:doctor
-bun run deploy
+```md
+## 主要更新
+
+- 面向用户说明本次变化及影响。
+
+关联 Issue：#<issue-number>
+
+## 验证
+
+- 列出实际完成的测试、类型检查和构建结果。
 ```
 
-如果用户没有提供首次登录密码，应只询问这一个必要信息，或在用户同意后生成随机密码。Cloudflare 授权、账号、D1/R2 资源、Worker 名称、自定义域名等私有配置必须来自用户环境、Cloudflare MCP/插件、Wrangler 登录态或 `.env.local`，严禁硬编码到仓库文件。
+验证失败时不得发布正式 Release。
 
-部署脚本必须通过 `scripts/run-wrangler.mjs` 读取 `.env.local` 并生成临时 Wrangler 配置。不要直接修改 `wrangler.toml` 来写入个人 `database_id`、bucket 名称、Worker 名称或 route。
+每个正式 Release 必须附带可安装的 Android APK。APK 文件名统一使用 `edgeever-android-vX.Y.Z-<ABI>.apk`，例如 `edgeever-android-v0.4.14-arm64-v8a.apk`。GitHub APK 默认仅构建 `arm64-v8a`；只有出现明确兼容需求时才额外提供其他 ABI，Play AAB 仍保留全部架构。若完整变更区间影响移动端代码、其共享依赖、原生配置或 APK 构建，则从本次发布提交重新构建生产签名 APK；否则可复用最近的兼容 APK，并在正文中注明来源 Release。发布前验证 APK 版本、签名、SHA-256 及下载可用性。
+
+## Cloudflare 自动部署约束
+
+当用户要求根据 GitHub 项目链接将本项目安装部署到 Cloudflare 时，必须先完整阅读并严格按照 `docs/agent-deploy-cloudflare.md` 执行。该文档是此部署流程的唯一操作规范；不要在本文件重复维护部署命令、密码配置或 Workers Builds 步骤。
 
 ## 本地启动约束
 
-本地预览或调试时，必须优先使用 `bun run dev` 启动完整开发环境，让 API 通过 `scripts/run-wrangler.mjs` 读取 `.env.local` 中的个性化实例配置。实例名称、D1/R2 资源、账号等本机私有配置均以 `.env.local` 为准，严禁在代理指令或代码中硬编码个人实例名。
-
-除非用户明确要求只启动前端静态界面，否则不要单独运行 `bun run dev:web`；该命令不会启动 API，也不会保证读取 `.env.local` 中的实例配置，容易导致前端请求 `127.0.0.1:8787` 失败或误判环境。
+- 默认使用 `bun run dev` 启动完整本地环境（本地 D1/R2 和固定演示种子），不得连接 `.env.local` 中的远程实例。
+- 仅在用户明确指定远程实例并要求连接时，使用 `EDGE_EVER_INSTANCE=<实例名> bun run dev:remote`；私有配置以 `.env.local` 为准，不得硬编码实例名。
+- 仅在用户明确要求只启动前端时使用 `bun run dev:web`。
 
 ## 组件复用与造轮子约束
 

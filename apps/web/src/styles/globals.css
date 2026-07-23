@@ -1,3 +1,5 @@
+@import "highlight.js/styles/github.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -170,12 +172,23 @@ textarea {
 }
 
 .ProseMirror {
-  color: #020617;
+  color: #000;
   font-size: var(--editor-body-font-size);
   line-height: var(--editor-body-line-height);
   min-height: 100%;
   outline: none;
   padding: 24px 28px 56px;
+}
+
+.ProseMirror .edgeever-search-match {
+  border-radius: 0.2rem;
+  background-color: rgb(254 240 138 / 0.8);
+  box-shadow: 0 0 0 1px rgb(234 179 8 / 0.25);
+}
+
+.ProseMirror .edgeever-search-match-active {
+  background-color: rgb(251 191 36 / 0.9);
+  box-shadow: 0 0 0 2px rgb(217 119 6 / 0.45);
 }
 
 @media (max-width: 1023px) {
@@ -261,40 +274,76 @@ textarea {
   color: inherit;
 }
 
-/* Highlight.js-compatible token classes emitted by Tiptap/lowlight. */
-.ProseMirror pre .hljs-comment,
-.ProseMirror pre .hljs-quote {
+.ProseMirror .edgeever-code-block,
+.ProseMirror .edgeever-mermaid-code-block {
+  margin: 0 0 1rem;
+}
+
+.ProseMirror .edgeever-code-source {
+  overflow-x: auto;
+  border: 1px solid #d9eadf;
+  border-radius: 8px;
+  background: #f7fbf8;
+  padding: 0.9rem 1rem;
+  color: #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+  white-space: pre;
+}
+
+.ProseMirror .edgeever-mermaid-code-block {
+  overflow: visible;
+  background: transparent;
+}
+
+.ProseMirror .edgeever-mermaid-preview {
+  display: flex;
+  min-height: 6rem;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 1.25rem 0.5rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ProseMirror .edgeever-mermaid-message,
+.ProseMirror .edgeever-mermaid-error {
+  margin: 0;
+  font-size: 0.82rem;
   color: #64748b;
 }
 
-.ProseMirror pre .hljs-keyword,
-.ProseMirror pre .hljs-selector-tag,
-.ProseMirror pre .hljs-literal,
-.ProseMirror pre .hljs-name,
-.ProseMirror pre .hljs-attribute {
-  color: #7c3aed;
+.ProseMirror .edgeever-mermaid-error {
+  color: #be123c;
 }
 
-.ProseMirror pre .hljs-string,
-.ProseMirror pre .hljs-title,
-.ProseMirror pre .hljs-section,
-.ProseMirror pre .hljs-built_in,
-.ProseMirror pre .hljs-type {
-  color: #047857;
+.ProseMirror .edgeever-mermaid-svg {
+  display: flex;
+  width: 100%;
+  justify-content: center;
 }
 
-.ProseMirror pre .hljs-number,
-.ProseMirror pre .hljs-symbol,
-.ProseMirror pre .hljs-bullet,
-.ProseMirror pre .hljs-variable,
-.ProseMirror pre .hljs-template-variable {
-  color: #c2410c;
+.ProseMirror .edgeever-mermaid-svg svg {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 30rem;
 }
 
-.ProseMirror pre .hljs-meta,
-.ProseMirror pre .hljs-regexp,
-.ProseMirror pre .hljs-link {
-  color: #0369a1;
+.ProseMirror .edgeever-mermaid-source {
+  display: none;
+  margin-top: 0.5rem;
+}
+
+.ProseMirror .edgeever-mermaid-code-block.is-source-visible .edgeever-mermaid-source {
+  display: block;
+}
+
+/* lowlight emits Highlight.js token classes inside a div-based Tiptap node view. */
+.ProseMirror .edgeever-code-block {
+  color: #24292e;
 }
 
 .ProseMirror hr {
@@ -476,7 +525,7 @@ textarea {
   color: var(--brand-green-text);
   font-weight: 500;
   border-radius: 0 4px 4px 0;
-  margin: 1.25rem 0;
+  margin: 1.25rem auto;
 }
 .markdown-content ul {
   list-style-type: disc;
@@ -530,6 +579,154 @@ textarea {
 }
 .markdown-content a:hover {
   color: var(--brand-green);
+}
+
+.ProseMirror .tableWrapper,
+.markdown-content .tableWrapper {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin-top: 1.25rem;
+  margin-right: auto;
+  margin-bottom: 1.25rem;
+  margin-left: 0;
+  border: 1px solid #d8d8d8;
+  border-radius: 2px;
+  background: #fff;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: rgb(100 116 139 / 0.28) transparent;
+}
+
+.ProseMirror table,
+.markdown-content table {
+  width: max-content;
+  min-width: 42rem !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.ProseMirror table col,
+.markdown-content table col {
+  width: 14rem !important;
+}
+
+.ProseMirror th,
+.ProseMirror td,
+.markdown-content th,
+.markdown-content td {
+  position: relative;
+  width: 14rem;
+  min-width: 14rem;
+  border: 0;
+  border-right: 1px solid #dedede;
+  border-bottom: 1px solid #dedede;
+  padding: 0.42rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  transition: background-color 120ms ease;
+}
+
+.ProseMirror th,
+.markdown-content th {
+  background: #f0f0f0;
+  color: #111827;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.ProseMirror th:last-child,
+.ProseMirror td:last-child,
+.markdown-content th:last-child,
+.markdown-content td:last-child {
+  border-right: 0;
+}
+
+.ProseMirror tr:last-child td,
+.markdown-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.ProseMirror tbody tr:nth-child(even) td,
+.markdown-content tbody tr:nth-child(even) td {
+  background: #f8f8f8;
+}
+
+.ProseMirror tbody tr:hover td,
+.markdown-content tbody tr:hover td {
+  background: #f3f4f6;
+}
+
+@media (max-width: 767px) {
+  .ProseMirror .tableWrapper,
+  .markdown-content .tableWrapper {
+    --mobile-table-column-width: clamp(5.5rem, calc((100vw - 3rem) / 3), 14rem);
+    width: 100%;
+  }
+
+  .ProseMirror table,
+  .markdown-content table {
+    min-width: 100% !important;
+  }
+
+  .ProseMirror table col,
+  .markdown-content table col {
+    width: var(--mobile-table-column-width) !important;
+  }
+
+  .ProseMirror th,
+  .ProseMirror td,
+  .markdown-content th,
+  .markdown-content td {
+    width: var(--mobile-table-column-width);
+    min-width: var(--mobile-table-column-width);
+  }
+}
+
+.ProseMirror th p,
+.ProseMirror td p,
+.markdown-content th p,
+.markdown-content td p {
+  margin: 0;
+}
+
+.ProseMirror .selectedCell::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: rgb(16 185 129 / 0.14);
+}
+
+:root.dark .ProseMirror th,
+:root.dark .markdown-content th {
+  background: #27303f;
+  color: #f8fafc;
+}
+
+:root.dark .ProseMirror .tableWrapper,
+:root.dark .markdown-content .tableWrapper {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+:root.dark .ProseMirror th,
+:root.dark .ProseMirror td,
+:root.dark .markdown-content th,
+:root.dark .markdown-content td {
+  border-color: #334155;
+}
+
+:root.dark .ProseMirror tbody tr:nth-child(even) td,
+:root.dark .markdown-content tbody tr:nth-child(even) td {
+  background: #182235;
+}
+
+:root.dark .ProseMirror tbody tr:hover td,
+:root.dark .markdown-content tbody tr:hover td {
+  background: #202b3d;
 }
 
 /* Theme-aware surfaces for legacy white utilities and fixed semantic colors. */
@@ -653,6 +850,20 @@ textarea {
   border-color: #166534;
   background: #13261a;
   color: #cbd5e1;
+}
+
+:root.dark .ProseMirror .edgeever-mermaid-code-block {
+  background: transparent;
+}
+
+:root.dark .ProseMirror .edgeever-code-source {
+  border-color: #166534;
+  background: #13261a;
+  color: #cbd5e1;
+}
+
+:root.dark .ProseMirror .edgeever-mermaid-preview {
+  background: transparent;
 }
 
 :root.dark .markdown-content {

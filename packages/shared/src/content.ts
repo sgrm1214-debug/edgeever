@@ -1,6 +1,17 @@
+import Image from "@tiptap/extension-image";
+import { TableKit } from "@tiptap/extension-table";
+import { Markdown, MarkdownManager } from "@tiptap/markdown";
+import StarterKit from "@tiptap/starter-kit";
+
 export type TiptapTextNode = {
   type: "text";
   text: string;
+  marks?: TiptapMark[];
+};
+
+export type TiptapMark = {
+  type: string;
+  attrs?: Record<string, unknown>;
 };
 
 export type TiptapNode = {
@@ -21,86 +32,50 @@ export const emptyDoc = (): TiptapDoc => ({
   content: [{ type: "paragraph" }],
 });
 
+const markdownManager = new MarkdownManager({
+  extensions: [
+    StarterKit,
+    TableKit,
+    Image,
+    Markdown.configure({
+      markedOptions: { gfm: true },
+    }),
+  ],
+});
+
 export const markdownToDoc = (markdown: string): TiptapDoc => {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const content: TiptapNode[] = [];
-
-  for (let index = 0; index < lines.length; ) {
-    if (!lines[index].trim()) {
-      index += 1;
-      continue;
-    }
-
-    const fence = /^```([^\s`]*)\s*$/.exec(lines[index].trim());
-
-    if (fence) {
-      const codeLines: string[] = [];
-      index += 1;
-
-      while (index < lines.length && lines[index].trim() !== "```") {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-
-      if (index < lines.length) {
-        index += 1;
-      }
-
-      content.push({
-        type: "codeBlock",
-        attrs: { language: fence[1] || "plaintext" },
-        content: [{ type: "text", text: codeLines.join("\n") }],
-      });
-      continue;
-    }
-
-    const blockLines: string[] = [];
-    while (index < lines.length && lines[index].trim()) {
-      blockLines.push(lines[index]);
-      index += 1;
-    }
-
-    const block = blockLines.join("\n").trim();
-    const heading = /^(#{1,3})\s+(.+)$/.exec(block);
-    const image = /^!\[([^\]]*)\]\((\S+?)(?:\s+"([^"]+)")?\)$/.exec(block);
-
-    if (heading) {
-      content.push({
-        type: "heading",
-        attrs: { level: heading[1].length },
-        content: [{ type: "text", text: heading[2] }],
-      });
-      continue;
-    }
-
-    if (image) {
-      content.push({
-        type: "image",
-        attrs: {
-          src: image[2],
-          alt: image[1] || null,
-          title: image[3] || null,
-        },
-      });
-      continue;
-    }
-
-    if (/^-{3,}$/.test(block)) {
-      content.push({ type: "horizontalRule" });
-      continue;
-    }
-
-    content.push({
-      type: "paragraph",
-      content: [{ type: "text", text: block }],
-    });
-  }
-
-  if (content.length === 0) {
+  if (!markdown.trim()) {
     return emptyDoc();
   }
 
-  return { type: "doc", content };
+  return markdownManager.parse(markdown.replace(/\r\n?/g, "\n")) as TiptapDoc;
+};
+
+const docContainsNodeType = (doc: TiptapDoc, nodeType: string): boolean => {
+  const visit = (nodes: TiptapNode[]): boolean => nodes.some((node) =>
+    node.type === nodeType || (node.content ? visit(node.content as TiptapNode[]) : false)
+  );
+
+  return visit(doc.content);
+};
+
+/**
+ * Recovers Markdown features that an older editor schema could not persist in
+ * contentJson. The stored Markdown remains the compatibility source in that
+ * case; otherwise the richer JSON document (for example image sizing attrs)
+ * keeps precedence.
+ */
+export const resolveMemoContentDoc = (
+  contentJson: TiptapDoc | null | undefined,
+  contentMarkdown: string | null | undefined
+): TiptapDoc => {
+  const currentDoc = contentJson && Array.isArray(contentJson.content) ? contentJson : emptyDoc();
+  if (!contentMarkdown?.trim() || docContainsNodeType(currentDoc, "table")) {
+    return currentDoc;
+  }
+
+  const markdownDoc = markdownToDoc(contentMarkdown);
+  return docContainsNodeType(markdownDoc, "table") ? markdownDoc : currentDoc;
 };
 
 export const docToText = (doc: unknown): string => {
@@ -140,6 +115,53 @@ export const docToText = (doc: unknown): string => {
   return pieces.join(" ").replace(/\s+/g, " ").trim();
 };
 
+let memoCharacterSegmenter: Intl.Segmenter | null | undefined;
+
+const getMemoCharacterSegmenter = () => {
+  if (memoCharacterSegmenter !== undefined) {
+    return memoCharacterSegmenter;
+  }
+
+  memoCharacterSegmenter = typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+  return memoCharacterSegmenter;
+};
+
+/**
+ * Counts visible memo-body characters while excluding whitespace. Formatting,
+ * titles, tags, and image labels are intentionally not part of the count.
+ */
+export const countMemoCharacters = (doc: unknown): number => {
+  const pieces: string[] = [];
+
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+
+    const current = node as { text?: unknown; content?: unknown };
+
+    if (typeof current.text === "string") {
+      pieces.push(current.text);
+    }
+
+    if (Array.isArray(current.content)) {
+      for (const child of current.content) {
+        walk(child);
+      }
+    }
+  };
+
+  walk(doc);
+  const text = pieces.join("");
+  const segmenter = getMemoCharacterSegmenter();
+  const characters = segmenter ? Array.from(segmenter.segment(text), ({ segment }) => segment) : Array.from(text);
+
+  return characters.reduce((count, character) => count + (/^\s+$/u.test(character) ? 0 : 1), 0);
+};
+
 export const docToMarkdown = (doc: unknown): string => {
   if (!doc || typeof doc !== "object") {
     return "";
@@ -151,147 +173,7 @@ export const docToMarkdown = (doc: unknown): string => {
     return "";
   }
 
-  return root.content
-    .map((node) => blockToMarkdown(node))
-    .filter(Boolean)
-    .join("\n\n");
-};
-
-const blockToMarkdown = (node: unknown): string => {
-  if (!node || typeof node !== "object") {
-    return "";
-  }
-
-  const current = node as {
-    type?: unknown;
-    attrs?: Record<string, unknown>;
-    content?: unknown;
-    text?: unknown;
-  };
-
-  if (current.type === "heading") {
-    const level = typeof current.attrs?.level === "number" ? current.attrs.level : 1;
-    const text = inlineToMarkdown(current.content);
-    return text ? `${"#".repeat(Math.min(Math.max(level, 1), 6))} ${text}` : "";
-  }
-
-  if (current.type === "image") {
-    return imageToMarkdown(current.attrs);
-  }
-
-  if (current.type === "horizontalRule") {
-    return "---";
-  }
-
-  if (current.type === "bulletList" && Array.isArray(current.content)) {
-    return current.content
-      .map((item) => inlineToMarkdown((item as { content?: unknown })?.content))
-      .filter(Boolean)
-      .map((item) => `- ${item.replace(/\n/g, "\n  ")}`)
-      .join("\n");
-  }
-
-  if (current.type === "orderedList" && Array.isArray(current.content)) {
-    return current.content
-      .map((item, index) => {
-        const text = inlineToMarkdown((item as { content?: unknown })?.content);
-        return text ? `${index + 1}. ${text.replace(/\n/g, "\n   ")}` : "";
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  if (current.type === "blockquote") {
-    const text = inlineToMarkdown(current.content);
-    return text
-      .split("\n")
-      .map((line) => `> ${line}`)
-      .join("\n");
-  }
-
-  if (current.type === "codeBlock") {
-    const language = getStringAttr(current.attrs, "language");
-    const languageSuffix = language && language !== "plaintext" ? language : "";
-    const code = contentToPlainText(current.content);
-    return `\`\`\`${languageSuffix}\n${code}\n\`\`\``;
-  }
-
-  return inlineToMarkdown(current.content);
-};
-
-const contentToPlainText = (content: unknown): string => {
-  if (!Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .map((node) => {
-      if (!node || typeof node !== "object") {
-        return "";
-      }
-
-      const current = node as { type?: unknown; text?: unknown; content?: unknown };
-
-      if (typeof current.text === "string") {
-        return current.text;
-      }
-
-      if (current.type === "hardBreak") {
-        return "\n";
-      }
-
-      return contentToPlainText(current.content);
-    })
-    .join("");
-};
-
-const inlineToMarkdown = (content: unknown): string => {
-  if (!Array.isArray(content)) {
-    return "";
-  }
-
-  return content
-    .map((node) => {
-      if (!node || typeof node !== "object") {
-        return "";
-      }
-
-      const current = node as {
-        type?: unknown;
-        text?: unknown;
-        attrs?: Record<string, unknown>;
-        content?: unknown;
-      };
-
-      if (typeof current.text === "string") {
-        return current.text;
-      }
-
-      if (current.type === "hardBreak") {
-        return "\n";
-      }
-
-      if (current.type === "image") {
-        return imageToMarkdown(current.attrs);
-      }
-
-      return inlineToMarkdown(current.content);
-    })
-    .join("");
-};
-
-const imageToMarkdown = (attrs: Record<string, unknown> | undefined): string => {
-  const src = getStringAttr(attrs, "src");
-
-  if (!src) {
-    return "";
-  }
-
-  const alt = getStringAttr(attrs, "alt");
-  const title = getStringAttr(attrs, "title");
-  const titleSuffix = title ? ` "${title.replace(/"/g, '\\"')}"` : "";
-
-  return `![${alt.replace(/\]/g, "\\]")}](${src}${titleSuffix})`;
+  return markdownManager.serialize(doc as Parameters<typeof markdownManager.serialize>[0]);
 };
 
 const getStringAttr = (attrs: Record<string, unknown> | undefined, key: string) => {

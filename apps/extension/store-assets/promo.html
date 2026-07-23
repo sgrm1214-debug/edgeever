@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EdgeEver Web Clipper</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 440px; height: 280px; margin: 0; overflow: hidden; }
+      body {
+        display: grid;
+        place-items: center;
+        color: #f8fafc;
+        background:
+          radial-gradient(circle at 84% 18%, rgba(94, 234, 212, 0.24), transparent 32%),
+          linear-gradient(145deg, #064e3b, #0f766e 62%, #115e59);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main { width: 100%; padding: 32px 36px; }
+      .brand { display: flex; align-items: center; gap: 18px; }
+      .icon {
+        width: 76px;
+        height: 76px;
+        border-radius: 18px;
+        box-shadow: 0 14px 32px rgba(6, 78, 59, 0.35);
+      }
+      h1 { margin: 0; font-size: 27px; line-height: 1.1; letter-spacing: -0.02em; }
+      .eyebrow { margin: 7px 0 0; color: #99f6e4; font-size: 14px; font-weight: 700; }
+      .tagline { margin: 26px 0 0; max-width: 350px; font-size: 17px; font-weight: 650; line-height: 1.5; }
+      .detail { margin: 8px 0 0; color: #ccfbf1; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img class="icon" src="/icons/icon-128.png" alt="" />
+        <div>
+          <h1>EdgeEver</h1>
+          <p class="eyebrow">Web Clipper</p>
+        </div>
+      </div>
+      <p class="tagline">一键保存网页正文或选中内容<br />到你自己的 EdgeEver 实例</p>
+      <p class="detail">本地提取 · Markdown · 自托管</p>
+    </main>
+  </body>
+</html>

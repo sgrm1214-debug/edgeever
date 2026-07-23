@@ -51,7 +51,9 @@ import {
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { MemoCard } from "./MemoCard";
 import { cn } from "@/lib/utils";
+import { WORKSPACE_PAGE_TITLE_CLASSNAME } from "@/lib/workspace-ui";
 import type { Notebook, MemoSummary } from "@edgeever/shared";
+import { toggleMobileMemoFilterMode } from "@edgeever/shared/mobile-ui";
 import type {
   MemoFilterMode,
   MemoSortMode,
@@ -129,8 +131,8 @@ export const MemoSelectionActionBar = ({
   const { t } = useTranslation();
 
   return (
-    <div className="hidden h-full min-h-0 flex-1 items-center justify-center bg-white px-16 py-10 lg:flex xl:px-24">
-      <div className="w-72 -translate-x-20 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg xl:-translate-x-28">
+    <div className="hidden h-full min-h-0 flex-1 items-center justify-start bg-white px-16 py-10 lg:flex lg:pl-44 xl:px-24 xl:pl-44">
+      <div className="w-72 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg">
         <div className="flex h-9 items-center gap-2 px-3 text-xs font-semibold text-slate-400">
           <CheckSquare className="h-4 w-4" />
           {getSelectionCountLabel(selectedCount, t)}
@@ -354,6 +356,7 @@ export const MemoListPane = ({
   onOpenTags,
   onOpenAssets,
   onOpenTrash,
+  onBackFromTrash,
   onOpenSettings,
   onSyncMemos,
   onCreateMemo,
@@ -425,6 +428,7 @@ export const MemoListPane = ({
   onOpenTags: () => void;
   onOpenAssets: () => void;
   onOpenTrash: () => void;
+  onBackFromTrash: () => void;
   onOpenSettings: () => void;
   onSyncMemos: () => void;
   onCreateMemo: () => void;
@@ -508,7 +512,8 @@ export const MemoListPane = ({
   const selectionToggleTitle = canToggleVisibleMemoSelection ? visibleSelectionToggleLabel : t("memoList.noSelectableInList");
   const moveTargetTitle =
     view === "trash" ? t("workspace.selection.trashCannotMove") : notebooks.length === 0 ? t("workspace.selection.noMovableNotebook") : isMoving ? t("workspace.selection.moving") : t("memoList.moveToNotebook");
-  const hasListConstraint = Boolean(search.trim()) || filterMode !== "all";
+  const searchActive = Boolean(search.trim());
+  const hasListConstraint = searchActive || filterMode !== "all";
   const activeFilterLabel = filterOptions.find((option) => option.value === filterMode)?.label ?? t("options.memoFilter.all");
   const activeSortLabel = memoSortOptions.find((option) => option.value === sortMode)?.label ?? t("options.memoSort.updatedDesc");
   const syncMemosTitle = !canSyncMemos
@@ -925,11 +930,19 @@ export const MemoListPane = ({
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm text-slate-500 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
-              <Search className="h-4 w-4 shrink-0" />
+            <div
+              className={cn(
+                "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border bg-white px-3 text-sm shadow-[0_8px_18px_rgba(15,23,42,0.05)] transition",
+                searchActive
+                  ? "border-emerald-400 bg-emerald-50/80 text-emerald-700 ring-2 ring-emerald-200/70"
+                  : "border-slate-200 text-slate-500"
+              )}
+            >
+              <Search className={cn("h-4 w-4 shrink-0", searchActive && "text-emerald-600")} />
               <input
                 ref={mobileSearchInputRef}
-                type="search"
+                type="text"
+                role="searchbox"
                 value={search}
                 autoCapitalize="none"
                 autoComplete="off"
@@ -978,6 +991,17 @@ export const MemoListPane = ({
         {!mobileSearchActive && (
           <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
             <div className="flex min-w-0 items-center gap-2">
+              {view === "trash" && (
+                <button
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                  type="button"
+                  title={t("notebookPane.backToList")}
+                  aria-label={t("notebookPane.backToList")}
+                  onClick={onBackFromTrash}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              )}
               <button
                 className="flex min-w-0 items-center gap-1 rounded-md px-1 py-1 text-left transition hover:bg-slate-100 lg:hidden"
                 type="button"
@@ -985,7 +1009,7 @@ export const MemoListPane = ({
                 aria-label={t("memoList.switchNotebook")}
                 onClick={onOpenNotebookPicker}
               >
-                <span className="max-w-[190px] truncate text-lg font-semibold text-slate-950">{listTitle}</span>
+                <span className={`max-w-[190px] truncate ${WORKSPACE_PAGE_TITLE_CLASSNAME}`}>{listTitle}</span>
                 <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
               </button>
             </div>
@@ -1008,10 +1032,24 @@ export const MemoListPane = ({
           </div>
         )}
 
-        <div className="mb-3 hidden min-w-0 lg:block">
-          <div className="truncate text-lg font-semibold leading-6 text-slate-950">{listTitle}</div>
-          <div className="mt-0.5 truncate text-xs text-slate-500">
-            {listContextLabel} · {listCountLabel}
+        <div className="mb-3 hidden min-w-0 lg:flex items-start gap-1">
+          {view === "trash" && (
+            <Button
+              className="-ml-2 mt-0.5 shrink-0"
+              size="icon"
+              variant="ghost"
+              title={t("notebookPane.backToList")}
+              aria-label={t("notebookPane.backToList")}
+              onClick={onBackFromTrash}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="min-w-0">
+            <div className={`truncate ${WORKSPACE_PAGE_TITLE_CLASSNAME}`}>{listTitle}</div>
+            <div className="mt-0.5 truncate text-xs text-slate-500">
+              {listContextLabel} · {listCountLabel}
+            </div>
           </div>
         </div>
 
@@ -1181,11 +1219,19 @@ export const MemoListPane = ({
         </div>
 
         <div className={cn("items-center gap-2", mobileSearchActive ? "hidden lg:flex" : "flex")}>
-          <div className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-full border border-transparent bg-slate-100 px-3 text-sm text-slate-500 transition focus-within:border-slate-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-slate-400/20 lg:rounded-md lg:border-slate-200 lg:bg-slate-50">
-            <Search className="h-4 w-4" />
+          <div
+            className={cn(
+              "flex h-mobile-control min-w-0 flex-1 items-center gap-2 rounded-full border px-3 text-sm transition focus-within:ring-2 lg:rounded-md",
+              searchActive
+                ? "border-emerald-400 bg-emerald-50/80 text-emerald-700 shadow-[0_0_0_1px_rgba(52,211,153,0.18)] ring-1 ring-emerald-200 focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-emerald-300/50"
+                : "border-transparent bg-slate-100 text-slate-500 focus-within:border-slate-300 focus-within:bg-white focus-within:ring-slate-400/20 lg:border-slate-200 lg:bg-slate-50"
+            )}
+          >
+            <Search className={cn("h-4 w-4 shrink-0", searchActive && "text-emerald-600")} />
             <input
               ref={searchInputRef}
-              type="search"
+              type="text"
+              role="searchbox"
               value={search}
               autoCapitalize="none"
               autoComplete="off"
@@ -1220,7 +1266,7 @@ export const MemoListPane = ({
               <button
                 key={option.value}
                 className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full border transition",
+                  "flex h-mobile-control w-mobile-control items-center justify-center rounded-full border transition",
                   filterMode === option.value
                     ? "border-slate-700 bg-slate-700 text-white shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
                     : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800"
@@ -1229,7 +1275,7 @@ export const MemoListPane = ({
                 title={filterMode === option.value ? t("memoList.toggleOffFilter", { label: option.label }) : option.label}
                 aria-label={filterMode === option.value ? t("memoList.toggleOffFilter", { label: option.label }) : option.label}
                 aria-pressed={filterMode === option.value}
-                onClick={() => handleFilterModeChange(filterMode === option.value ? "all" : option.value)}
+                onClick={() => handleFilterModeChange(toggleMobileMemoFilterMode(filterMode, option.value))}
               >
                 {getMobileFilterIcon(option.value)}
               </button>
@@ -1238,21 +1284,38 @@ export const MemoListPane = ({
         </div>
 
         {hasListConstraint && (
-          <div className="mt-3 flex min-h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
-            <span className="min-w-0 flex-1 truncate">
-              {t("memoList.constrainedCount", {
-                label: search.trim()
-                  ? t("memoList.searchConstraint", { query: search.trim() })
-                  : t("memoList.filterConstraint", { label: activeFilterLabel }),
-                count: totalMemoCount,
-              })}
+          <div
+            className={cn(
+              "mt-3 flex min-h-8 items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
+              searchActive
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 shadow-[inset_3px_0_0_#10b981]"
+                : "border-slate-200 bg-white text-slate-500"
+            )}
+            role="status"
+          >
+            {searchActive && (
+              <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2 py-1 font-semibold text-white">
+                <Search className="h-3 w-3" />
+                {t("memoList.searchActive")}
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {searchActive
+                ? t("memoList.searchResults", { count: totalMemoCount })
+                : t("memoList.constrainedCount", {
+                    label: t("memoList.filterConstraint", { label: activeFilterLabel }),
+                    count: totalMemoCount,
+                  })}
             </span>
             <button
-              className="shrink-0 font-semibold text-slate-600 transition hover:text-slate-950"
+              className={cn(
+                "shrink-0 font-semibold transition",
+                searchActive ? "text-emerald-800 hover:text-emerald-950" : "text-slate-600 hover:text-slate-950"
+              )}
               type="button"
-              onClick={handleResetListConstraints}
+              onClick={searchActive ? handleClearSearch : handleResetListConstraints}
             >
-              {t("memoList.reset")}
+              {searchActive ? t("memoList.cancelSearch") : t("memoList.reset")}
             </button>
           </div>
         )}

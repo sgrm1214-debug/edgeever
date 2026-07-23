@@ -1,7 +1,13 @@
 import type {
   ApiToken,
   AuthSession,
+  LoginInput,
+  LoginDeviceSession,
+  InstanceUser,
   CreatedApiToken,
+  JsonBackupMemo,
+  JsonBackupNotebook,
+  JsonBackupRevision,
   MemoDetail,
   MemoEditSession,
   MemoRevision,
@@ -52,6 +58,18 @@ export type ListApiTokensResponse = {
   availableScopes: string[];
 };
 
+export type ListUsersResponse = {
+  users: InstanceUser[];
+};
+
+export type UserResponse = {
+  user: InstanceUser;
+};
+
+export type ListLoginDeviceSessionsResponse = {
+  sessions: LoginDeviceSession[];
+};
+
 export type MemoResponse = {
   memo: MemoDetail;
 };
@@ -62,6 +80,43 @@ export type NotebookResponse = {
 
 export type ResourceResponse = {
   resource: Resource;
+};
+
+export type MarkdownExportPage = {
+  memos: MemoDetail[];
+  resources: Resource[];
+  totalCount: number;
+  nextOffset: number | null;
+};
+
+export type JsonBackupPage = MarkdownExportPage & {
+  revisions: JsonBackupRevision[];
+};
+
+export type MobileSyncBootstrapPage = {
+  notebooks: Notebook[];
+  memos: MemoDetail[];
+  snapshotCursor: number;
+  syncIdentity?: string;
+  totalCount: number;
+  nextAfterId: string | null;
+};
+
+export type MobileSyncChange = {
+  cursor: number;
+  entityType: "notebook" | "memo";
+  entityId: string;
+  operation: "upsert" | "delete";
+  notebook: Notebook | null;
+  memo: MemoDetail | null;
+};
+
+export type MobileSyncChangesPage = {
+  changes: MobileSyncChange[];
+  cursor: number;
+  hasMore: boolean;
+  serverCursor?: number;
+  syncIdentity?: string;
 };
 
 export class ApiRequestError extends Error {
@@ -118,9 +173,38 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
   return {
     getSession: () => request<AuthSession>("/api/v1/auth/session"),
 
-    login: (payload: { username: string; password: string }) =>
+    listLoginDeviceSessions: () =>
+      request<ListLoginDeviceSessionsResponse>("/api/v1/auth/sessions"),
+
+    revokeLoginDeviceSession: (sessionId: string) =>
+      request<{ ok: true }>(`/api/v1/auth/sessions/${sessionId}`, { method: "DELETE" }),
+
+    revokeOtherLoginDeviceSessions: () =>
+      request<{ ok: true }>("/api/v1/auth/sessions", { method: "DELETE" }),
+
+    login: (payload: LoginInput) =>
       request<AuthSession>("/api/v1/auth/login", {
         method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    changePassword: (payload: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+      request<{ ok: true }>("/api/v1/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    listUsers: () => request<ListUsersResponse>("/api/v1/users"),
+
+    createUser: (payload: { username: string; displayName?: string | null; password: string }) =>
+      request<UserResponse>("/api/v1/users", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    updateUser: (userId: string, payload: { displayName?: string | null; password?: string; isDisabled?: boolean }) =>
+      request<UserResponse>(`/api/v1/users/${userId}`, {
+        method: "PATCH",
         body: JSON.stringify(payload),
       }),
 
@@ -131,6 +215,17 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
       }),
 
     listNotebooks: () => request<ListNotebooksResponse>("/api/v1/notebooks"),
+
+    getMobileSyncBootstrapPage: (afterId: string | null = null, limit = 100) => {
+      const search = new URLSearchParams({ limit: String(limit) });
+      if (afterId) {
+        search.set("afterId", afterId);
+      }
+      return request<MobileSyncBootstrapPage>(`/api/v1/sync/bootstrap?${search.toString()}`);
+    },
+
+    getMobileSyncChanges: (cursor: number, limit = 100) =>
+      request<MobileSyncChangesPage>(`/api/v1/sync/changes?cursor=${cursor}&limit=${limit}`),
 
     createNotebook: (payload: { name: string; parentId?: string | null }) =>
       request<NotebookResponse>("/api/v1/notebooks", {
@@ -177,6 +272,7 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
 
     listMemos: (params: {
       notebookId?: string | null;
+      includeDescendants?: boolean;
       q?: string;
       trash?: boolean;
       sort?: MemoSortMode;
@@ -188,6 +284,10 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
 
       if (params.notebookId) {
         search.set("notebookId", params.notebookId);
+      }
+
+      if (params.includeDescendants) {
+        search.set("includeDescendants", "1");
       }
 
       if (params.q?.trim()) {
@@ -273,6 +373,57 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
       }),
 
     listResources: () => request<ListResourcesResponse>("/api/v1/resources"),
+
+    getMarkdownExportPage: (offset = 0, limit = 50) =>
+      request<MarkdownExportPage>(`/api/v1/exports/markdown?offset=${offset}&limit=${limit}`),
+
+    getJsonBackupPage: (offset = 0, limit = 25) =>
+      request<JsonBackupPage>(`/api/v1/backups/json?offset=${offset}&limit=${limit}`),
+
+    restoreJsonNotebooks: (notebooks: JsonBackupNotebook[]) =>
+      request<{ ok: true }>("/api/v1/restores/json/notebooks", {
+        method: "POST",
+        body: JSON.stringify({ notebooks }),
+      }),
+
+    restoreJsonMemos: (memos: JsonBackupMemo[]) =>
+      request<{ ok: true }>("/api/v1/restores/json/memos", {
+        method: "POST",
+        body: JSON.stringify({ memos }),
+      }),
+
+    restoreJsonResource: (resourceId: string, metadata: JsonBackupMemo["resources"][number], file: Blob) => {
+      const form = new FormData();
+      form.append("metadata", JSON.stringify(metadata));
+      form.append("file", file, metadata.filename || metadata.id);
+      return request<{ ok: true }>(`/api/v1/restores/json/resources/${encodeURIComponent(resourceId)}`, {
+        method: "PUT",
+        body: form,
+      });
+    },
+
+    getResourceBlob: async (resourceUrl: string) => {
+      const headers = new Headers();
+
+      if (options.token) {
+        headers.set("Authorization", `Bearer ${options.token}`);
+      }
+
+      const response = await fetchImpl(`${baseUrl}${resourceUrl}`, {
+        credentials: "include",
+        headers,
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          options.onUnauthorized?.();
+        }
+
+        throw new ApiRequestError(response.statusText || "Resource download failed", response.status);
+      }
+
+      return response.blob();
+    },
 
     uploadMemoResource: (memoId: string, file: FormData) =>
       request<ResourceResponse>(`/api/v1/memos/${memoId}/resources`, {

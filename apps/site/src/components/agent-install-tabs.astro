@@ -6,10 +6,19 @@ const isEnglish = locale === "en-US";
 
 const copy = isEnglish
   ? {
-      manual: "Manual install",
-      agent: "Install with AI Agent",
+      chooseOne: "Choose any one of the following three options to complete deployment.",
+      oneClick: "Option A: Cloudflare one-click",
+      agent: "Option B: AI Agent",
+      manual: "Option C: Manual",
+      recommended: "Recommended",
+      oneClickIntro:
+        "One-click deployment creates a dedicated GitHub repository and the required Cloudflare resources, then automatically redeploys after the repository's daily upstream sync.",
+      deployButton: "Deploy to Cloudflare",
+      oneClickGuide: "Setup and troubleshooting",
+      oneClickGuideHref:
+        "https://github.com/tianma-if/edgeever/blob/main/docs/deploy-cloudflare-button.md",
       agentIntro:
-        "Copy the prompt below to your AI assistant (Claude Code, Codex, Cursor, Trae, and similar tools). It can complete the installation for you.",
+        "Copy the prompt below to your AI assistant (Claude Code, Codex, Cursor, and similar tools).",
       promptLabel: "Prompt",
       copyPrompt: "Copy prompt",
       copying: "Copying...",
@@ -20,12 +29,20 @@ const copy = isEnglish
       manualGuide: "Open the complete manual deployment guide",
       manualGuideHref: "/en/manual-deploy",
       promptText:
-        "Please fork the EdgeEver repository first: https://github.com/tianma-if/edgeever\n\nAfter the fork is ready, use the forked repository to install and deploy EdgeEver to Cloudflare, and configure automatic upstream sync for the fork so future product updates can be pulled in.",
+        "Please follow these steps:\n1. Create a GitHub repository from https://github.com/tianma-if/edgeever and clone it locally.\n2. Follow docs/agent-deploy-cloudflare.md to create Cloudflare resources and run `bun run deploy:manual`.\n3. Run `bun run deploy:builds:setup` to connect the deployed Worker to the repository's `main` branch through Cloudflare Workers Builds. If setup needs a token, use a User API Token, not an Account API Token.\n4. Verify the first automatic build and the daily upstream-update workflow.",
     }
   : {
-      manual: "手动部署",
-      agent: "通过 AI Agent 部署",
-      agentIntro: "将下方提示词复制给你的 AI 助手（Claude Code、Codex、Cursor、Trae 等），它会自动完成部署。",
+      chooseOne: "以下三种方案任选其一即可完成部署。",
+      oneClick: "方案 A：Cloudflare 一键部署",
+      agent: "方案 B：AI Agent 一句话部署",
+      manual: "方案 C：手动部署",
+      recommended: "推荐",
+      oneClickIntro: "一键部署会创建专属 GitHub 仓库和所需 Cloudflare 资源，并在仓库每日同步上游版本后自动触发重新部署。",
+      deployButton: "Deploy to Cloudflare",
+      oneClickGuide: "查看配置与排错说明",
+      oneClickGuideHref:
+        "https://github.com/tianma-if/edgeever/blob/main/docs/deploy-cloudflare-button.zh-CN.md",
+      agentIntro: "将下方提示词复制给你的 AI 助手（Claude Code、Codex、Cursor 等）。",
       promptLabel: "提示词",
       copyPrompt: "复制提示词",
       copying: "复制中...",
@@ -36,30 +53,61 @@ const copy = isEnglish
       manualGuide: "查看完整手动部署指南",
       manualGuideHref: "/manual-deploy",
       promptText:
-        "请先 Fork EdgeEver 仓库：https://github.com/tianma-if/edgeever\n\nFork 完成后，请使用 Fork 后的仓库把 EdgeEver 部署到 Cloudflare 上，并为 Fork 仓库配置自动同步上游，以便后续获取最新产品特性。",
+        "请按以下流程操作：\n1. 基于 https://github.com/tianma-if/edgeever 创建 GitHub 仓库并克隆到本地。\n2. 严格按照 docs/agent-deploy-cloudflare.md 创建 Cloudflare 资源并运行 `bun run deploy:manual`。\n3. 运行 `bun run deploy:builds:setup`，通过 Cloudflare Workers Builds 将已部署的 Worker 连接到仓库的 `main` 分支；如需 token，使用 User API Token，不要使用 Account API Token。\n4. 验证首次自动构建和每日上游更新工作流。",
     };
 ---
 
 <section class="not-prose relative left-1/2 my-10 w-[min(92vw,960px)] -translate-x-1/2" data-agent-install-tabs>
-  <div class="mx-auto flex max-w-xl items-center justify-center gap-14 border-b border-slate-200 text-lg font-semibold">
+  <p class="mb-6 text-center text-lg font-semibold text-slate-700">{copy.chooseOne}</p>
+
+  <div class="mx-auto grid max-w-4xl grid-cols-1 border-b border-slate-200 text-sm font-semibold sm:grid-cols-3 sm:text-base">
     <button
-      class="agent-install-tab px-2 pb-4 text-slate-500 transition hover:text-brand-text"
+      class="agent-install-tab active relative px-3 py-4 text-brand transition hover:text-brand-text"
+      type="button"
+      data-tab-target="one-click"
+      aria-selected="true">
+      <span>{copy.oneClick}</span>
+      <span class="ml-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">{copy.recommended}</span>
+    </button>
+    <button
+      class="agent-install-tab relative px-3 py-4 text-slate-500 transition hover:text-brand-text"
+      type="button"
+      data-tab-target="agent"
+      aria-selected="false">
+      {copy.agent}
+    </button>
+    <button
+      class="agent-install-tab relative px-3 py-4 text-slate-500 transition hover:text-brand-text"
       type="button"
       data-tab-target="manual"
       aria-selected="false">
       {copy.manual}
     </button>
-    <button
-      class="agent-install-tab active px-2 pb-4 text-brand relative transition"
-      type="button"
-      data-tab-target="agent"
-      aria-selected="true">
-      {copy.agent}
-    </button>
   </div>
 
   <div class="mt-8 overflow-hidden rounded-[28px] bg-slate-100 px-6 py-8 sm:px-10 md:px-14">
-    <div class="agent-install-panel" data-tab-panel="agent">
+    <div class="agent-install-panel" data-tab-panel="one-click">
+      <p class="mx-auto max-w-3xl text-center text-lg leading-9 text-slate-600">{copy.oneClickIntro}</p>
+      <div class="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <a
+          class="inline-flex items-center gap-2 rounded-xl bg-[#f48120] px-7 py-3 text-base font-semibold text-white shadow-[0_14px_30px_-18px_rgba(244,129,32,0.85)] transition hover:-translate-y-0.5 hover:bg-[#e87315]"
+          href="https://deploy.workers.cloudflare.com/?url=https://github.com/tianma-if/edgeever"
+          target="_blank"
+          rel="noopener">
+          <Icon class="h-5 w-5" name="simple-icons:cloudflare" />
+          {copy.deployButton}
+        </a>
+        <a
+          class="text-sm font-semibold text-brand-text underline decoration-brand-border underline-offset-4 hover:text-brand"
+          href={copy.oneClickGuideHref}
+          target="_blank"
+          rel="noopener">
+          {copy.oneClickGuide}
+        </a>
+      </div>
+    </div>
+
+    <div class="agent-install-panel hidden" data-tab-panel="agent">
       <p class="mx-auto mb-8 max-w-3xl text-center text-lg leading-9 text-slate-600">
         {copy.agentIntro}
       </p>

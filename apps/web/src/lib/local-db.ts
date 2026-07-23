@@ -17,6 +17,7 @@ export type MemoUpdateSyncPayload = {
   editSessionId: string;
   title: string;
   contentJson: TiptapDoc;
+  contentMarkdown?: string;
   tags: string[];
 };
 
@@ -29,6 +30,7 @@ export type SyncQueueItem = {
   attemptCount: number;
   lastError: string | null;
   nextAttemptAt: string | null;
+  claimId: string | null;
   createdAt: string;
   updatedAt: string;
 };

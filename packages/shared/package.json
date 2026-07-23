@@ -4,7 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./image-display": "./src/image-display.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./mobile-editor": "./src/mobile-editor.ts",
+    "./mobile-ui": "./src/mobile-ui.ts"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@tiptap/extension-image": "3.27.1",
+    "@tiptap/extension-table": "3.27.1",
+    "@tiptap/markdown": "3.27.1",
+    "@tiptap/starter-kit": "3.27.1"
+  }
 }

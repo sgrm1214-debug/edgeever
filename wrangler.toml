@@ -2,6 +2,7 @@ name = "edgeever"
 main = "apps/api/src/index.ts"
 compatibility_date = "2026-06-26"
 workers_dev = true
+account_id = "5b0dc8433c33e625f83beae3ef49aa71"
 
 [assets]
 directory = "apps/web/dist"

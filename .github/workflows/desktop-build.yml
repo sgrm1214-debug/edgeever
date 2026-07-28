@@ -99,6 +99,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build Web renderer
+        env:
+          EDGE_EVER_DESKTOP_BUILD: "1"
         run: bun run build:web
 
       - name: Verify Web precache budget

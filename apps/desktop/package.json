@@ -1,6 +1,6 @@
 {
   "name": "@edgeever/desktop",
-  "version": "1.6.27",
+  "version": "1.6.28",
   "desktopName": "EdgeEver",
   "private": true,
   "description": "Native EdgeEver desktop client",

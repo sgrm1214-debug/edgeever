@@ -70,9 +70,13 @@ const deploymentMethod = resolveDeploymentMethod(
         ? "github_actions"
         : undefined)
 );
+const isDesktopBuild = process.env.EDGE_EVER_DESKTOP_BUILD === "1";
 
 export default defineConfig({
   root: "apps/web",
+  // Packaged Electron apps load index.html via file://, so root-absolute
+  // asset URLs resolve to the filesystem root and leave a blank window.
+  base: isDesktopBuild ? "./" : "/",
   define: {
     __EDGEEVER_APP_VERSION__: JSON.stringify(appVersion),
     __EDGEEVER_BUILD_ID__: JSON.stringify(buildId),

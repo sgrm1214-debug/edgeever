@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.6.27",
+  "version": "1.6.28",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -31,7 +31,7 @@
     "dev:extension": "vite --config apps/extension/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build:desktop:sidecar": "cargo build --manifest-path crates/desktop-sidecar/Cargo.toml --release",
-  "build:desktop": "bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
+    "build:desktop": "EDGE_EVER_DESKTOP_BUILD=1 bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
     "benchmark:desktop:sidecar": "bun scripts/benchmark-desktop-sidecar.mjs",
     "verify:web-performance": "bun scripts/verify-web-performance.mjs",
     "test:desktop:sidecar": "bun scripts/test-desktop-sidecar.mjs",

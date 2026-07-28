@@ -3,66 +3,22 @@
 ```text
 edgeever/
 ├── apps/
-│   ├── web/
-│   │   ├── public/
-│   │   │   ├── manifest.webmanifest
-│   │   │   └── icons/
-│   │   ├── src/
-│   │   │   ├── app/
-│   │   │   │   ├── App.tsx
-│   │   │   │   └── routes.tsx
-│   │   │   ├── components/
-│   │   │   │   ├── editor/
-│   │   │   │   ├── layout/
-│   │   │   │   ├── memo-list/
-│   │   │   │   ├── notebook-tree/
-│   │   │   │   └── ui/
-│   │   │   ├── hooks/
-│   │   │   ├── lib/
-│   │   │   ├── styles/
-│   │   │   └── main.tsx
-│   │   ├── index.html
-│   │   ├── package.json
-│   │   ├── tsconfig.json
-│   │   └── vite.config.ts
-│   ├── api/
-│   │   ├── src/
-│   │   │   ├── index.ts
-│   │   │   ├── env.ts
-│   │   │   ├── db/
-│   │   │   ├── routes/
-│   │   │   │   ├── memos.ts
-│   │   │   │   ├── notebooks.ts
-│   │   │   │   └── resources.ts
-│   │   │   └── services/
-│   │   │       ├── merge-memos.ts
-│   │   │       └── resource-store.ts
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   └── site/
-│       ├── public/
-│       ├── src/
-│       │   ├── components/
-│       │   ├── content/
-│       │   ├── layouts/
-│       │   ├── pages/
-│       │   └── styles/
-│       ├── astro.config.mjs
-│       ├── package.json
-│       └── tsconfig.json
+│   ├── web/              Vite + React product UI, PWA, offline drafts, sync queue
+│   ├── extension/        Chrome/Edge Manifest V3 web clipper
+│   ├── api/              Cloudflare Worker + Hono API, OpenAPI, MCP endpoint
+│   ├── mobile/           Expo + React Native mobile app
+│   ├── desktop/          Electron shell, preload bridge, and packaging
+│   └── site/             Astro official website
 ├── packages/
-│   └── shared/
-│       ├── src/
-│       │   ├── content.ts
-│       │   ├── index.ts
-│       │   ├── schemas.ts
-│       │   └── types.ts
-│       ├── package.json
-│       └── tsconfig.json
+│   ├── client/           Shared API client
+│   └── shared/           Shared types, schemas, and content conversion
+├── crates/
+│   └── desktop-sidecar/  Rust sidecar for local SQLite and native data services
 ├── migrations/
 │   └── 0001_initial.sql
-├── docs/
-│   └── project-structure.md
+├── scripts/              Wrangler wrapper, CLI, MCP bridge, and build helpers
+├── docs/                 API, architecture, migration, and deployment docs
+├── .github/workflows/    CI, packaging, deployment, and release workflows
 ├── tailwind.config.ts
 ├── wrangler.toml
 ├── bun.lock

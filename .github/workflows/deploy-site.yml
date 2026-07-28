@@ -23,6 +23,9 @@ concurrency:
 
 jobs:
   deploy:
+    # The official site is maintained by the upstream repository only. Product
+    # deployments and downstream self-hosted instances do not need Cloudflare Pages.
+    if: github.repository == 'tianma-if/edgeever'
     name: Deploy Cloudflare Pages
     runs-on: ubuntu-latest
     timeout-minutes: 15

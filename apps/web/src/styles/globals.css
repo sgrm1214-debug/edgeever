@@ -1,4 +1,5 @@
 @import "highlight.js/styles/github.css";
+@import "./editor-themes/index.css";
 
 @tailwind base;
 @tailwind components;
@@ -41,6 +42,8 @@
     --editor-body-font-size: 0.9375rem;
     --editor-body-line-height: 1.6;
     --editor-paragraph-spacing: 0.45rem;
+    --editor-outline-width: 300px;
+    --editor-content-max-width: 880px;
 
     --card: 0 0% 100%;
     --card-foreground: 224 71% 4%;
@@ -156,6 +159,27 @@ body {
   overscroll-behavior-y: auto;
 }
 
+/* Keep the three-pane desktop workspace usable on compact laptop screens.
+ * The notebook and memo columns may shrink, while the editor always keeps
+ * the remaining width instead of being clipped by fixed tracks.
+ */
+.edgeever-workspace-grid--focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .edgeever-workspace-grid--editor {
+    grid-template-columns:
+      clamp(180px, 17vw, 260px)
+      clamp(240px, 23vw, var(--memo-list-width))
+      minmax(0, 1fr);
+  }
+
+  .edgeever-workspace-grid--single-right {
+    grid-template-columns: clamp(180px, 17vw, 260px) minmax(0, 1fr);
+  }
+}
+
 :root.dark body {
   background: #0f172a;
   color: #f8fafc;
@@ -172,12 +196,15 @@ textarea {
 }
 
 .ProseMirror {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   color: #000;
   font-size: var(--editor-body-font-size);
   line-height: var(--editor-body-line-height);
   min-height: 100%;
   outline: none;
-  padding: 24px 28px 56px;
+  padding: 8px 12px 56px;
 }
 
 .ProseMirror .edgeever-search-match {
@@ -193,6 +220,8 @@ textarea {
 
 @media (max-width: 1023px) {
   .ProseMirror {
+    max-width: none;
+    margin: 0;
     padding: 18px 16px max(4rem, env(safe-area-inset-bottom));
   }
 }
@@ -220,6 +249,103 @@ textarea {
 .ProseMirror p {
   line-height: var(--editor-body-line-height);
   margin: 0 0 var(--editor-paragraph-spacing);
+}
+
+.ProseMirror a.edgeever-note-link,
+.ProseMirror a[href^="#memo="] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  max-width: min(100%, 32rem);
+  padding: 0.03rem 0.32rem 0.05rem;
+  border: 1px solid rgb(110 231 183 / 0.9);
+  border-radius: 0.35rem;
+  background: linear-gradient(135deg, rgb(236 253 245), rgb(209 250 229));
+  color: rgb(4 120 87);
+  font-size: 0.9em;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: rgb(52 211 153 / 0.7);
+  text-underline-offset: 2px;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+}
+
+.ProseMirror a.edgeever-note-link::before,
+.ProseMirror a[href^="#memo="]::before {
+  content: "↗";
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ProseMirror a.edgeever-note-link:hover,
+.ProseMirror a[href^="#memo="]:hover {
+  color: rgb(6 95 70);
+  border-color: rgb(16 185 129);
+  background: rgb(167 243 208);
+  text-decoration-color: rgb(4 120 87);
+  box-shadow: 0 2px 8px rgb(16 185 129 / 0.2);
+}
+
+:root.dark .ProseMirror a.edgeever-note-link,
+:root.dark .ProseMirror a[href^="#memo="] {
+  border-color: rgb(52 211 153 / 0.7);
+  background: linear-gradient(135deg, rgb(6 78 59), rgb(6 95 70));
+  color: rgb(110 231 183);
+}
+
+:root.dark .ProseMirror a.edgeever-note-link:hover,
+:root.dark .ProseMirror a[href^="#memo="]:hover {
+  border-color: rgb(110 231 183);
+  background: rgb(6 95 70);
+  color: rgb(167 243 208);
+}
+
+.ProseMirror a.edgeever-attachment-link,
+.ProseMirror a[href*="/api/v1/resources/"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: min(100%, 30rem);
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgb(203 213 225 / 0.9);
+  border-radius: 0.45rem;
+  background: linear-gradient(135deg, rgb(248 250 252), rgb(241 245 249));
+  color: rgb(30 41 59);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.ProseMirror li:has(> p > a[href*="/api/v1/resources/"]) {
+  margin-bottom: 0.25rem;
+}
+
+.ProseMirror a.edgeever-attachment-link::before,
+.ProseMirror a[href*="/api/v1/resources/"]::before {
+  content: "📎";
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+}
+
+.ProseMirror a.edgeever-attachment-link:hover,
+.ProseMirror a[href*="/api/v1/resources/"]:hover {
+  border-color: rgb(16 185 129 / 0.55);
+  background: linear-gradient(135deg, rgb(236 253 245), rgb(240 253 250));
+  box-shadow: 0 3px 10px rgb(15 118 110 / 0.12);
+}
+
+:root.dark .ProseMirror a.edgeever-attachment-link,
+:root.dark .ProseMirror a[href*="/api/v1/resources/"] {
+  border-color: rgb(71 85 105 / 0.8);
+  background: linear-gradient(135deg, rgb(30 41 59), rgb(15 23 42));
+  color: rgb(226 232 240);
 }
 
 .ProseMirror ul,
@@ -276,7 +402,31 @@ textarea {
 
 .ProseMirror .edgeever-code-block,
 .ProseMirror .edgeever-mermaid-code-block {
+  position: relative;
   margin: 0 0 1rem;
+}
+
+.ProseMirror .edgeever-code-copy-button {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 1;
+  border: 1px solid #cbded1;
+  border-radius: 5px;
+  padding: 0.2rem 0.45rem;
+  background: rgb(247 251 248 / 0.92);
+  color: #475569;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.ProseMirror .edgeever-code-copy-button:hover,
+.ProseMirror .edgeever-code-copy-button:focus-visible {
+  border-color: #0f766e;
+  color: #0f766e;
+  outline: none;
 }
 
 .ProseMirror .edgeever-code-source {
@@ -289,6 +439,7 @@ textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.875em;
   white-space: pre;
+  padding-right: 5.5rem;
 }
 
 .ProseMirror .edgeever-mermaid-code-block {
@@ -682,6 +833,28 @@ textarea {
   .markdown-content td {
     width: var(--mobile-table-column-width);
     min-width: var(--mobile-table-column-width);
+  }
+}
+
+@media (min-width: 768px) {
+  .ProseMirror .tableWrapper {
+    width: 100%;
+  }
+
+  .ProseMirror table {
+    width: 100%;
+    min-width: 100% !important;
+    table-layout: auto;
+  }
+
+  .ProseMirror table col {
+    width: auto !important;
+  }
+
+  .ProseMirror th,
+  .ProseMirror td {
+    width: auto;
+    min-width: 0;
   }
 }
 

@@ -69,13 +69,55 @@ export const resolveMemoContentDoc = (
   contentJson: TiptapDoc | null | undefined,
   contentMarkdown: string | null | undefined
 ): TiptapDoc => {
-  const currentDoc = contentJson && Array.isArray(contentJson.content) ? contentJson : emptyDoc();
-  if (!contentMarkdown?.trim() || docContainsNodeType(currentDoc, "table")) {
+  const currentDoc = contentJson && Array.isArray(contentJson.content)
+    ? upgradeLegacyAttachmentLinks(contentJson)
+    : emptyDoc();
+  if (!contentMarkdown?.trim() || docContainsNodeType(currentDoc, "table") || docContainsNodeType(currentDoc, "edgeeverThemeBlock")) {
     return currentDoc;
   }
 
   const markdownDoc = markdownToDoc(contentMarkdown);
   return docContainsNodeType(markdownDoc, "table") ? markdownDoc : currentDoc;
+};
+
+const LEGACY_ATTACHMENT_PATTERN = /^(附件：|Attachment:\s*)(.+?)\s+(\/api\/v1\/resources\/\S+|https?:\/\/\S+)$/;
+
+const isTiptapTextNode = (node: TiptapNode | TiptapTextNode): node is TiptapTextNode =>
+  node.type === "text" && "text" in node;
+
+/** Convert the first-generation plain-text attachment insertion into a link mark. */
+const upgradeLegacyAttachmentLinks = (doc: TiptapDoc): TiptapDoc => {
+  let changed = false;
+  const visit = (node: TiptapNode | TiptapTextNode): TiptapNode | TiptapTextNode => {
+    if (isTiptapTextNode(node)) {
+      const match = node.text.match(LEGACY_ATTACHMENT_PATTERN);
+      if (!match) {
+        return node;
+      }
+
+      const existingMarks = node.marks ?? [];
+      if (existingMarks.some((mark) => mark.type === "link")) {
+        return node;
+      }
+
+      changed = true;
+      return {
+        ...node,
+        text: `${match[1]}${match[2]}`,
+        marks: [
+          ...existingMarks,
+          { type: "link", attrs: { href: match[3], target: "_blank", class: "edgeever-attachment-link" } },
+        ],
+      };
+    }
+
+    return node.content
+      ? { ...node, content: node.content.map((child: TiptapNode | TiptapTextNode) => visit(child)) }
+      : node;
+  };
+
+  const upgradedDoc = visit(doc) as TiptapDoc;
+  return changed ? upgradedDoc : doc;
 };
 
 export const docToText = (doc: unknown): string => {
@@ -173,7 +215,36 @@ export const docToMarkdown = (doc: unknown): string => {
     return "";
   }
 
-  return markdownManager.serialize(doc as Parameters<typeof markdownManager.serialize>[0]);
+  return markdownManager.serialize(stripEditorOnlyNodes(doc) as Parameters<typeof markdownManager.serialize>[0]);
+};
+
+/**
+ * Theme blocks are richer editor-only nodes. Markdown has no portable equivalent,
+ * so exports keep their text as a quoted section instead of silently dropping it.
+ */
+const stripEditorOnlyNodes = (doc: unknown): unknown => {
+  if (!doc || typeof doc !== "object") {
+    return doc;
+  }
+
+  const node = doc as { type?: unknown; attrs?: Record<string, unknown>; content?: unknown };
+  if (node.type === "edgeeverThemeBlock") {
+    const label = getStringAttr(node.attrs, "kind");
+    const content = Array.isArray(node.content) ? node.content : [];
+    return {
+      type: "blockquote",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: label ? `[${label}]` : "[主题化组件]" }] },
+        ...content.map(stripEditorOnlyNodes),
+      ],
+    };
+  }
+
+  if (!Array.isArray(node.content)) {
+    return doc;
+  }
+
+  return { ...node, content: node.content.map(stripEditorOnlyNodes) };
 };
 
 const getStringAttr = (attrs: Record<string, unknown> | undefined, key: string) => {

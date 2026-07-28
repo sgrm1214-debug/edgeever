@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   Plus,
   LayoutList,
+  LayoutTemplate,
   BookPlus,
   ArrowDownWideNarrow,
   Notebook as NotebookIcon,
@@ -19,10 +20,12 @@ import {
   CheckCircle2,
   CircleUserRound,
   Download,
+  ExternalLink,
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -30,7 +33,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotebookTreeItem } from "./NotebookTreeItem";
-import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Notebook, AuthUser } from "@edgeever/shared";
 import type { NotebookNode, NotebookDropPosition, NotebookSortMode } from "@/lib/app-helpers";
@@ -44,17 +46,20 @@ import {
   writeNotebookSortPreference,
 } from "@/lib/app-helpers";
 import { usePwaInstall } from "./PwaInstallContext";
+import type { EdgeEverRepository } from "@/lib/repository";
 
 const NOTEBOOK_DRAG_SCROLL_EDGE_PX = 56;
 const NOTEBOOK_DRAG_SCROLL_MAX_STEP_PX = 18;
 
 const SidebarNavButton = ({
   active = false,
+  tone = "default",
   icon,
   label,
   onClick,
 }: {
   active?: boolean;
+  tone?: "default" | "warning";
   icon: ReactNode;
   label: string;
   onClick: () => void;
@@ -62,7 +67,11 @@ const SidebarNavButton = ({
   <button
     className={cn(
       "flex h-9 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium leading-none transition-all duration-200",
-      active ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+      tone === "warning"
+        ? "text-amber-700 hover:bg-amber-50/70 hover:text-amber-800"
+        : active
+          ? "bg-slate-100 text-slate-950"
+          : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
     )}
     type="button"
     aria-current={active ? "page" : undefined}
@@ -78,25 +87,39 @@ const SidebarShortcutButton = ({
   icon,
   label,
   onClick,
+  showTooltip = true,
 }: {
   active?: boolean;
   icon: ReactNode;
   label: string;
   onClick: () => void;
-}) => (
-  <button
-    className={cn(
-      "flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-1.5 text-xs font-medium transition-colors duration-200",
-      active ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
-    )}
-    type="button"
-    aria-current={active ? "page" : undefined}
-    onClick={onClick}
-  >
-    <span className="flex h-4 w-4 shrink-0 items-center justify-center">{icon}</span>
-    <span className="min-w-0 truncate">{label}</span>
-  </button>
-);
+  showTooltip?: boolean;
+}) => {
+  const button = (
+    <button
+      className={cn(
+        "flex h-9 min-w-0 w-full items-center justify-center rounded-md px-0 text-xs font-medium transition-colors duration-200",
+        active ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+      )}
+      type="button"
+      aria-current={active ? "page" : undefined}
+      aria-label={label}
+      onClick={onClick}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center">{icon}</span>
+      <span className="sr-only">{label}</span>
+    </button>
+  );
+
+  return showTooltip ? (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  ) : (
+    button
+  );
+};
 
 const SidebarTrashShortcut = ({
   active = false,
@@ -111,7 +134,7 @@ const SidebarTrashShortcut = ({
 
   return (
     <div className="group relative min-w-0">
-      <SidebarShortcutButton active={active} icon={<Trash2 className="h-4 w-4" />} label={t("notebookPane.trash")} onClick={onOpenTrash} />
+      <SidebarShortcutButton active={active} icon={<Trash2 className="h-4 w-4" />} label={t("notebookPane.trash")} onClick={onOpenTrash} showTooltip={false} />
       {!active && (
         <div className="pointer-events-none absolute right-0 top-full z-20 w-max pt-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
           <button
@@ -164,11 +187,13 @@ const SyncStatusBar = ({
   isOnline,
   isSyncing,
   onSyncNow,
+  onDiscardConflicts,
 }: {
   summary: SyncQueueSummary;
   isOnline: boolean;
   isSyncing: boolean;
   onSyncNow: () => void;
+  onDiscardConflicts: () => void;
 }) => {
   const { t } = useTranslation();
   const hasQueuedWork = summary.total > 0;
@@ -193,6 +218,16 @@ const SyncStatusBar = ({
         <CheckCircle2 className="h-4 w-4 shrink-0" />
       )}
       <span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
+      {summary.conflict > 0 && (
+        <button
+          className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-amber-800 transition-colors hover:bg-white/70 disabled:opacity-50"
+          type="button"
+          disabled={!isOnline || isSyncing}
+          onClick={onDiscardConflicts}
+        >
+          {t("notebookPane.sync.discardConflicts")}
+        </button>
+      )}
       {hasQueuedWork && (
         <button
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-white/70 disabled:opacity-50 transition-colors"
@@ -210,6 +245,7 @@ const SyncStatusBar = ({
 };
 
 export const NotebookPane = ({
+  repository,
   user,
   view,
   selectedNotebookId,
@@ -222,6 +258,7 @@ export const NotebookPane = ({
   onBackToList,
   onOpenTags,
   onOpenAssets,
+  onOpenTemplates,
   onOpenTrash,
   onEmptyTrash,
   onOpenSettings,
@@ -232,6 +269,7 @@ export const NotebookPane = ({
   isOnline,
   isSyncingQueuedChanges,
   onSyncQueuedChanges,
+  onDiscardConflicts,
   imageCompressionEnabled,
   onImageCompressionChange,
   authRequired,
@@ -241,6 +279,7 @@ export const NotebookPane = ({
   onResetDemo,
   isResettingDemo = false,
 }: {
+  repository: EdgeEverRepository;
   user: AuthUser | null;
   view: string;
   selectedNotebookId: string | null;
@@ -253,6 +292,7 @@ export const NotebookPane = ({
   onBackToList: () => void;
   onOpenTags: () => void;
   onOpenAssets: () => void;
+  onOpenTemplates: () => void;
   onOpenTrash: () => void;
   onEmptyTrash: () => void;
   onOpenSettings: () => void;
@@ -263,6 +303,7 @@ export const NotebookPane = ({
   isOnline: boolean;
   isSyncingQueuedChanges: boolean;
   onSyncQueuedChanges: () => void;
+  onDiscardConflicts: () => void;
   imageCompressionEnabled: boolean;
   onImageCompressionChange: (enabled: boolean) => void;
   authRequired: boolean;
@@ -273,6 +314,8 @@ export const NotebookPane = ({
   isResettingDemo?: boolean;
 }) => {
   const { t } = useTranslation();
+  // Temporarily keep template actions out of the primary workspace navigation.
+  const showTemplateEntry = true;
   const { isInstallable, install } = usePwaInstall();
   const notebookScrollRef = useRef<HTMLDivElement | null>(null);
   const notebookDragScrollFrameRef = useRef<number | null>(null);
@@ -336,7 +379,7 @@ export const NotebookPane = ({
 
   const notebooksQuery = useQuery({
     queryKey: ["notebooks"],
-    queryFn: () => api.listNotebooks(),
+    queryFn: () => repository.listNotebooks(),
   });
 
   const notebooks = notebooksQuery.data?.notebooks ?? [];
@@ -380,11 +423,26 @@ export const NotebookPane = ({
         </div>
       </header>
 
-      <nav className="grid shrink-0 grid-cols-3 gap-1 border-b border-slate-100 px-3 py-2" aria-label={t("notebookPane.secondaryEntries")}>
-        <SidebarShortcutButton icon={<Tags className="h-4 w-4" />} label={t("mobileSheets.tags")} onClick={onOpenTags} />
-        <SidebarShortcutButton icon={<Archive className="h-4 w-4" />} label={t("mobileSheets.assets")} onClick={onOpenAssets} />
-        <SidebarTrashShortcut active={view === "trash"} onOpenTrash={onOpenTrash} onEmptyTrash={onEmptyTrash} />
-      </nav>
+      <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+        <nav className="grid shrink-0 grid-cols-4 gap-0.5 border-b border-slate-100 px-2 py-1.5" aria-label={t("notebookPane.secondaryEntries")}>
+          <SidebarShortcutButton icon={<Tags className="h-4 w-4" />} label={t("mobileSheets.tags")} onClick={onOpenTags} />
+          <SidebarShortcutButton icon={<Archive className="h-4 w-4" />} label={t("mobileSheets.assets")} onClick={onOpenAssets} />
+          {showTemplateEntry && <SidebarShortcutButton icon={<LayoutTemplate className="h-4 w-4" />} label={t("nav.templates")} onClick={onOpenTemplates} />}
+          <SidebarTrashShortcut active={view === "trash"} onOpenTrash={onOpenTrash} onEmptyTrash={onEmptyTrash} />
+        </nav>
+      </TooltipProvider>
+
+      {window.edgeeverDesktop?.isAvailable && (
+        <div className="px-3 pt-2">
+          <SyncStatusBar
+            summary={syncSummary}
+            isOnline={isOnline}
+            isSyncing={isSyncingQueuedChanges}
+            onSyncNow={onSyncQueuedChanges}
+            onDiscardConflicts={onDiscardConflicts}
+          />
+        </div>
+      )}
 
       <div
         ref={notebookScrollRef}
@@ -412,6 +470,18 @@ export const NotebookPane = ({
             <span className="min-w-0 truncate text-sm font-semibold text-slate-950">{t("notebookPane.newMemo")}</span>
           </button>
         </div>
+        {showTemplateEntry && (
+          <button
+            className="mb-3 hidden h-8 w-full items-center justify-start gap-2 rounded-md px-3 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 lg:flex"
+            type="button"
+            title={t("templates.useTemplate")}
+            onClick={onOpenTemplates}
+            disabled={isCreatingMemo}
+          >
+            <LayoutTemplate className="h-4 w-4" />
+            {t("templates.useTemplate")}
+          </button>
+        )}
 
         <nav className="mb-3 space-y-1" aria-label={t("notebookPane.entries")}>
           <SidebarNavButton
@@ -422,6 +492,7 @@ export const NotebookPane = ({
           />
           {demoMode && onResetDemo && (
             <SidebarNavButton
+              tone="warning"
               icon={<RotateCcw className={cn("h-4 w-4 text-amber-600", isResettingDemo && "animate-spin")} />}
               label={isResettingDemo ? t("demo.resetting") : t("demo.resetButton")}
               onClick={onResetDemo}
@@ -508,6 +579,21 @@ export const NotebookPane = ({
               </span>
               <span className="min-w-0 flex-1 truncate">{t("pwa.sidebarInstall") || "安装桌面客户端"}</span>
             </button>
+          )}
+          {demoMode && (
+            <a
+              href="https://chromewebstore.google.com/detail/edgeever-web-clipper/gjadpfmanienmlofajibkfkkpfdkclgo"
+              target="_blank"
+              rel="noreferrer"
+              className="flex h-8 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium leading-none text-slate-500 transition-colors duration-200 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+              title={t("pwa.sidebarClipperTitle") || "安装 EdgeEver 浏览器剪藏插件"}
+              aria-label={t("pwa.sidebarClipperTitle") || "安装 EdgeEver 浏览器剪藏插件"}
+            >
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{t("pwa.sidebarClipper") || "安装浏览器剪藏插件"}</span>
+            </a>
           )}
           <button
             onClick={onOpenSettings}

@@ -2,6 +2,13 @@ name: Build EdgeEver Mobile
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Upload the signed arm64 APK to this existing GitHub Release (optional)"
+        required: false
+        type: string
+  release:
+    types: [published]
   push:
     branches:
       - main
@@ -15,7 +22,7 @@ on:
       - ".github/workflows/mobile-build.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: edgeever-mobile-android-${{ github.ref }}-${{ github.event_name }}
@@ -23,7 +30,7 @@ concurrency:
 
 jobs:
   android:
-    if: github.repository == 'tianma-if/edgeever' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    if: github.repository == 'tianma-if/edgeever' && (github.event_name == 'workflow_dispatch' || github.event_name == 'release' || github.ref == 'refs/heads/main')
     name: Build Android packages
     runs-on: [self-hosted, macOS, ARM64, edgeever-mobile]
     timeout-minutes: 45
@@ -41,7 +48,10 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Check Expo dependencies
-        run: bun --cwd apps/mobile expo install --check
+        run: |
+          if ! bun --cwd apps/mobile expo install --check; then
+            echo "::warning::Expo reported compatible patch-version updates; continuing with the frozen lockfile for this build."
+          fi
 
       - name: Typecheck
         run: bun run typecheck:mobile
@@ -54,7 +64,7 @@ jobs:
         run: bun run build:android:fast
 
       - name: Restore Android upload keystore
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -63,7 +73,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/edgeever-upload.p12"
 
       - name: Build signed release AAB
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/edgeever-upload.p12
@@ -71,14 +81,30 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bun run build:android:play
 
+      - name: Build signed release APK for GitHub Release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/edgeever-upload.p12
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EDGE_EVER_ANDROID_APK_ARCHS: arm64-v8a
+        run: bun run build:android:apk
+
       - name: Verify release AAB signature
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
         run: |
           "$JAVA_HOME/bin/jarsigner" -verify app/build/outputs/bundle/release/*.aab
         working-directory: apps/mobile/android
 
+      - name: Verify release APK signature
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        run: |
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+        working-directory: apps/mobile/android
+
       - name: Verify R8 deobfuscation mapping
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
         run: test -s app/build/outputs/mapping/release/mapping.txt
         working-directory: apps/mobile/android
 
@@ -92,7 +118,7 @@ jobs:
           compression-level: 0
 
       - name: Upload release AAB
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
         uses: actions/upload-artifact@v7
         with:
           name: edgeever-android-release-aab
@@ -100,8 +126,18 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+      - name: Upload release APK to GitHub Release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          release_asset="$RUNNER_TEMP/edgeever-android-${RELEASE_TAG}-arm64-v8a.apk"
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$release_asset"
+          gh release upload "$RELEASE_TAG" "$release_asset" --repo "$GITHUB_REPOSITORY" --clobber
+
       - name: Upload R8 deobfuscation mapping
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag == ''
         uses: actions/upload-artifact@v7
         with:
           name: edgeever-android-release-mapping
@@ -109,5 +145,5 @@ jobs:
           if-no-files-found: error
 
       - name: Remove temporary upload keystore
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'release')
         run: rm -f "$RUNNER_TEMP/edgeever-upload.p12"

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "./ThemeProvider";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 type MermaidModule = typeof import("mermaid")["default"];
 type BeautifulMermaidModule = typeof import("beautiful-mermaid");
@@ -36,6 +37,18 @@ export const MermaidCodeBlock = ({ editor, node }: NodeViewProps) => {
   const [svg, setSvg] = useState("");
   const [sourceVisible, setSourceVisible] = useState(false);
   const [renderState, setRenderState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), 1800);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  const handleCopy = async () => {
+    const copied = await copyTextToClipboard(node.textContent);
+    setCopyState(copied ? "copied" : "error");
+  };
 
   useEffect(() => {
     if (!isMermaid || !source) {
@@ -124,6 +137,25 @@ export const MermaidCodeBlock = ({ editor, node }: NodeViewProps) => {
         : "edgeever-code-block"}
       data-language={language}
     >
+      <button
+        type="button"
+        className="edgeever-code-copy-button"
+        contentEditable={false}
+        aria-label={t(copyState === "copied" ? "editorToolbar.codeCopied" : copyState === "error" ? "editorToolbar.codeCopyFailed" : "editorToolbar.copyCode")}
+        title={t(copyState === "copied" ? "editorToolbar.codeCopied" : copyState === "error" ? "editorToolbar.codeCopyFailed" : "editorToolbar.copyCode")}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void handleCopy();
+        }}
+        onMouseDown={(event) => event.preventDefault()}
+      >
+        {copyState === "copied"
+          ? t("editorToolbar.codeCopied")
+          : copyState === "error"
+            ? t("editorToolbar.codeCopyFailed")
+            : t("editorToolbar.copyCode")}
+      </button>
       {isMermaid && (
         <div
           className="edgeever-mermaid-preview"

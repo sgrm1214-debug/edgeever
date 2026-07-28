@@ -35,6 +35,29 @@ export const MemoUpdateSchema = z.object({
   allowDestructiveOverwrite: z.boolean().optional(),
 });
 
+export const TemplateCreateSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(500).optional(),
+  memoId: z.string().trim().min(1).optional(),
+  title: z.string().trim().max(160).nullable().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+}).refine((input) => input.memoId || input.contentMarkdown !== undefined, {
+  message: "memoId or contentMarkdown is required",
+});
+
+export const TemplateUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  title: z.string().trim().max(160).nullable().optional(),
+  contentMarkdown: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export const TemplateUseSchema = z.object({
+  notebookId: z.string().trim().min(1),
+});
+
 export const MoveMemosSchema = z.object({
   memoIds: z.array(z.string().trim().min(1)).min(1).max(100),
   notebookId: z.string().trim().min(1),
@@ -55,6 +78,10 @@ export const LoginSchema = z.object({
   username: z.string().trim().min(1).max(80),
   password: z.string().min(1).max(512),
   deviceId: z.string().trim().min(16).max(160).optional(),
+});
+
+export const LoginDeviceSessionUpdateSchema = z.object({
+  label: z.string().trim().max(80).nullable(),
 });
 
 export const ChangePasswordSchema = z
@@ -96,10 +123,13 @@ export type NotebookCreateInput = z.infer<typeof NotebookCreateSchema>;
 export type NotebookUpdateInput = z.infer<typeof NotebookUpdateSchema>;
 export type MemoCreateInput = z.infer<typeof MemoCreateSchema>;
 export type MemoUpdateInput = z.infer<typeof MemoUpdateSchema>;
+export type TemplateCreateInput = z.infer<typeof TemplateCreateSchema>;
+export type TemplateUpdateInput = z.infer<typeof TemplateUpdateSchema>;
 export type MoveMemosInput = z.infer<typeof MoveMemosSchema>;
 export type DeleteMemosInput = z.infer<typeof DeleteMemosSchema>;
 export type MergeMemosInput = z.infer<typeof MergeMemosSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
+export type LoginDeviceSessionUpdateInput = z.infer<typeof LoginDeviceSessionUpdateSchema>;
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 export type UserCreateInput = z.infer<typeof UserCreateSchema>;
 export type UserUpdateInput = z.infer<typeof UserUpdateSchema>;

@@ -38,6 +38,14 @@ export type MemoTemplate = {
   description: string;
   contentMarkdown: string;
   tags: string[];
+  iconName?: "zap" | "calendar" | "checklist" | "book" | "sun" | "file";
+  themeColor?: {
+    iconBg: string;
+    iconText: string;
+    badgeBg: string;
+    badgeText: string;
+    accentBorder: string;
+  };
 };
 
 export const getMemoTemplates = (t: TFunction): MemoTemplate[] => [
@@ -47,6 +55,14 @@ export const getMemoTemplates = (t: TFunction): MemoTemplate[] => [
     description: t("templates.items.quickNote.description"),
     contentMarkdown: t("templates.items.quickNote.contentMarkdown"),
     tags: ["template", "quick-note"],
+    iconName: "zap",
+    themeColor: {
+      iconBg: "bg-amber-100/80 text-amber-700",
+      iconText: "text-amber-700",
+      badgeBg: "bg-amber-50 text-amber-800 border-amber-200/60",
+      badgeText: "text-amber-800",
+      accentBorder: "hover:border-amber-300/80",
+    },
   },
   {
     id: "meeting",
@@ -54,13 +70,29 @@ export const getMemoTemplates = (t: TFunction): MemoTemplate[] => [
     description: t("templates.items.meeting.description"),
     contentMarkdown: t("templates.items.meeting.contentMarkdown"),
     tags: ["template", "meeting"],
+    iconName: "calendar",
+    themeColor: {
+      iconBg: "bg-blue-100/80 text-blue-700",
+      iconText: "text-blue-700",
+      badgeBg: "bg-blue-50 text-blue-800 border-blue-200/60",
+      badgeText: "text-blue-800",
+      accentBorder: "hover:border-blue-300/80",
+    },
   },
   {
-    id: "checklist",
-    title: t("templates.items.checklist.title"),
-    description: t("templates.items.checklist.description"),
-    contentMarkdown: t("templates.items.checklist.contentMarkdown"),
-    tags: ["template", "checklist"],
+    id: "weekly-review",
+    title: t("templates.items.weeklyReview.title"),
+    description: t("templates.items.weeklyReview.description"),
+    contentMarkdown: t("templates.items.weeklyReview.contentMarkdown"),
+    tags: ["template", "weekly-review"],
+    iconName: "checklist",
+    themeColor: {
+      iconBg: "bg-emerald-100/80 text-emerald-700",
+      iconText: "text-emerald-700",
+      badgeBg: "bg-emerald-50 text-emerald-800 border-emerald-200/60",
+      badgeText: "text-emerald-800",
+      accentBorder: "hover:border-emerald-300/80",
+    },
   },
   {
     id: "reading",
@@ -68,13 +100,44 @@ export const getMemoTemplates = (t: TFunction): MemoTemplate[] => [
     description: t("templates.items.reading.description"),
     contentMarkdown: t("templates.items.reading.contentMarkdown"),
     tags: ["template", "reading"],
+    iconName: "book",
+    themeColor: {
+      iconBg: "bg-purple-100/80 text-purple-700",
+      iconText: "text-purple-700",
+      badgeBg: "bg-purple-50 text-purple-800 border-purple-200/60",
+      badgeText: "text-purple-800",
+      accentBorder: "hover:border-purple-300/80",
+    },
   },
   {
-    id: "daily",
-    title: t("templates.items.daily.title"),
-    description: t("templates.items.daily.description"),
-    contentMarkdown: t("templates.items.daily.contentMarkdown"),
-    tags: ["template", "daily"],
+    id: "okr",
+    title: t("templates.items.okr.title"),
+    description: t("templates.items.okr.description"),
+    contentMarkdown: t("templates.items.okr.contentMarkdown"),
+    tags: ["template", "okr"],
+    iconName: "sun",
+    themeColor: {
+      iconBg: "bg-rose-100/80 text-rose-700",
+      iconText: "text-rose-700",
+      badgeBg: "bg-rose-50 text-rose-800 border-rose-200/60",
+      badgeText: "text-rose-800",
+      accentBorder: "hover:border-rose-300/80",
+    },
+  },
+  {
+    id: "post-mortem",
+    title: t("templates.items.postMortem.title"),
+    description: t("templates.items.postMortem.description"),
+    contentMarkdown: t("templates.items.postMortem.contentMarkdown"),
+    tags: ["template", "post-mortem"],
+    iconName: "file",
+    themeColor: {
+      iconBg: "bg-indigo-100/80 text-indigo-700",
+      iconText: "text-indigo-700",
+      badgeBg: "bg-indigo-50 text-indigo-800 border-indigo-200/60",
+      badgeText: "text-indigo-800",
+      accentBorder: "hover:border-indigo-300/80",
+    },
   },
 ];
 
@@ -145,6 +208,7 @@ export { buildNotebookTree, type NotebookNode };
 export { DEFAULT_MEMO_TITLE };
 
 export const IMAGE_COMPRESSION_STORAGE_KEY = "edgeever.imageCompressionEnabled";
+export const AUTO_SAVE_INTERVAL_STORAGE_KEY = "edgeever.autoSaveInterval";
 export const DESKTOP_FOCUS_MODE_STORAGE_KEY = "edgeever.desktopFocusMode";
 export const MEMO_LIST_DENSITY_STORAGE_KEY = "edgeever.memoListDensity";
 export const MEMO_LIST_WIDTH_STORAGE_KEY = "edgeever.memoListWidth";
@@ -153,6 +217,18 @@ export const SHORTCUT_SETTINGS_STORAGE_KEY = "edgeever.shortcutSettings";
 export const DEFAULT_MEMO_LIST_WIDTH_PX = 360;
 export const MIN_MEMO_LIST_WIDTH_PX = 300;
 export const MAX_MEMO_LIST_WIDTH_PX = 540;
+
+export type AutoSaveIntervalPreference = "1m" | "5m" | "15m" | "30m" | "1h" | "2h" | "off";
+export const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60_000;
+const AUTO_SAVE_INTERVAL_VALUES: Record<AutoSaveIntervalPreference, number | null> = {
+  "1m": 60_000,
+  "5m": 300_000,
+  "15m": 900_000,
+  "30m": 1_800_000,
+  "1h": 3_600_000,
+  "2h": 7_200_000,
+  off: null,
+};
 
 export const MEMO_DRAG_MIME = "application/x-edgeever-memos";
 export const NOTEBOOK_DRAG_MIME = "application/x-edgeever-notebook";
@@ -216,6 +292,11 @@ const SHORTCUT_ALIASES: Partial<Record<ShortcutAction, ShortcutBinding[]>> = {
 
 const SHORTCUT_ACTION_VALUES: ShortcutAction[] = ["createMemo", "createNotebook", "focusSearch", "focusReplace"];
 
+export const isDefaultMemoTitle = (title: string | null | undefined) => title?.trim() === DEFAULT_MEMO_TITLE;
+
+export const getEditableMemoTitle = (title: string | null | undefined) =>
+  isDefaultMemoTitle(title) ? "" : title?.trim() || "";
+
 export const getMemoTitle = (title: string | null | undefined) => title?.trim() || DEFAULT_MEMO_TITLE;
 
 export const getActiveBlockValue = (editor: any): string => {
@@ -250,6 +331,23 @@ export const readImageCompressionPreference = () => {
 export const writeImageCompressionPreference = (enabled: boolean) => {
   try {
     window.localStorage.setItem(IMAGE_COMPRESSION_STORAGE_KEY, enabled ? "true" : "false");
+  } catch {
+    // Local storage can be unavailable in private or restricted browser contexts.
+  }
+};
+
+export const readAutoSaveIntervalPreference = (): number | null => {
+  try {
+    const stored = window.localStorage.getItem(AUTO_SAVE_INTERVAL_STORAGE_KEY) as AutoSaveIntervalPreference | null;
+    return stored && stored in AUTO_SAVE_INTERVAL_VALUES ? AUTO_SAVE_INTERVAL_VALUES[stored] : DEFAULT_AUTO_SAVE_INTERVAL_MS;
+  } catch {
+    return DEFAULT_AUTO_SAVE_INTERVAL_MS;
+  }
+};
+
+export const writeAutoSaveIntervalPreference = (preference: AutoSaveIntervalPreference) => {
+  try {
+    window.localStorage.setItem(AUTO_SAVE_INTERVAL_STORAGE_KEY, preference);
   } catch {
     // Local storage can be unavailable in private or restricted browser contexts.
   }

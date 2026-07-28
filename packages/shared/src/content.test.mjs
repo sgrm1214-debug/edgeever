@@ -59,6 +59,34 @@ describe("Markdown table conversion", () => {
   });
 });
 
+describe("Nested list Markdown conversion", () => {
+  const markdown = [
+    "- Level 1",
+    "  - Level 2",
+    "    - Level 3",
+    "  - Another level 2",
+    "- Another level 1",
+  ].join("\n");
+
+  test("preserves nested list hierarchy through a Markdown round trip", () => {
+    const doc = markdownToDoc(markdown);
+
+    const topList = doc.content[0];
+    const firstItem = topList?.content?.[0];
+    const secondLevelList = firstItem?.content?.[1];
+    const secondLevelItem = secondLevelList?.content?.[0];
+
+    expect(topList?.type).toBe("bulletList");
+    expect(topList?.content).toHaveLength(2);
+    expect(firstItem?.type).toBe("listItem");
+    expect(secondLevelList?.type).toBe("bulletList");
+    expect(secondLevelList?.content).toHaveLength(2);
+    expect(secondLevelItem?.content?.[1]?.type).toBe("bulletList");
+    expect(secondLevelItem?.content?.[1]?.content).toHaveLength(1);
+    expect(docToMarkdown(doc)).toBe(markdown);
+  });
+});
+
 describe("Mermaid Markdown conversion", () => {
   const markdown = "```mermaid\nflowchart LR\n  A --> B\n```";
 
@@ -70,5 +98,35 @@ describe("Mermaid Markdown conversion", () => {
       attrs: { language: "mermaid" },
     });
     expect(docToMarkdown(doc)).toBe(markdown);
+  });
+});
+
+describe("Theme block compatibility", () => {
+  test("keeps themed blocks in the richer JSON document when Markdown is also present", () => {
+    const doc = {
+      type: "doc",
+      content: [{
+        type: "edgeeverThemeBlock",
+        attrs: { kind: "key-point" },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Important" }] }],
+      }],
+    };
+
+    expect(resolveMemoContentDoc(doc, "Important")).toBe(doc);
+  });
+
+  test("exports themed blocks as readable quoted Markdown instead of dropping their text", () => {
+    const doc = {
+      type: "doc",
+      content: [{
+        type: "edgeeverThemeBlock",
+        attrs: { kind: "intro" },
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Read this first" }] }],
+      }],
+    };
+
+    const markdown = docToMarkdown(doc);
+    expect(markdown).toContain("\\[intro\\]");
+    expect(markdown).toContain("Read this first");
   });
 });

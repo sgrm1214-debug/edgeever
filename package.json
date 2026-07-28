@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.5.6",
+  "version": "1.6.27",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -12,9 +12,12 @@
     "dev:api": "bun run dev:api:local",
     "dev:local": "bun run db:migrate:local && concurrently -k -n api,web -c cyan,magenta \"bun run dev:api:local\" \"bun run dev:web\"",
     "dev:api:local": "EDGE_EVER_INSTANCE= EDGE_EVER_LOCAL_DEMO_SEED=true bun scripts/run-wrangler.mjs dev --local --port 8787",
+    "dev:self-hosted": "bun --watch scripts/self-hosted-server.mjs",
+    "start:self-hosted": "bun scripts/self-hosted-server.mjs",
     "dev:remote": "concurrently -k -n api,web -c cyan,magenta \"bun run dev:api:remote\" \"bun run dev:web\"",
     "dev:api:remote": "bun scripts/run-wrangler.mjs dev --remote --port 8787",
     "dev:web": "vite --config apps/web/vite.config.ts --host 127.0.0.1 --port 5173",
+  "dev:desktop": "concurrently -k -n web,desktop -c magenta,cyan \"bun run dev:web\" \"bun run --cwd apps/desktop dev\"",
     "dev:mobile": "bun --cwd apps/mobile expo start",
     "prepare:mobile:icons": "bun scripts/prepare-mobile-icons.mjs",
     "build:android:fast": "bash scripts/build-android-local.sh fast",
@@ -27,6 +30,13 @@
     "build:extension": "vite build --config apps/extension/vite.config.ts",
     "dev:extension": "vite --config apps/extension/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
+    "build:desktop:sidecar": "cargo build --manifest-path crates/desktop-sidecar/Cargo.toml --release",
+  "build:desktop": "bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
+    "benchmark:desktop:sidecar": "bun scripts/benchmark-desktop-sidecar.mjs",
+    "verify:web-performance": "bun scripts/verify-web-performance.mjs",
+    "test:desktop:sidecar": "bun scripts/test-desktop-sidecar.mjs",
+    "test:desktop": "bun test apps/desktop/src/main/account-scope.test.mjs apps/desktop/src/main/diagnostic-log.test.mjs apps/desktop/src/main/file-association.test.mjs apps/desktop/src/main/file-permissions.test.mjs apps/desktop/src/main/resource-url.test.mjs apps/desktop/src/main/staged-resource.test.mjs apps/web/src/lib/desktop-resources.test.mjs apps/web/src/lib/desktop-sync.test.mjs apps/web/src/lib/local-mirror.test.mjs apps/web/src/lib/repository.test.mjs apps/web/src/lib/sync-queue.test.mjs && bun run test:desktop:sidecar",
+    "verify:desktop-package": "bun scripts/verify-desktop-package.mjs",
     "build:cloudflare": "bun run typecheck && bun run build",
     "build:site": "bun --cwd apps/site build",
     "preview:web": "vite preview --config apps/web/vite.config.ts --host 127.0.0.1 --port 4173",
@@ -44,11 +54,12 @@
     "deploy:doctor": "bun scripts/cloudflare-deploy.mjs doctor",
     "deploy:setup": "bun scripts/cloudflare-deploy.mjs setup",
     "deploy": "bun run build:cloudflare && EDGE_EVER_USE_EXISTING_AUTH_SECRET=true bun run deploy:ci",
-    "deploy:manual": "bun run deploy:doctor && bun run build:cloudflare && bun run deploy:ci",
+    "deploy:manual": "export EDGE_EVER_DEPLOYMENT_TRIGGER=manual EDGE_EVER_DEPLOYMENT_METHOD=local_cli && bun run deploy:doctor && bun run build:cloudflare && bun run deploy:ci",
     "deploy:ci": "bun run db:migrate:remote && bun run deploy:worker && bun run deploy:verify",
     "deploy:worker": "bun scripts/run-wrangler.mjs deploy",
     "deploy:cloudflare-builds": "bun run deploy:ci",
     "deploy:verify": "bun scripts/verify-deployment.mjs",
+    "demo:sync": "bun scripts/sync-demo.mjs",
     "deploy:builds:setup": "bun scripts/cloudflare-workers-builds.mjs setup",
     "deploy:site": "bun run build:site && wrangler pages deploy apps/site/dist --project-name=edgeever-official"
   },
@@ -62,10 +73,14 @@
       },
       "EDGE_EVER_AUTH_PASSWORD": {
         "description": "首次登录密码，必填。请设置一个仅用于此实例的强密码；部署后可在个人设置中修改。"
+      },
+      "EDGE_EVER_AUTH_USERNAME": {
+        "description": "管理员登录用户名，默认值为 admin；高级用户可以改成自定义用户名。"
       }
     }
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1095.0",
     "@edgeever/shared": "workspace:*",
     "@hono/zod-validator": "latest",
     "@radix-ui/react-checkbox": "^1.3.5",
@@ -79,6 +94,7 @@
     "@radix-ui/react-toggle-group": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.10",
     "@tanstack/react-query": "latest",
+    "@tiptap/core": "3.27.1",
     "@tiptap/extension-image": "^3.27.1",
     "@tiptap/extension-placeholder": "latest",
     "@tiptap/extension-table": "3.27.1",
@@ -104,6 +120,7 @@
     "tailwindcss-animate": "^1.0.7",
     "turndown": "^7.2.4",
     "vaul": "^1.1.2",
+    "webdav": "^5.10.0",
     "workbox-window": "^7.4.1",
     "yet-another-react-lightbox": "^3.32.0",
     "zod": "latest"

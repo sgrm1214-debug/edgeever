@@ -184,11 +184,13 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    modulePreload: {
-      resolveDependencies: (_filename, dependencies) => dependencies.filter((dependency) =>
-        !/(?:vendor-code-highlight|vendor-(?:mermaid|D3|tiptap|prosemirror|floating)|ui-primitives)/.test(dependency),
-      ),
-    },
+    modulePreload: isDesktopBuild
+      ? false
+      : {
+          resolveDependencies: (_filename, dependencies) => dependencies.filter((dependency) =>
+            !/(?:vendor-code-highlight|vendor-(?:mermaid|D3|tiptap|prosemirror|floating)|ui-primitives)/.test(dependency),
+          ),
+        },
     rolldownOptions: {
       input: {
         app: fileURLToPath(new URL("./index.html", import.meta.url)),

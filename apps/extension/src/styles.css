@@ -109,6 +109,61 @@ h1 {
   font-size: 22px;
 }
 
+.diagnostics-panel {
+  margin-top: 28px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 22px;
+}
+
+.diagnostics-panel h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.diagnostics-list {
+  margin: 16px 0 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  overflow: hidden;
+}
+
+.diagnostics-list div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12px;
+}
+
+.diagnostics-list div:last-child {
+  border-bottom: 0;
+}
+
+.diagnostics-list dt {
+  color: #64748b;
+}
+
+.diagnostics-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #172033;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.diagnostics-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.diagnostics-actions .status {
+  min-height: 0;
+  margin: 0;
+}
+
 .hint {
   margin: 0 0 20px;
   color: #64748b;

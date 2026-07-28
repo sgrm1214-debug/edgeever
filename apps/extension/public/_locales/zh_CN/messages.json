@@ -12,10 +12,10 @@
     "message": "网页剪藏"
   },
   "popupDescription": {
-    "message": "保存当前网页或选中的内容到你的 EdgeEver。"
+    "message": "剪藏当前网页或选中的内容到你的 EdgeEver。"
   },
   "saveCurrentPage": {
-    "message": "保存当前网页"
+    "message": "剪藏当前网页"
   },
   "pluginSettings": {
     "message": "插件设置"
@@ -34,6 +34,60 @@
   },
   "optionsTitle": {
     "message": "EdgeEver Web Clipper 设置"
+  },
+  "diagnosticsTitle": {
+    "message": "关于与诊断信息"
+  },
+  "diagnosticsDescription": {
+    "message": "查看插件、浏览器、系统和连接信息。不会包含 API Token。"
+  },
+  "extensionVersion": {
+    "message": "插件版本"
+  },
+  "manifestVersion": {
+    "message": "Manifest 版本"
+  },
+  "browserVersion": {
+    "message": "浏览器"
+  },
+  "systemVersion": {
+    "message": "系统"
+  },
+  "extensionId": {
+    "message": "插件 ID"
+  },
+  "instanceOrigin": {
+    "message": "实例 Origin"
+  },
+  "instancePermission": {
+    "message": "实例访问权限"
+  },
+  "copyDiagnostics": {
+    "message": "复制诊断信息"
+  },
+  "diagnosticsCopied": {
+    "message": "诊断信息已复制。"
+  },
+  "diagnosticsCopyFailed": {
+    "message": "复制失败，请检查浏览器剪贴板权限。"
+  },
+  "permissionGranted": {
+    "message": "已授权"
+  },
+  "permissionNotGranted": {
+    "message": "未授权"
+  },
+  "permissionNotConfigured": {
+    "message": "未配置实例"
+  },
+  "notConfigured": {
+    "message": "未配置"
+  },
+  "invalidInstanceAddress": {
+    "message": "地址无效"
+  },
+  "unknownValue": {
+    "message": "未知"
   },
   "instanceAddress": {
     "message": "EdgeEver 实例地址"

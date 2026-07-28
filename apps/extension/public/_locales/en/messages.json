@@ -12,10 +12,10 @@
     "message": "Web Clipper"
   },
   "popupDescription": {
-    "message": "Save the current webpage or selected content to your EdgeEver."
+    "message": "Clip the current webpage or selected content to your EdgeEver."
   },
   "saveCurrentPage": {
-    "message": "Save current page"
+    "message": "Clip current page"
   },
   "pluginSettings": {
     "message": "Extension settings"
@@ -34,6 +34,60 @@
   },
   "optionsTitle": {
     "message": "EdgeEver Web Clipper settings"
+  },
+  "diagnosticsTitle": {
+    "message": "About & diagnostics"
+  },
+  "diagnosticsDescription": {
+    "message": "View basic extension, browser, system, and connection information. API tokens are never included."
+  },
+  "extensionVersion": {
+    "message": "Extension version"
+  },
+  "manifestVersion": {
+    "message": "Manifest version"
+  },
+  "browserVersion": {
+    "message": "Browser"
+  },
+  "systemVersion": {
+    "message": "System"
+  },
+  "extensionId": {
+    "message": "Extension ID"
+  },
+  "instanceOrigin": {
+    "message": "Instance origin"
+  },
+  "instancePermission": {
+    "message": "Instance permission"
+  },
+  "copyDiagnostics": {
+    "message": "Copy diagnostics"
+  },
+  "diagnosticsCopied": {
+    "message": "Diagnostics copied."
+  },
+  "diagnosticsCopyFailed": {
+    "message": "Copy failed. Check the browser clipboard permission."
+  },
+  "permissionGranted": {
+    "message": "Granted"
+  },
+  "permissionNotGranted": {
+    "message": "Not granted"
+  },
+  "permissionNotConfigured": {
+    "message": "Instance not configured"
+  },
+  "notConfigured": {
+    "message": "Not configured"
+  },
+  "invalidInstanceAddress": {
+    "message": "Invalid address"
+  },
+  "unknownValue": {
+    "message": "Unknown"
   },
   "instanceAddress": {
     "message": "EdgeEver instance URL"

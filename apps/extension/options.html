@@ -29,6 +29,23 @@
         </div>
         <p id="status" class="status" role="status"></p>
       </form>
+      <section class="diagnostics-panel" aria-labelledby="diagnostics-title">
+        <h2 id="diagnostics-title" data-i18n="diagnosticsTitle">About &amp; diagnostics</h2>
+        <p class="hint" data-i18n="diagnosticsDescription">View basic extension, browser, system, and connection information. API tokens are never included.</p>
+        <dl class="diagnostics-list">
+          <div><dt data-i18n="extensionVersion">Extension version</dt><dd id="extension-version">—</dd></div>
+          <div><dt data-i18n="manifestVersion">Manifest version</dt><dd id="manifest-version">—</dd></div>
+          <div><dt data-i18n="browserVersion">Browser</dt><dd id="browser-version">—</dd></div>
+          <div><dt data-i18n="systemVersion">System</dt><dd id="system-version">—</dd></div>
+          <div><dt data-i18n="extensionId">Extension ID</dt><dd id="extension-id">—</dd></div>
+          <div><dt data-i18n="instanceOrigin">Instance origin</dt><dd id="instance-origin">—</dd></div>
+          <div><dt data-i18n="instancePermission">Instance permission</dt><dd id="instance-permission">—</dd></div>
+        </dl>
+        <div class="diagnostics-actions">
+          <button id="copy-diagnostics" type="button" class="secondary" data-i18n="copyDiagnostics">Copy diagnostics</button>
+          <span id="copy-status" class="status" role="status"></span>
+        </div>
+      </section>
       <p class="privacy-link">
         <a href="https://edgeever.org/privacy" target="_blank" rel="noopener noreferrer" data-i18n="privacyPolicy">Privacy policy</a>
       </p>

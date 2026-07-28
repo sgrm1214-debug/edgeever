@@ -18,7 +18,7 @@ Select the matching language in the Chrome Web Store developer dashboard and ent
 
 ## Upload files
 
-- Package: `store-assets/edgeever-web-clipper-v0.1.2.zip`
+- Package: `store-assets/edgeever-web-clipper-v0.1.3.zip`
 - Store icon: `public/icons/icon-128.png`
 - Screenshot: `store-assets/screenshot-options-1280x800.jpg`
 - Small promo tile: `store-assets/promo-small-440x280.jpg`
@@ -41,7 +41,7 @@ EdgeEver Web Clipper 可以把当前网页或你选中的内容保存到自托�
 - 可选择默认笔记本，并自动添加 `web-clip` 标签。
 - 网页内容直接发送到你配置的 EdgeEver 实例，不经过开发者的中转服务器。
 
-使用前，请在插件设置中填写 EdgeEver 实例地址和 API Token。插件只会在你点击“保存当前网页”后读取当前标签页，并仅向你授权的 EdgeEver 实例申请网络访问权限。
+使用前，请在插件设置中填写 EdgeEver 实例地址和 API Token。插件只会在你点击“剪藏当前网页”后读取当前标签页，并仅向你授权的 EdgeEver 实例申请网络访问权限。
 
 EdgeEver 是开源、自托管的现代笔记工作区。项目主页与源代码：https://github.com/tianma-if/edgeever
 
@@ -63,7 +63,7 @@ Key features:
 - Select a default notebook and add the `web-clip` tag automatically.
 - Send webpage content directly to your configured EdgeEver instance without a developer-operated relay server.
 
-Before using the extension, enter your EdgeEver instance URL and API token in the extension settings. The extension reads the current tab only after you click “Save current page” and requests network access only for the EdgeEver instance you authorize.
+Before using the extension, enter your EdgeEver instance URL and API token in the extension settings. The extension reads the current tab only after you click “Clip current page” and requests network access only for the EdgeEver instance you authorize.
 
 EdgeEver is an open-source, self-hosted modern notes workspace. Project homepage and source code: https://github.com/tianma-if/edgeever
 

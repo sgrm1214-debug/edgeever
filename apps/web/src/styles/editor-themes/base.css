@@ -9,6 +9,10 @@
   --editor-theme-accent: #059669;
   --editor-theme-soft: #ecfdf5;
   --editor-theme-border: #a7f3d0;
+  --editor-theme-code-bg: var(--editor-theme-soft);
+  --editor-theme-code-text: var(--editor-theme-text);
+  --editor-theme-table-stripe: color-mix(in srgb, var(--editor-theme-soft) 52%, var(--editor-theme-bg));
+  --editor-theme-table-hover: color-mix(in srgb, var(--editor-theme-soft) 78%, var(--editor-theme-bg));
   background: var(--editor-theme-bg);
 }
 .edgeever-editor[data-editor-theme]:not([data-editor-theme="default"]) .ProseMirror {
@@ -55,8 +59,8 @@
 .edgeever-editor[data-editor-theme]:not([data-editor-theme="default"]) .ProseMirror .edgeever-code-source {
 
   border-color: var(--editor-theme-border);
-  background: var(--editor-theme-soft);
-  color: var(--editor-theme-text);
+  background: var(--editor-theme-code-bg);
+  color: var(--editor-theme-code-text);
 }
 
 .edgeever-editor[data-editor-theme]:not([data-editor-theme="default"]) .ProseMirror th {
@@ -130,7 +134,18 @@
 
   border-color: var(--editor-theme-border);
   border-radius: var(--editor-theme-radius, 6px);
+  background: var(--editor-theme-bg);
   box-shadow: var(--editor-theme-shadow, none);
+}
+
+.edgeever-editor[data-editor-theme]:not([data-editor-theme="default"]) .ProseMirror tbody tr:nth-child(even) td {
+
+  background: var(--editor-theme-table-stripe);
+}
+
+.edgeever-editor[data-editor-theme]:not([data-editor-theme="default"]) .ProseMirror tbody tr:hover td {
+
+  background: var(--editor-theme-table-hover);
 }
 
 .edgeever-editor .ProseMirror .edgeever-theme-block {

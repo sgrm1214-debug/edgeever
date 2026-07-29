@@ -154,6 +154,8 @@ export const zhCN = {
     switchTo: "切换到 {{name}}",
     currentWithCount: "当前：{{name}}，{{count}} 条笔记",
     switchToWithCount: "切换到 {{name}}，{{count}} 条笔记",
+    actions: "笔记本操作",
+    actionsAria: "打开 {{name}} 的操作菜单",
     newChild: "新建子笔记本",
     newChildAria: "在 {{name}} 下新建子笔记本",
     rename: "重命名",

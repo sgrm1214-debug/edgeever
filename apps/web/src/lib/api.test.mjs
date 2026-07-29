@@ -94,6 +94,50 @@ describe("desktop instance setup", () => {
     window.edgeeverDesktop.apiBaseUrl = "";
   });
 
+  test("preserves the desktop token when refreshing the same authenticated session", () => {
+    cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "desktop-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+
+    cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      user: { id: "user-1", username: "admin", displayName: "Owner", role: "owner" },
+    });
+
+    expect(getCachedDesktopSession()).toEqual({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "desktop-session-token",
+      user: { id: "user-1", username: "admin", displayName: "Owner", role: "owner" },
+    });
+  });
+
+  test("does not carry a desktop token into a different account session", () => {
+    cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "user-1-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+
+    cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      user: { id: "user-2", username: "member", displayName: null, role: "member" },
+    });
+
+    expect(getCachedDesktopSession()?.sessionToken).toBeUndefined();
+  });
+
   test("uses the desktop session token and stops network retries after a 401", async () => {
     calls.length = 0;
     events.length = 0;

@@ -154,6 +154,8 @@ export const enUS = {
     switchTo: "Switch to {{name}}",
     currentWithCount: "Current: {{name}}, {{count}} notes",
     switchToWithCount: "Switch to {{name}}, {{count}} notes",
+    actions: "Notebook actions",
+    actionsAria: "Open actions for {{name}}",
     newChild: "New child notebook",
     newChildAria: "Create child notebook under {{name}}",
     rename: "Rename",

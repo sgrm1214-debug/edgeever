@@ -25,6 +25,36 @@
       "ios": {
         "ascAppId": "6792625631"
       }
+    },
+    "store-internal": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed"
+      }
+    },
+    "store-alpha": {
+      "android": {
+        "track": "alpha",
+        "releaseStatus": "completed"
+      }
+    },
+    "store-beta": {
+      "android": {
+        "track": "beta",
+        "releaseStatus": "completed"
+      }
+    },
+    "store-production": {
+      "android": {
+        "track": "production",
+        "releaseStatus": "draft",
+        "changesNotSentForReview": true
+      }
+    },
+    "store-ios": {
+      "ios": {
+        "ascAppId": "6792625631"
+      }
     }
   }
 }

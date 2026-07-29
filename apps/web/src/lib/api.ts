@@ -76,7 +76,18 @@ export const getCachedDesktopSession = (): AuthSession | null => {
 export const cacheDesktopSession = (session: AuthSession) => {
   if (typeof window === "undefined" || !window.edgeeverDesktop?.isAvailable) return;
   try {
-    window.localStorage.setItem(DESKTOP_SESSION_STORAGE_KEY, JSON.stringify(session));
+    const cached = getCachedDesktopSession();
+    const sessionToken =
+      session.authenticated &&
+      !session.sessionToken &&
+      cached?.authenticated &&
+      cached.user?.id === session.user?.id
+        ? cached.sessionToken
+        : session.sessionToken;
+    window.localStorage.setItem(
+      DESKTOP_SESSION_STORAGE_KEY,
+      JSON.stringify(sessionToken ? { ...session, sessionToken } : session),
+    );
   } catch {
     // A session cache is an offline convenience and must never block login.
   }

@@ -16,10 +16,8 @@ on:
       - "apps/mobile/**"
       - "packages/client/**"
       - "packages/shared/**"
-      - "package.json"
       - "bun.lock"
       - "scripts/build-android-local.sh"
-      - ".github/workflows/mobile-build.yml"
 
 permissions:
   contents: write
@@ -29,8 +27,144 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-plan:
+    if: >-
+      ${{
+        github.repository == 'tianma-if/edgeever' &&
+        (
+          github.event_name == 'release' ||
+          (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        )
+      }}
+    name: Plan Android release asset
+    runs-on: ubuntu-latest
+    outputs:
+      asset_ready: ${{ steps.plan.outputs.asset_ready }}
+      previous_tag: ${{ steps.plan.outputs.previous_tag }}
+      rebuild: ${{ steps.plan.outputs.rebuild }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate Draft Release target
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          expected_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          test "$RELEASE_TAG" = "v${expected_version}"
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
+          target_commitish="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')"
+          test "$(git rev-parse "${target_commitish}^{commit}")" = "$(git rev-parse "${GITHUB_SHA}^{commit}")"
+
+      - name: Compare with previous formal release
+        id: plan
+        env:
+          CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
+        run: |
+          mapfile -t release_tags < <(
+            gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
+          )
+          previous_tag=""
+          for release_tag in "${release_tags[@]}"; do
+            if [[ "$release_tag" != "$CURRENT_TAG" ]]; then
+              previous_tag="$release_tag"
+              break
+            fi
+          done
+          test -n "$previous_tag"
+          git fetch origin "refs/tags/${previous_tag}:refs/tags/${previous_tag}"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          plan_output="$(node scripts/plan-native-release.mjs mobile "$previous_tag" "$HEAD_REF")"
+          printf '%s\n' "$plan_output" >> "$GITHUB_OUTPUT"
+          rebuild="$(printf '%s\n' "$plan_output" | sed -n 's/^rebuild=//p')"
+          if [[ "$rebuild" = "true" ]]; then
+            root_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+            mobile_version="$(node -p "JSON.parse(require('fs').readFileSync('apps/mobile/app.json', 'utf8')).expo.version")"
+            if [[ "$mobile_version" != "$root_version" ]]; then
+              echo "::error::Mobile rebuild requires apps/mobile/app.json expo.version ($mobile_version) to match package.json version ($root_version)."
+              exit 1
+            fi
+
+            current_version_code="$(node -p "JSON.parse(require('fs').readFileSync('apps/mobile/app.json', 'utf8')).expo.android.versionCode")"
+            previous_version_code="$(
+              git show "${previous_tag}:apps/mobile/app.json" |
+                node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).expo.android.versionCode)"
+            )"
+            if (( current_version_code <= previous_version_code )); then
+              echo "::error::Mobile rebuild requires android.versionCode ($current_version_code) to be greater than the previous release ($previous_version_code)."
+              exit 1
+            fi
+          fi
+
+          mapfile -t current_assets < <(
+            gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${CURRENT_TAG}" \
+              --jq '.assets[].name'
+          )
+          asset_ready="$(
+            printf '%s\n' "${current_assets[@]}" |
+              node scripts/check-native-release-assets.mjs mobile "$rebuild" "$CURRENT_TAG"
+          )"
+          echo "asset_ready=$asset_ready" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" = "release" && "$asset_ready" != "true" ]]; then
+            echo "::error::Published Release assets are incomplete or incompatible. Restore the Release to Draft and prepare assets with workflow_dispatch."
+            exit 1
+          fi
+
+  reuse-release-apk:
+    needs: release-plan
+    if: >-
+      ${{
+        github.repository == 'tianma-if/edgeever' &&
+        github.event_name == 'workflow_dispatch' &&
+        inputs.release_tag != '' &&
+        needs.release-plan.result == 'success' &&
+        needs.release-plan.outputs.asset_ready == 'false' &&
+        needs.release-plan.outputs.rebuild == 'false'
+      }}
+    name: Reuse Android release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy latest compatible APK without renaming
+        env:
+          CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.release-plan.outputs.previous_tag }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-assets"
+          gh release download "$PREVIOUS_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'edgeever-android-v*-arm64-v8a.apk' \
+            --dir "$RUNNER_TEMP/native-assets"
+          test "$(find "$RUNNER_TEMP/native-assets" -type f -name 'edgeever-android-v*-arm64-v8a.apk' | wc -l | tr -d ' ')" = "1"
+          gh release upload "$CURRENT_TAG" "$RUNNER_TEMP/native-assets/"* \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
   android:
-    if: github.repository == 'tianma-if/edgeever' && (github.event_name == 'workflow_dispatch' || github.event_name == 'release' || github.ref == 'refs/heads/main')
+    needs: release-plan
+    if: >-
+      ${{
+        always() &&
+        github.repository == 'tianma-if/edgeever' &&
+        (
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'workflow_dispatch' && inputs.release_tag == '') ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.release_tag != '' &&
+            needs.release-plan.result == 'success' &&
+            needs.release-plan.outputs.asset_ready == 'false' &&
+            needs.release-plan.outputs.rebuild == 'true'
+          )
+        )
+      }}
     name: Build Android packages
     runs-on: [self-hosted, macOS, ARM64, edgeever-mobile]
     timeout-minutes: 45
@@ -64,7 +198,7 @@ jobs:
         run: bun run build:android:fast
 
       - name: Restore Android upload keystore
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+        if: github.event_name == 'workflow_dispatch'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -82,7 +216,7 @@ jobs:
         run: bun run build:android:play
 
       - name: Build signed release APK for GitHub Release
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/edgeever-upload.p12
@@ -98,7 +232,7 @@ jobs:
         working-directory: apps/mobile/android
 
       - name: Verify release APK signature
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
         run: |
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
         working-directory: apps/mobile/android
@@ -127,10 +261,10 @@ jobs:
           compression-level: 0
 
       - name: Upload release APK to GitHub Release
-        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           release_asset="$RUNNER_TEMP/edgeever-android-${RELEASE_TAG}-arm64-v8a.apk"
           cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "$release_asset"
@@ -145,5 +279,5 @@ jobs:
           if-no-files-found: error
 
       - name: Remove temporary upload keystore
-        if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'release')
+        if: always() && github.event_name == 'workflow_dispatch'
         run: rm -f "$RUNNER_TEMP/edgeever-upload.p12"

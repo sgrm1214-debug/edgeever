@@ -46,6 +46,12 @@ This produces `apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
 If the audited change range does not affect the mobile binary, the most recent compatible, verified APK may be attached again without rebuilding. Keep its original versioned filename and checksum, and state the source release explicitly; never rename an older binary to the current release version.
 
+The release workflow performs this audit automatically. Web-only releases use
+an Ubuntu planning job and copy the single verified `arm64-v8a` APK from the
+previous formal Release. The self-hosted Android runner is scheduled only when
+the audited range includes mobile runtime code, shared mobile packages,
+dependencies, native configuration, or Android build tooling.
+
 ### Recommended local Play build
 
 Routine Google Play bundles should be built on the release Mac instead of in

@@ -77,7 +77,11 @@ export const resolveMemoContentDoc = (
   }
 
   const markdownDoc = markdownToDoc(contentMarkdown);
-  return docContainsNodeType(markdownDoc, "table") ? markdownDoc : currentDoc;
+  // Some older saves left an empty JSON document behind while retaining the
+  // real body in Markdown. Treat that as a compatibility case too; otherwise
+  // the editor can show the Markdown body while list excerpts see an empty
+  // JSON document.
+  return docContainsNodeType(markdownDoc, "table") || !docToText(currentDoc) ? markdownDoc : currentDoc;
 };
 
 const LEGACY_ATTACHMENT_PATTERN = /^(附件：|Attachment:\s*)(.+?)\s+(\/api\/v1\/resources\/\S+|https?:\/\/\S+)$/;

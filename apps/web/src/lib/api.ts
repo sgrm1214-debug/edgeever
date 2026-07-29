@@ -93,31 +93,40 @@ export const clearCachedDesktopSession = () => {
 
 export const getConfiguredDesktopApiBaseUrl = () => {
   if (typeof window === "undefined") return "";
-  const bridgeUrl = (window.edgeeverDesktop?.apiBaseUrl ?? "").trim();
-  if (bridgeUrl) return bridgeUrl.replace(/\/$/, "");
 
   try {
-    return (window.localStorage.getItem(DESKTOP_API_BASE_URL_STORAGE_KEY) ?? "").trim().replace(/\/$/, "");
-  } catch {
-    return "";
-  }
+    const savedUrl = (window.localStorage.getItem(DESKTOP_API_BASE_URL_STORAGE_KEY) ?? "").trim();
+    if (savedUrl) return savedUrl.replace(/\/$/, "");
+  } catch {}
+
+  const bridgeUrl = (window.edgeeverDesktop?.apiBaseUrl ?? "").trim();
+  return bridgeUrl.replace(/\/$/, "");
 };
 
-export const isDesktopInstanceConfigurationRequired = () =>
-  typeof window !== "undefined" &&
-  Boolean(window.edgeeverDesktop?.isAvailable) &&
-  window.location.protocol === "file:" &&
-  !getConfiguredDesktopApiBaseUrl();
+export class DesktopInstanceUrlError extends Error {
+  constructor() {
+    super("Desktop instance URL must use http or https");
+    this.name = "DesktopInstanceUrlError";
+  }
+}
 
-export const saveDesktopApiBaseUrl = (value: string) => {
+export const saveDesktopApiBaseUrl = async (value: string) => {
   const normalized = value.trim().replace(/\/$/, "");
-  const parsed = new URL(normalized);
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new DesktopInstanceUrlError();
+  }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Desktop instance URL must use http or https");
+    throw new DesktopInstanceUrlError();
   }
 
+  if (getConfiguredDesktopApiBaseUrl() !== normalized) {
+    clearCachedDesktopSession();
+  }
+  await window.edgeeverDesktop?.setApiBaseUrl(normalized);
   window.localStorage.setItem(DESKTOP_API_BASE_URL_STORAGE_KEY, normalized);
-  void window.edgeeverDesktop?.setApiBaseUrl(normalized);
   return normalized;
 };
 
@@ -180,8 +189,23 @@ export class ApiRequestError extends Error {
   }
 }
 
+let desktopSessionRejected = false;
+
+const isDesktopAuthenticationRequest = (path: string) =>
+  path === "/api/v1/auth/login" || path === "/api/v1/auth/session";
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const headers = new Headers(init?.headers);
+  const isDesktop = Boolean(window.edgeeverDesktop?.isAvailable);
+  const sessionToken = isDesktop ? getCachedDesktopSession()?.sessionToken : undefined;
+
+  if (isDesktop && desktopSessionRejected && !isDesktopAuthenticationRequest(path)) {
+    throw new ApiRequestError("Authentication required", 401, "unauthorized");
+  }
+
+  if (sessionToken && !headers.has("Authorization") && path !== "/api/v1/auth/login") {
+    headers.set("Authorization", `Bearer ${sessionToken}`);
+  }
 
   if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -203,13 +227,25 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
         : response.statusText;
 
     if (response.status === 401) {
-      window.dispatchEvent(new CustomEvent("edgeever:unauthorized"));
+      if (isDesktop) {
+        clearCachedDesktopSession();
+        if (!desktopSessionRejected) {
+          desktopSessionRejected = true;
+          window.dispatchEvent(new CustomEvent("edgeever:unauthorized"));
+        }
+      } else {
+        window.dispatchEvent(new CustomEvent("edgeever:unauthorized"));
+      }
     }
 
     throw new ApiRequestError(message || "Request failed", response.status, error?.code);
   }
 
-  return response.json() as Promise<T>;
+  const body = await response.json() as T;
+  if (path === "/api/v1/auth/login") {
+    desktopSessionRejected = false;
+  }
+  return body;
 };
 
 export const api = {

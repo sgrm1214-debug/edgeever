@@ -12,6 +12,7 @@ import {
   type SyncQueueItem,
 } from "@/lib/local-db";
 import { getCachedLocalResourceBytes, removeCachedLocalResourceBytes } from "@/lib/local-resource-cache";
+import { isBrowserOffline } from "@/lib/network-status";
 
 export type SyncQueueSummary = {
   total: number;
@@ -253,7 +254,7 @@ const runQueuedChanges = async (options: {
     conflicted: 0,
   };
 
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (isBrowserOffline()) {
     return result;
   }
 
@@ -371,7 +372,7 @@ const updateClaimedQueueItem = (item: SyncQueueItem, patch: Partial<SyncQueueIte
   });
 
 export const shouldQueueMemoSaveError = (error: unknown) => {
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (isBrowserOffline()) {
     return true;
   }
 

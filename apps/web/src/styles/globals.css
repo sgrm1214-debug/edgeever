@@ -988,9 +988,17 @@ textarea {
 :root.dark [class*="hover:text-slate-900"]:hover,
 :root.dark [class*="focus:text-slate-900"]:focus { color: rgb(var(--slate-900-rgb)) !important; }
 
+:root.dark [class~="bg-amber-50/60"] {
+  background-color: rgb(69 26 3 / 72%) !important;
+}
+
 :root.dark [class~="bg-amber-50"],
 :root.dark [class~="bg-amber-50/95"] {
   background-color: #451a03 !important;
+}
+
+:root.dark [class~="text-amber-600/80"] {
+  color: rgb(252 211 77 / 80%) !important;
 }
 
 :root.dark [class~="text-amber-700"],

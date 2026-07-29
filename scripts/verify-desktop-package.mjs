@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import { listPackage } from "@electron/asar";
 
 const outputDirectory = join(process.cwd(), "release", "desktop");
 const version = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version;
@@ -28,8 +29,20 @@ for (const sidecarPath of files.filter((path) => /[\\/]resources[\\/]sidecar[\\/
 
 if (requestedPlatform === "darwin") {
   assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-arm64.dmg`)), "macOS package must contain the current arm64 DMG");
-  const sidecar = join(outputDirectory, "mac-arm64", "EdgeEver.app", "Contents", "Resources", "sidecar", "edgeever-sidecar");
+  const unpackedApp = join(outputDirectory, "mac-arm64", "EdgeEver.app");
+  assert.ok(existsSync(unpackedApp), "macOS package must contain the unpacked app bundle");
+  const appResources = join(unpackedApp, "Contents", "Resources");
+  const sidecar = join(appResources, "sidecar", "edgeever-sidecar");
   assert.ok(existsSync(sidecar), `macOS app bundle is missing the sidecar: ${sidecar}`);
+  const asarPath = join(appResources, "app.asar");
+  assert.ok(existsSync(asarPath), `macOS app bundle is missing app.asar: ${asarPath}`);
+  const asarFiles = new Set(listPackage(asarPath));
+  assert.ok(asarFiles.has("/src/preload/index.cjs"), "macOS app bundle must contain the sandbox-compatible CommonJS preload");
+  assert.ok(!asarFiles.has("/src/preload/index.mjs"), "macOS app bundle must not contain the unsupported ESM preload");
+  // LaunchServices registers unpacked build products as additional document
+  // handlers. The signed DMG/ZIP are the release artifacts, so discard the
+  // disposable unpacked bundle once its contents have passed verification.
+  rmSync(unpackedApp, { recursive: true, force: true });
 } else if (requestedPlatform === "win32") {
   const installer = matchingPrefix(`EdgeEver-${version}-windows-`).some((path) => path.endsWith(".exe"));
   const unpacked = existsSync(join(outputDirectory, "win-arm64-unpacked", "EdgeEver.exe"));

@@ -6,6 +6,7 @@ import {
   NOTE_PRINT_READY_MESSAGE,
   type NotePrintPayload,
 } from "@/lib/note-print";
+import { getMessageTargetOrigin } from "@/lib/app-page-path";
 import printStyles from "@/styles/note-print.css?inline";
 import "@fontsource-variable/noto-sans-sc/wght.css";
 import "@/styles/note-print-screen.css";
@@ -164,7 +165,7 @@ window.addEventListener("message", (event: MessageEvent<NotePrintPayload>) => {
 if (window.opener && token) {
   window.opener.postMessage(
     { type: NOTE_PRINT_READY_MESSAGE, token },
-    window.location.origin
+    getMessageTargetOrigin(window.location.origin)
   );
 } else {
   setText(status, "EdgeEver");

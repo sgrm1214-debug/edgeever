@@ -208,7 +208,8 @@ export { buildNotebookTree, type NotebookNode };
 export { DEFAULT_MEMO_TITLE };
 
 export const IMAGE_COMPRESSION_STORAGE_KEY = "edgeever.imageCompressionEnabled";
-export const AUTO_SAVE_INTERVAL_STORAGE_KEY = "edgeever.autoSaveInterval";
+export const SYNC_INTERVAL_STORAGE_KEY = "edgeever.syncInterval";
+const LEGACY_AUTO_SAVE_INTERVAL_STORAGE_KEY = "edgeever.autoSaveInterval";
 export const DESKTOP_FOCUS_MODE_STORAGE_KEY = "edgeever.desktopFocusMode";
 export const MEMO_LIST_DENSITY_STORAGE_KEY = "edgeever.memoListDensity";
 export const MEMO_LIST_WIDTH_STORAGE_KEY = "edgeever.memoListWidth";
@@ -217,11 +218,12 @@ export const SHORTCUT_SETTINGS_STORAGE_KEY = "edgeever.shortcutSettings";
 export const DEFAULT_MEMO_LIST_WIDTH_PX = 360;
 export const MIN_MEMO_LIST_WIDTH_PX = 300;
 export const MAX_MEMO_LIST_WIDTH_PX = 540;
+export const EDITOR_LOCAL_SAVE_DELAY_MS = 1_200;
 
-export type AutoSaveIntervalPreference = "1m" | "5m" | "15m" | "30m" | "1h" | "2h" | "off";
-export const DEFAULT_AUTO_SAVE_INTERVAL_MS = 60_000;
-const AUTO_SAVE_INTERVAL_VALUES: Record<AutoSaveIntervalPreference, number | null> = {
-  "1m": 60_000,
+export type SyncIntervalPreference = "30s" | "5m" | "15m" | "30m" | "1h" | "2h" | "off";
+export const DEFAULT_SYNC_INTERVAL_MS = 30_000;
+const SYNC_INTERVAL_VALUES: Record<SyncIntervalPreference, number | null> = {
+  "30s": 30_000,
   "5m": 300_000,
   "15m": 900_000,
   "30m": 1_800_000,
@@ -336,18 +338,24 @@ export const writeImageCompressionPreference = (enabled: boolean) => {
   }
 };
 
-export const readAutoSaveIntervalPreference = (): number | null => {
+export const readSyncIntervalPreference = (): number | null => {
   try {
-    const stored = window.localStorage.getItem(AUTO_SAVE_INTERVAL_STORAGE_KEY) as AutoSaveIntervalPreference | null;
-    return stored && stored in AUTO_SAVE_INTERVAL_VALUES ? AUTO_SAVE_INTERVAL_VALUES[stored] : DEFAULT_AUTO_SAVE_INTERVAL_MS;
+    const stored = (
+      window.localStorage.getItem(SYNC_INTERVAL_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_AUTO_SAVE_INTERVAL_STORAGE_KEY)
+    );
+    const preference = stored === "1m" ? "30s" : stored;
+    return preference && preference in SYNC_INTERVAL_VALUES
+      ? SYNC_INTERVAL_VALUES[preference as SyncIntervalPreference]
+      : DEFAULT_SYNC_INTERVAL_MS;
   } catch {
-    return DEFAULT_AUTO_SAVE_INTERVAL_MS;
+    return DEFAULT_SYNC_INTERVAL_MS;
   }
 };
 
-export const writeAutoSaveIntervalPreference = (preference: AutoSaveIntervalPreference) => {
+export const writeSyncIntervalPreference = (preference: SyncIntervalPreference) => {
   try {
-    window.localStorage.setItem(AUTO_SAVE_INTERVAL_STORAGE_KEY, preference);
+    window.localStorage.setItem(SYNC_INTERVAL_STORAGE_KEY, preference);
   } catch {
     // Local storage can be unavailable in private or restricted browser contexts.
   }

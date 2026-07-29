@@ -46,7 +46,7 @@ mac:
         - arm64
   artifactName: EdgeEver-${version}-mac-${arch}.${ext}
 dmg:
-  title: "EdgeEver: drag to Applications, then double-click"
+  title: "EdgeEver: double-click to install"
   backgroundColor: '#f5f7f6'
   iconSize: 112
   window:

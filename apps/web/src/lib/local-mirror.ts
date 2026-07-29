@@ -3,6 +3,7 @@ import type { MemoFilterMode, MemoSortMode } from "@/lib/app-helpers";
 import { api, type SyncChangesResponse } from "@/lib/api";
 import { localDb, type LocalMemo, type LocalNotebook, type LocalResource, type LocalRevision } from "@/lib/local-db";
 import { cacheLocalResourceBytes, localResourceUrl, removeCachedLocalResourceBytes } from "@/lib/local-resource-cache";
+import { isBrowserOffline } from "@/lib/network-status";
 
 export type LocalMemoListParams = {
   notebookId?: string | null;
@@ -122,7 +123,7 @@ const bootstrapScope = async (scope: string) => {
 };
 
 const performSyncLocalMirror = async (scope: string) => {
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (isBrowserOffline()) {
     return { bootstrapped: false, changed: 0 };
   }
 

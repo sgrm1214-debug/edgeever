@@ -11,6 +11,7 @@ import type { EdgeEverRepository } from "@/lib/repository";
 import { api, getConfiguredDesktopApiBaseUrl } from "@/lib/api";
 import { createStagedResourceListItem, mapMarkdownResourceUrls, mapTiptapResourceUrls, toApiResourceUrl, toDesktopResourceUrl } from "@/lib/desktop-resources";
 import type { ResourceListItem, ResourceStorageSummary } from "@edgeever/shared";
+import { notifySyncQueueDeferred } from "@/lib/sync-events";
 
 const resolveResourceUrls = <T extends { resources: Array<{ url: string }> }>(result: T): T => {
   const baseUrl = getConfiguredDesktopApiBaseUrl();
@@ -224,7 +225,7 @@ export const createDesktopRepository = (): EdgeEverRepository => ({
       tags: input.tags,
     };
     const result = await request("memo.update", rpcParams);
-    window.dispatchEvent(new CustomEvent("edgeever:sync-queue-changed"));
+    notifySyncQueueDeferred();
     return { memo: toDisplayMemo(result.memo), queued: true as const };
   },
 

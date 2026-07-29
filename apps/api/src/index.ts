@@ -162,6 +162,7 @@ type MemoSummaryRow = {
   title: string | null;
   excerpt: string;
   content_text?: string | null;
+  content_markdown?: string | null;
   tags_json: string;
   is_pinned: number;
   is_archived: number;
@@ -1534,7 +1535,7 @@ app.get("/api/v1/memos", async (c) => {
            )
            SELECT m.id, m.notebook_id, m.title, m.excerpt, m.tags_json, m.is_pinned,
                   m.is_archived, m.is_deleted, m.created_at, m.updated_at, m.deleted_at, mc.revision,
-                  mc.content_text
+                  mc.content_text, mc.content_markdown
            FROM search_matches s
            INNER JOIN memos m ON m.id = s.memo_id
            INNER JOIN memo_contents mc ON mc.memo_id = m.id
@@ -1587,7 +1588,7 @@ app.get("/api/v1/memos", async (c) => {
       c.env.storage.db.prepare(
         `SELECT m.id, m.notebook_id, m.title, m.excerpt, m.tags_json, m.is_pinned,
                 m.is_archived, m.is_deleted, m.created_at, m.updated_at, m.deleted_at, mc.revision,
-                mc.content_text
+                mc.content_text, mc.content_markdown
          FROM memos m
          INNER JOIN memo_contents mc ON mc.memo_id = m.id
          WHERE ${searchCursorConditions.join(" AND ")}
@@ -1616,7 +1617,7 @@ app.get("/api/v1/memos", async (c) => {
     c.env.storage.db.prepare(
       `SELECT m.id, m.notebook_id, m.title, m.excerpt, m.tags_json, m.is_pinned,
               m.is_archived, m.is_deleted, m.created_at, m.updated_at, m.deleted_at, mc.revision,
-              mc.content_text
+              mc.content_text, mc.content_markdown
        FROM memos m
        INNER JOIN memo_contents mc ON mc.memo_id = m.id
        WHERE ${cursorConditions.join(" AND ")}
@@ -4443,7 +4444,7 @@ const mapMemoSummary = (row: MemoSummaryRow): MemoSummary => ({
   id: row.id,
   notebookId: row.notebook_id,
   title: row.title,
-  excerpt: row.excerpt || createExcerpt(row.content_text ?? ""),
+  excerpt: row.excerpt || createExcerpt(row.content_text ?? "") || createExcerpt(docToText(markdownToDoc(row.content_markdown ?? ""))),
   tags: parseJsonArray(row.tags_json),
   isPinned: Boolean(row.is_pinned),
   isArchived: Boolean(row.is_archived),

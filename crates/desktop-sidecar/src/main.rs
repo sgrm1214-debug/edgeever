@@ -1350,6 +1350,53 @@ fn sync_status(database: &Connection) -> Result<Value, String> {
     }))
 }
 
+fn prepare_sync_bootstrap(database: &Connection) -> Result<Value, String> {
+    if meta_value(database, "sync.identity").is_some_and(|identity| !identity.is_empty()) {
+        return Ok(json!({ "clearedSeedData": false }));
+    }
+
+    let outbox_count = database
+        .query_row("SELECT COUNT(*) FROM _edgeever_sidecar_outbox", [], |row| {
+            row.get::<_, i64>(0)
+        })
+        .map_err(|e| e.to_string())?;
+    let non_seed_memos = database
+        .query_row(
+            "SELECT COUNT(*) FROM memos WHERE id <> 'memo_welcome'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|e| e.to_string())?;
+    let non_seed_notebooks = database
+        .query_row(
+            "SELECT COUNT(*) FROM notebooks
+             WHERE id NOT IN ('nb_inbox', 'nb_projects', 'nb_learning', 'nb_creative', 'nb_personal')",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if outbox_count > 0 || non_seed_memos > 0 || non_seed_notebooks > 0 {
+        return Ok(json!({ "clearedSeedData": false }));
+    }
+
+    let tx = database
+        .unchecked_transaction()
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM memos_fts WHERE memo_id = 'memo_welcome'", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM memos WHERE id = 'memo_welcome'", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "DELETE FROM notebooks
+         WHERE id IN ('nb_inbox', 'nb_projects', 'nb_learning', 'nb_creative', 'nb_personal')",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(json!({ "clearedSeedData": true }))
+}
+
 fn sync_outbox_list(database: &Connection, params: &Value) -> Result<Value, String> {
     let limit = params
         .get("limit")
@@ -1648,6 +1695,7 @@ fn handle(
         "storage.backups" => list_backups(root).map_err(|error| error.to_string()),
         "storage.restore" => restore_database(database, root, migrations, &request.params),
         "sync.status" => sync_status(database),
+        "sync.bootstrap.prepare" => prepare_sync_bootstrap(database),
         "sync.outbox.list" => sync_outbox_list(database, &request.params),
         "sync.outbox.ack" => sync_outbox_ack(database, &request.params),
         "sync.outbox.fail" => sync_outbox_fail(database, &request.params),

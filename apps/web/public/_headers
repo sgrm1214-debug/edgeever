@@ -1,0 +1,25 @@
+# Always validate application entry points against the active deployment.
+# Fingerprinted assets below can remain cached indefinitely.
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/settings
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/templates
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/evernote-migration
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/*.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -1,10 +1,11 @@
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import type { TiptapDoc } from "@edgeever/shared";
+import { getAppPagePath, getMessageTargetOrigin } from "@/lib/app-page-path";
 
 export const NOTE_PRINT_MESSAGE = "edgeever:note-print";
 export const NOTE_PRINT_READY_MESSAGE = "edgeever:note-print-ready";
-export const NOTE_PRINT_PATH = "/note-print.html";
+export const NOTE_PRINT_PATH = getAppPagePath("note-print.html", import.meta.env.BASE_URL);
 
 export type NotePrintLabels = {
   close: string;
@@ -62,7 +63,7 @@ export const openNotePrintPreview = (
         type: NOTE_PRINT_MESSAGE,
         token,
       } satisfies NotePrintPayload,
-      window.location.origin
+      getMessageTargetOrigin(window.location.origin)
     );
   };
 

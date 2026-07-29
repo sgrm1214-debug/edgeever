@@ -74,7 +74,17 @@ export const parseMobileEditorTags = (value: string) =>
     .map((tag) => tag.trim())
     .filter(Boolean);
 
-export const safeMobileEditorReturnPath = (value: string | null) => (value?.startsWith("/") ? value : "/");
+export const safeMobileEditorReturnPath = (value: string | null) => {
+  const fallback = import.meta.env.BASE_URL.startsWith(".")
+    ? `${import.meta.env.BASE_URL}index.html`
+    : import.meta.env.BASE_URL;
+
+  if (value?.startsWith("/")) return value;
+  if (import.meta.env.BASE_URL.startsWith(".") && value?.startsWith(`${import.meta.env.BASE_URL}index.html`)) {
+    return value;
+  }
+  return fallback;
+};
 
 export const requestMobileEditorJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   const headers = new Headers(init?.headers);

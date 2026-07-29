@@ -14,7 +14,7 @@ import {
   MobileEditorNotebookSheet,
   MobileEditorToolbar,
 } from "@/components/MobileStandaloneEditorParts";
-import { getEditableMemoTitle, getNotebookMoveOptions, readAutoSaveIntervalPreference } from "@/lib/app-helpers";
+import { EDITOR_LOCAL_SAVE_DELAY_MS, getEditableMemoTitle, getNotebookMoveOptions } from "@/lib/app-helpers";
 import { defaultLocale, normalizeLocale } from "@/i18n/locales";
 import { compressImageForUpload } from "@/lib/image-compression";
 import { localDb, type LocalDraft } from "@/lib/local-db";
@@ -200,13 +200,10 @@ export const MobileStandaloneTiptapEditor = ({
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
       }
-      const autoSaveIntervalMs = readAutoSaveIntervalPreference();
-      if (autoSaveIntervalMs !== null) {
-        saveTimerRef.current = window.setTimeout(() => {
-          saveTimerRef.current = null;
-          void saveNowRef.current();
-        }, autoSaveIntervalMs);
-      }
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        void saveNowRef.current();
+      }, EDITOR_LOCAL_SAVE_DELAY_MS);
     },
   });
 
@@ -452,13 +449,10 @@ export const MobileStandaloneTiptapEditor = ({
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
     }
-    const autoSaveIntervalMs = readAutoSaveIntervalPreference();
-    if (autoSaveIntervalMs !== null) {
-      saveTimerRef.current = window.setTimeout(() => {
-        saveTimerRef.current = null;
-        void saveNow();
-      }, autoSaveIntervalMs);
-    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void saveNow();
+    }, EDITOR_LOCAL_SAVE_DELAY_MS);
   }, [persistLocalDraft, saveNow, setSaveStateStable]);
 
   const persistReturnPreview = useCallback(() => {

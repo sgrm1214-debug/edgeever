@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { countMemoCharacters, docToMarkdown, markdownToDoc, resolveMemoContentDoc } from "./content.ts";
+import { countMemoCharacters, docToMarkdown, docToText, markdownToDoc, resolveMemoContentDoc } from "./content.ts";
 
 describe("memo character count", () => {
   test("counts punctuation while excluding whitespace and formatting", () => {
@@ -56,6 +56,15 @@ describe("Markdown table conversion", () => {
 
     expect(resolveMemoContentDoc(legacyDoc, markdown).content[0]?.type).toBe("table");
     expect(resolveMemoContentDoc(legacyDoc, "Legacy note")).toBe(legacyDoc);
+  });
+});
+
+describe("legacy Markdown body recovery", () => {
+  test("recovers a body when the stored JSON document is empty", () => {
+    const markdown = "权威和反中心化特征，即当一个人成为某种代表性的符号之后";
+    const resolved = resolveMemoContentDoc(markdownToDoc(""), markdown);
+
+    expect(docToText(resolved)).toContain(markdown);
   });
 });
 

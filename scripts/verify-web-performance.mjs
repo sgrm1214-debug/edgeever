@@ -5,13 +5,22 @@ import { join } from "node:path";
 const distDirectory = join(process.cwd(), "apps", "web", "dist");
 const indexHtml = readFileSync(join(distDirectory, "index.html"), "utf8");
 const serviceWorker = readFileSync(join(distDirectory, "sw.js"), "utf8");
+const staticHeaders = readFileSync(join(distDirectory, "_headers"), "utf8");
 assert.match(serviceWorker, /edgeever-resource-blobs/, "PWA must provide a runtime cache for resource bytes");
 assert.match(serviceWorker, /CacheFirst/, "PWA resource bytes must use a cache-first runtime strategy");
+assert.match(serviceWorker, /edgeever-app-shell/, "PWA navigation must use a dedicated app-shell runtime cache");
+assert.match(serviceWorker, /NetworkFirst/, "PWA navigation must prefer the current deployment over cached HTML");
+assert.match(serviceWorker, /PrecacheFallbackPlugin/, "PWA navigation must retain an offline app-shell fallback");
+assert.doesNotMatch(serviceWorker, /NavigationRoute/, "PWA navigation must not always serve the precached HTML shell");
+assert.match(staticHeaders, /\/sw\.js\s+Cache-Control: no-cache, no-store, must-revalidate/, "Service worker updates must not use stale browser cache");
+assert.match(staticHeaders, /\/assets\/\*\s+Cache-Control: public, max-age=31536000, immutable/, "Fingerprinted assets must use immutable browser caching");
 const precacheStart = serviceWorker.indexOf("precacheAndRoute(");
 const precacheEnd = serviceWorker.indexOf(");", precacheStart);
 assert.ok(precacheStart >= 0 && precacheEnd > precacheStart, "Web service worker must contain a precache manifest");
 
 const precacheManifest = serviceWorker.slice(precacheStart, precacheEnd);
+assert.doesNotMatch(precacheManifest, /\{url:"index\.html",/, "Current HTML must not be served by a cache-first precache route");
+assert.match(precacheManifest, /index\.html\?edgeever-offline-shell=/, "PWA must retain a versioned offline HTML shell");
 const optionalDiagramPattern = /(?:vendor-(?:beautiful-mermaid|mermaid)|mermaid\.core|[^"']*Diagram-)[^"']*\.js/;
 assert.doesNotMatch(precacheManifest, optionalDiagramPattern, "Optional diagram chunks must remain out of the initial PWA precache");
 

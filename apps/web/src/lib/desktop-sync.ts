@@ -3,6 +3,7 @@ import { api, ApiRequestError } from "@/lib/api";
 import { isDesktopResourceRuntime } from "@/lib/desktop-resources";
 
 type StagedResourceRewrite = { memoId: string; placeholder: string; url: string };
+let lastSyncFailed = false;
 
 const syncStagedResources = async (memoIdMappings: Map<string, string>) => {
   if (!isDesktopResourceRuntime() || (typeof navigator !== "undefined" && !navigator.onLine)) return { attempted: 0, synced: 0, failed: 0, rewrites: [] as StagedResourceRewrite[], stagedIds: [] as string[] };
@@ -313,15 +314,37 @@ const syncOutbox = async (stagedRewrites: StagedResourceRewrite[], onlyKinds?: S
 
 const applyBootstrap = async (page: SyncBootstrapResponse) => {
   const changes = [
-    ...page.notebooks.map((notebook) => ({ entityType: "notebook" as const, operation: "upsert" as const, entityId: notebook.id, notebook, memo: null })),
+    ...orderBootstrapNotebooks(page.notebooks).map((notebook) => ({ entityType: "notebook" as const, operation: "upsert" as const, entityId: notebook.id, notebook, memo: null })),
     ...page.memos.map((memo) => ({ entityType: "memo" as const, operation: "upsert" as const, entityId: memo.id, memo, notebook: null })),
   ];
   if (changes.length > 0) await request("sync.apply", { changes });
 };
 
+export const orderBootstrapNotebooks = (notebooks: SyncBootstrapResponse["notebooks"]) => {
+  const remaining = new Map(notebooks.map((notebook) => [notebook.id, notebook]));
+  const ordered: SyncBootstrapResponse["notebooks"] = [];
+
+  while (remaining.size > 0) {
+    let added = 0;
+    for (const [id, notebook] of remaining) {
+      if (notebook.parentId && remaining.has(notebook.parentId)) continue;
+      ordered.push(notebook);
+      remaining.delete(id);
+      added += 1;
+    }
+    if (added === 0) {
+      ordered.push(...remaining.values());
+      break;
+    }
+  }
+
+  return ordered;
+};
+
 const pullRemoteChanges = async () => {
   const status = await request("sync.status", {});
   if (!status.syncIdentity) {
+    await request("sync.bootstrap.prepare", {});
     let afterId: string | null = null;
     let snapshotCursor = 0;
     let syncIdentity = "";
@@ -363,8 +386,11 @@ export const syncDesktopData = () => {
         await removeSyncedStagedResources(stagedResources.stagedIds);
       }
       if (outbox.conflicted === 0 && creates.conflicted === 0 && (typeof navigator === "undefined" || navigator.onLine)) await pullRemoteChanges();
+      lastSyncFailed = false;
       return { ...outbox, attempted: creates.attempted + outbox.attempted + stagedResources.attempted, synced: creates.synced + outbox.synced + stagedResources.synced, failed: creates.failed + outbox.failed + stagedResources.failed, conflicted: creates.conflicted + outbox.conflicted };
-    } catch {
+    } catch (error) {
+      lastSyncFailed = true;
+      console.error("[desktop-sync] Sync failed", error);
       return { attempted: 0, synced: 0, failed: 1, conflicted: 0 };
     }
   })().finally(() => { activeSync = null; });
@@ -373,7 +399,8 @@ export const syncDesktopData = () => {
 
 export const getDesktopSyncSummary = async () => {
   const status = await request("sync.status", {});
-  return { total: status.pending + status.syncing + status.conflict + status.error, pending: status.pending, syncing: status.syncing, conflict: status.conflict, error: status.error };
+  const error = status.error + (lastSyncFailed ? 1 : 0);
+  return { total: status.pending + status.syncing + status.conflict + error, pending: status.pending, syncing: status.syncing, conflict: status.conflict, error };
 };
 
 export const discardDesktopConflicts = async () => {

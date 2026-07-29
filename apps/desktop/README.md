@@ -31,6 +31,13 @@ CSC_IDENTITY_AUTO_DISCOVERY=false bun run --cwd apps/desktop dist -- --publish n
 The resulting DMG, NSIS installer, or AppImage is written under
 `release/desktop`. The CI workflow accepts optional signing secrets:
 
+On macOS, users can double-click EdgeEver in the mounted DMG and choose
+**Install and Launch**. The app moves itself to `Applications`, relaunches the
+installed copy, and ejects any mounted EdgeEver installer images so macOS does
+not retain duplicate file-association entries. Dragging the app to
+`Applications` remains supported; launching the installed copy also performs
+the installer-image cleanup.
+
 - `EDGEEVER_MAC_CERTIFICATE_BASE64` and `EDGEEVER_MAC_CERTIFICATE_PASSWORD`
 - `EDGEEVER_APPLE_ID`, `EDGEEVER_APPLE_APP_SPECIFIC_PASSWORD`, and `EDGEEVER_APPLE_TEAM_ID`
 - `EDGEEVER_WINDOWS_CERTIFICATE_BASE64` and `EDGEEVER_WINDOWS_CERTIFICATE_PASSWORD`
@@ -39,8 +46,12 @@ When these secrets are absent, CI produces unsigned verification artifacts.
 Private signing material is never committed to the repository.
 
 The workflow keeps `workflow_dispatch` builds as non-publishing verification
-runs. When a GitHub Release is published, each platform job publishes its
-installer and update metadata to that release through electron-builder.
+runs. When a GitHub Release is published, the workflow first compares it with
+the previous formal Release. It rebuilds and publishes the installer through
+electron-builder only when Electron, the Rust sidecar, native dependencies,
+packaging configuration, or desktop build tooling changed. Web-only Releases
+reuse the previous verified DMG, blockmap, and update metadata without renaming
+them, so the macOS runner and signing pipeline are not scheduled unnecessarily.
 
 The desktop Settings page exposes the sidecar's local backup list. Restoring a
 backup creates an additional protective backup first, restores the SQLite

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-const { rewriteStagedResource } = await import("./desktop-sync.ts");
+const { orderBootstrapNotebooks, rewriteStagedResource } = await import("./desktop-sync.ts");
 
 describe("desktop staged resource sync", () => {
   test("rewrites placeholders in memo JSON and markdown", () => {
@@ -14,5 +14,19 @@ describe("desktop staged resource sync", () => {
       contentJson: { type: "doc", content: [{ type: "image", attrs: { src: "/api/v1/resources/resource-1/blob" } }] },
       contentMarkdown: "![photo](/api/v1/resources/resource-1/blob)",
     });
+  });
+});
+
+describe("desktop bootstrap sync", () => {
+  test("orders parent notebooks before their children", () => {
+    const child = { id: "child", parentId: "parent", name: "Child" };
+    const parent = { id: "parent", parentId: null, name: "Parent" };
+    const grandchild = { id: "grandchild", parentId: "child", name: "Grandchild" };
+
+    expect(orderBootstrapNotebooks([grandchild, child, parent]).map((notebook) => notebook.id)).toEqual([
+      "parent",
+      "child",
+      "grandchild",
+    ]);
   });
 });

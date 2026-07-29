@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  DEFAULT_SYNC_INTERVAL_MS,
   DESKTOP_FOCUS_MODE_STORAGE_KEY,
+  SYNC_INTERVAL_STORAGE_KEY,
+  readSyncIntervalPreference,
   readDesktopFocusModePreference,
+  writeSyncIntervalPreference,
   writeDesktopFocusModePreference,
 } from "./app-helpers.ts";
 
@@ -63,5 +67,52 @@ describe("desktop focus mode preference", () => {
 
     expect(readDesktopFocusModePreference()).toBe(false);
     expect(() => writeDesktopFocusModePreference(true)).not.toThrow();
+  });
+});
+
+describe("automatic sync interval preference", () => {
+  test("defaults to 30 seconds", () => {
+    installLocalStorage();
+    expect(readSyncIntervalPreference()).toBe(DEFAULT_SYNC_INTERVAL_MS);
+    expect(DEFAULT_SYNC_INTERVAL_MS).toBe(30_000);
+  });
+
+  test("reads and writes sync intervals", () => {
+    const values = installLocalStorage();
+
+    writeSyncIntervalPreference("30s");
+    expect(values.get(SYNC_INTERVAL_STORAGE_KEY)).toBe("30s");
+    expect(readSyncIntervalPreference()).toBe(30_000);
+
+    writeSyncIntervalPreference("5m");
+    expect(values.get(SYNC_INTERVAL_STORAGE_KEY)).toBe("5m");
+    expect(readSyncIntervalPreference()).toBe(300_000);
+  });
+
+  test("preserves the legacy preference stored under the old key", () => {
+    const values = installLocalStorage();
+    values.set("edgeever.autoSaveInterval", "15m");
+    expect(readSyncIntervalPreference()).toBe(900_000);
+  });
+
+  test("migrates the former one-minute default to 30 seconds", () => {
+    const values = installLocalStorage();
+    values.set(SYNC_INTERVAL_STORAGE_KEY, "1m");
+    expect(readSyncIntervalPreference()).toBe(30_000);
+  });
+
+  test("falls back to the default for unknown or unavailable storage", () => {
+    const values = installLocalStorage();
+    values.set(SYNC_INTERVAL_STORAGE_KEY, "unexpected");
+    expect(readSyncIntervalPreference()).toBe(30_000);
+
+    globalThis.window = {
+      localStorage: {
+        getItem: () => {
+          throw new Error("blocked");
+        },
+      },
+    };
+    expect(readSyncIntervalPreference()).toBe(30_000);
   });
 });

@@ -1,7 +1,7 @@
 import { ChartNoAxesCombined, Image, Languages, Palette, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { writeAutoSaveIntervalPreference, type AutoSaveIntervalPreference, type ShortcutSettings } from "@/lib/app-helpers";
+import { writeSyncIntervalPreference, type ShortcutSettings, type SyncIntervalPreference } from "@/lib/app-helpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,8 +20,8 @@ import { EDITOR_THEME_NAMES, MERMAID_THEME_NAMES, useTheme } from "../ThemeProvi
 interface PreferenceCardProps {
   imageCompressionEnabled: boolean;
   onImageCompressionChange: (enabled: boolean) => void;
-  autoSaveIntervalMs: number | null;
-  onAutoSaveIntervalChange: (intervalMs: number | null) => void;
+  syncIntervalMs: number | null;
+  onSyncIntervalChange: (intervalMs: number | null) => void;
   shortcutSettings: ShortcutSettings;
   onShortcutSettingsChange: (settings: ShortcutSettings) => void;
 }
@@ -29,8 +29,8 @@ interface PreferenceCardProps {
 export const PreferenceCard = ({
   imageCompressionEnabled,
   onImageCompressionChange,
-  autoSaveIntervalMs,
-  onAutoSaveIntervalChange,
+  syncIntervalMs,
+  onSyncIntervalChange,
   shortcutSettings,
   onShortcutSettingsChange,
 }: PreferenceCardProps) => {
@@ -44,8 +44,8 @@ export const PreferenceCard = ({
     void changeAppLocalePreference(preference);
   };
 
-  const autoSaveIntervalPreference: AutoSaveIntervalPreference =
-    autoSaveIntervalMs === 300_000 ? "5m" : autoSaveIntervalMs === 900_000 ? "15m" : autoSaveIntervalMs === 1_800_000 ? "30m" : autoSaveIntervalMs === 3_600_000 ? "1h" : autoSaveIntervalMs === 7_200_000 ? "2h" : "1m";
+  const syncIntervalPreference: SyncIntervalPreference =
+    syncIntervalMs === 300_000 ? "5m" : syncIntervalMs === 900_000 ? "15m" : syncIntervalMs === 1_800_000 ? "30m" : syncIntervalMs === 3_600_000 ? "1h" : syncIntervalMs === 7_200_000 ? "2h" : "30s";
 
   return (
     <Card className="w-full min-w-0 overflow-hidden shadow-none">
@@ -139,31 +139,31 @@ export const PreferenceCard = ({
           <div className="flex min-w-0 items-start gap-3">
             <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-900">{t("settings.autoSaveIntervalTitle")}</div>
-              <div className="mt-0.5 text-xs leading-4 text-slate-500">{t("settings.autoSaveIntervalDescription")}</div>
+              <div className="text-sm font-semibold text-slate-900">{t("settings.syncIntervalTitle")}</div>
+              <div className="mt-0.5 text-xs leading-4 text-slate-500">{t("settings.syncIntervalDescription")}</div>
             </div>
           </div>
           <div className="w-full shrink-0 sm:w-44">
             <Select
-              value={autoSaveIntervalPreference}
+              value={syncIntervalPreference}
               onValueChange={(value) => {
-                const preference = value as AutoSaveIntervalPreference;
-                writeAutoSaveIntervalPreference(preference);
-                onAutoSaveIntervalChange(
-                  preference === "5m" ? 300_000 : preference === "15m" ? 900_000 : preference === "30m" ? 1_800_000 : preference === "1h" ? 3_600_000 : preference === "2h" ? 7_200_000 : 60_000
+                const preference = value as SyncIntervalPreference;
+                writeSyncIntervalPreference(preference);
+                onSyncIntervalChange(
+                  preference === "5m" ? 300_000 : preference === "15m" ? 900_000 : preference === "30m" ? 1_800_000 : preference === "1h" ? 3_600_000 : preference === "2h" ? 7_200_000 : 30_000
                 );
               }}
             >
-              <SelectTrigger aria-label={t("settings.autoSaveIntervalTitle")} className="h-9 bg-white">
+              <SelectTrigger aria-label={t("settings.syncIntervalTitle")} className="h-9 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1m">{t("settings.autoSaveIntervals.1m")}</SelectItem>
-                <SelectItem value="5m">{t("settings.autoSaveIntervals.5m")}</SelectItem>
-                <SelectItem value="15m">{t("settings.autoSaveIntervals.15m")}</SelectItem>
-                <SelectItem value="30m">{t("settings.autoSaveIntervals.30m")}</SelectItem>
-                <SelectItem value="1h">{t("settings.autoSaveIntervals.1h")}</SelectItem>
-                <SelectItem value="2h">{t("settings.autoSaveIntervals.2h")}</SelectItem>
+                <SelectItem value="30s">{t("settings.syncIntervals.30s")}</SelectItem>
+                <SelectItem value="5m">{t("settings.syncIntervals.5m")}</SelectItem>
+                <SelectItem value="15m">{t("settings.syncIntervals.15m")}</SelectItem>
+                <SelectItem value="30m">{t("settings.syncIntervals.30m")}</SelectItem>
+                <SelectItem value="1h">{t("settings.syncIntervals.1h")}</SelectItem>
+                <SelectItem value="2h">{t("settings.syncIntervals.2h")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

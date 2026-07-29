@@ -98,6 +98,7 @@ import { getMemoUpdateQueueId, isMemoUpdateAlreadyApplied, queueMemoUpdate, shou
 import { isLocalMemoId } from "@/lib/local-mirror";
 import type { EdgeEverRepository } from "@/lib/repository";
 import {
+  EDITOR_LOCAL_SAVE_DELAY_MS,
   getEditableMemoTitle,
   getNotebookMoveOptions,
 } from "@/lib/app-helpers";
@@ -108,6 +109,7 @@ import { fetchLatestRelease, isVersionOutdated } from "@/lib/version-check";
 import { RELEASE_STATUS_EVENT } from "@/lib/release-notice";
 import { downloadMarkdownFile } from "@/lib/note-markdown-export";
 import { openNotePrintPreview, serializeNoteDocumentForPrint } from "@/lib/note-print";
+import { isBrowserOffline } from "@/lib/network-status";
 
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const MOBILE_EDITOR_QUERY = "(max-width: 639px)";
@@ -125,7 +127,7 @@ const createLocalEditSession = (memo: MemoDetail): MemoEditSession => ({
 const requiresLocalEditSession = (memo: MemoDetail) =>
   isDesktopResourceRuntime() ||
   isLocalMemoId(memo.id) ||
-  (typeof navigator !== "undefined" && !navigator.onLine);
+  isBrowserOffline();
 
 const IconTooltip = ({ label, children }: { label: string; children: ReactNode }) => (
   <TooltipProvider delayDuration={0} skipDelayDuration={0}>
@@ -524,7 +526,6 @@ type EditorPaneProps = {
   isLoading: boolean;
   contentSearchQuery?: string;
   imageCompressionEnabled: boolean;
-  autoSaveIntervalMs: number | null;
   hasNextMemo: boolean;
   hasPreviousMemo: boolean;
   onBackToList: () => void;
@@ -551,7 +552,6 @@ const MobileNativeEditorPane = ({
   repository,
   notebooks,
   isTrashView,
-  autoSaveIntervalMs,
   onBackToList,
   onSaved,
   onMobileDefaultEditConsumed,
@@ -664,7 +664,6 @@ const MobileNativeEditorPane = ({
         setHasUnsavedChanges(false);
         await localDb.drafts.delete(localMemo.id);
         setSaveState("queued");
-        window.setTimeout(() => setSaveState("idle"), 1200);
       } else {
         persistDraft();
         hasUnsavedChangesRef.current = true;
@@ -727,15 +726,13 @@ const MobileNativeEditorPane = ({
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    if (autoSaveIntervalMs !== null) {
-      saveTimerRef.current = window.setTimeout(() => {
-        saveTimerRef.current = null;
-        if (hasUnsavedChangesRef.current) {
-          void saveCurrent();
-        }
-      }, autoSaveIntervalMs);
-    }
-  }, [autoSaveIntervalMs, persistDraft, saveCurrent]);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      if (hasUnsavedChangesRef.current) {
+        void saveCurrent();
+      }
+    }, EDITOR_LOCAL_SAVE_DELAY_MS);
+  }, [persistDraft, saveCurrent]);
 
   useEffect(() => {
     document.documentElement.classList.add("edgeever-mobile-native-editing");
@@ -926,7 +923,7 @@ const MobileNativeEditorPane = ({
     saveState === "error" || saveState === "conflict"
       ? "bg-rose-50 text-rose-700"
       : saveState === "queued"
-        ? "bg-amber-50 text-amber-700"
+        ? "bg-amber-50/60 text-amber-600/80"
         : saveState === "saving" || hasUnsavedChanges
           ? "bg-emerald-50 text-emerald-700"
           : "bg-slate-100 text-slate-500";
@@ -1144,7 +1141,6 @@ const RichEditorPane = ({
   isLoading,
   contentSearchQuery = "",
   imageCompressionEnabled,
-  autoSaveIntervalMs,
   hasNextMemo,
   hasPreviousMemo,
   onBackToList,
@@ -1170,6 +1166,7 @@ const RichEditorPane = ({
   const [tagsText, setTagsText] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued" | "error" | "conflict">("idle");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hydratedEditorMemoId, setHydratedEditorMemoId] = useState<string | null>(null);
   const [dirtyVersion, setDirtyVersion] = useState(0);
   const [, setEditorStateVersion] = useState(0);
   const [editorContentVersion, setEditorContentVersion] = useState(0);
@@ -1290,13 +1287,27 @@ const RichEditorPane = ({
           }
 
           const currentEditor = editorRef.current;
-          if (!isMobileViewport) {
-            if (isEditorReady(currentEditor) && hydratedMemoIdRef.current === memo.id) {
-              currentEditor.commands.focus("end");
-              onMobileDefaultEditConsumed();
-              return;
+            if (!isMobileViewport) {
+              if (isEditorReady(currentEditor) && hydratedMemoIdRef.current === memo.id) {
+                currentEditor.commands.focus("end");
+                // Consuming the create request updates the parent and can
+                // briefly blur the editor during that rerender. Mobile
+                // standalone editing consumes the request above; desktop
+                // keeps it alive until the list has observed the new memo so
+                // a background refresh cannot select the previous memo.
+                window.setTimeout(() => {
+                  if (cancelled || memoRef.current?.id !== memo.id) {
+                    return;
+                  }
+
+                  const activeEditor = editorRef.current;
+                  if (isEditorReady(activeEditor)) {
+                    activeEditor.commands.focus("end");
+                  }
+                }, 0);
+                return;
+              }
             }
-          }
 
           // The editor is mounted before its memo hydration/edit session
           // finishes. Keep retrying across that async boundary so a newly
@@ -1417,7 +1428,7 @@ const RichEditorPane = ({
     content: memo
       ? resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown)
       : { type: "doc", content: [{ type: "paragraph" }] },
-    editable: Boolean(memo && !effectiveReadOnly),
+    editable: Boolean(memo && !effectiveReadOnly && hydratedEditorMemoId === memo.id),
     editorProps: {
       attributes: {
         class: "prose prose-slate max-w-none focus:outline-none min-h-[300px] px-4 py-3 sm:px-7",
@@ -1891,6 +1902,7 @@ const RichEditorPane = ({
       memoRef.current = null;
       editSessionRef.current = null;
       hydratedMemoIdRef.current = null;
+      setHydratedEditorMemoId(null);
       editingMemoIdRef.current = null;
       hasUnsavedChangesRef.current = false;
       setHasUnsavedChanges(false);
@@ -1912,6 +1924,7 @@ const RichEditorPane = ({
 
     if (!sameMemo) {
       hydratedMemoIdRef.current = null;
+      setHydratedEditorMemoId(null);
     }
 
     if (sameMemo && hasUnsavedChangesRef.current && !memo.isDeleted) {
@@ -1973,6 +1986,7 @@ const RichEditorPane = ({
 
       hydratedMemoIdRef.current = memo.id;
       editSessionRef.current = editSessionResponse?.editSession ?? (requiresLocalEditSession(memo) ? createLocalEditSession(memo) : null);
+      setHydratedEditorMemoId(memo.id);
 
       window.setTimeout(() => {
         hydratingRef.current = false;
@@ -2005,9 +2019,9 @@ const RichEditorPane = ({
 
   useEffect(() => {
     if (isEditorReady(editor)) {
-      editor.setEditable(Boolean(memo && !effectiveReadOnly));
+      editor.setEditable(Boolean(memo && !effectiveReadOnly && hydratedEditorMemoId === memo.id));
     }
-  }, [editor, effectiveReadOnly, memo]);
+  }, [editor, effectiveReadOnly, hydratedEditorMemoId, memo]);
 
   useEffect(() => {
     if (!isEditorReady(editor) || !memo) {
@@ -2027,6 +2041,20 @@ const RichEditorPane = ({
       editor.off("update", persistDraft);
     };
   }, [editor, markDirty, memo, persistCurrentDraft]);
+
+  useEffect(() => {
+    const handleSyncCompleted = (event: Event) => {
+      const result = (event as CustomEvent<{ failed?: number; conflicted?: number }>).detail;
+      if ((result?.failed ?? 0) > 0 || (result?.conflicted ?? 0) > 0 || hasUnsavedChangesRef.current) {
+        return;
+      }
+
+      setSaveState((current) => current === "queued" ? "saved" : current);
+    };
+
+    window.addEventListener("edgeever:sync-completed", handleSyncCompleted);
+    return () => window.removeEventListener("edgeever:sync-completed", handleSyncCompleted);
+  }, []);
 
   const handleMarkdownModeChange = useCallback(() => {
     if (effectiveReadOnly || !isEditorReady(editor)) {
@@ -2234,7 +2262,9 @@ const RichEditorPane = ({
         setHasUnsavedChanges(false);
         await localDb.drafts.delete(savedMemo.id);
         setSaveState(queued ? "queued" : "saved");
-        window.setTimeout(() => setSaveState("idle"), 1400);
+        if (!queued) {
+          window.setTimeout(() => setSaveState("idle"), 1400);
+        }
         return;
       }
 
@@ -2312,23 +2342,21 @@ const RichEditorPane = ({
     if (mobileSaveTimerRef.current !== null) {
       window.clearTimeout(mobileSaveTimerRef.current);
     }
-    if (autoSaveIntervalMs !== null) {
-      mobileSaveTimerRef.current = window.setTimeout(() => {
-        mobileSaveTimerRef.current = null;
-        if (
-          !memoRef.current ||
-          memoRef.current.isDeleted ||
-          !hasUnsavedChangesRef.current ||
-          saveMutation.isPending ||
-          saveState === "conflict"
-        ) {
-          return;
-        }
+    mobileSaveTimerRef.current = window.setTimeout(() => {
+      mobileSaveTimerRef.current = null;
+      if (
+        !memoRef.current ||
+        memoRef.current.isDeleted ||
+        !hasUnsavedChangesRef.current ||
+        saveMutation.isPending ||
+        saveState === "conflict"
+      ) {
+        return;
+      }
 
-        saveMutation.mutate();
-      }, autoSaveIntervalMs);
-    }
-  }, [autoSaveIntervalMs, getMobilePlainTextValue, persistCurrentDraft, saveMutation, saveState, tagsText, title]);
+      saveMutation.mutate();
+    }, EDITOR_LOCAL_SAVE_DELAY_MS);
+  }, [getMobilePlainTextValue, persistCurrentDraft, saveMutation, saveState, tagsText, title]);
 
   useEffect(() => {
     markMobilePlainTextDirtyRef.current = markMobilePlainTextDirty;
@@ -2395,16 +2423,12 @@ const RichEditorPane = ({
       return;
     }
 
-    if (autoSaveIntervalMs === null) {
-      return;
-    }
-
     const timer = window.setTimeout(() => {
       saveMutation.mutate();
-    }, autoSaveIntervalMs);
+    }, EDITOR_LOCAL_SAVE_DELAY_MS);
 
     return () => window.clearTimeout(timer);
-  }, [autoSaveIntervalMs, dirtyVersion, editor, hasUnsavedChanges, memo, saveMutation, saveState, useMobilePlainTextEditor]);
+  }, [dirtyVersion, editor, hasUnsavedChanges, memo, saveMutation, saveState, useMobilePlainTextEditor]);
 
   if (isSelectionMode) {
     return (
@@ -2414,7 +2438,7 @@ const RichEditorPane = ({
     );
   }
 
-  if (isLoading) {
+  if (isLoading && !memo) {
     return (
       <div className="flex h-full min-w-0 flex-col bg-white">
         {selectionActionBar}
@@ -2456,7 +2480,7 @@ const RichEditorPane = ({
     saveState === "error" || saveState === "conflict"
       ? "bg-rose-50 text-rose-700"
       : saveState === "queued"
-        ? "bg-amber-50 text-amber-700"
+        ? "bg-amber-50/60 text-amber-600/80"
         : saveState === "saving" || hasUnsavedChanges
           ? "bg-emerald-50 text-emerald-700"
           : "bg-slate-100 text-slate-500";

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   buildIssueBody,
   buildReleaseNotes,
-  nextPatchVersion,
+  buildReleaseTitle,
+  nextVersion,
   parseReleaseArgs,
   reusedAssetMatches,
   selectPublishedDmg,
@@ -14,6 +15,8 @@ describe("release automation", () => {
       parseReleaseArgs([
         "--issue-title",
         "Improve release flow",
+        "--bump",
+        "minor",
         "--label",
         "enhancement",
         "--change-en",
@@ -23,6 +26,7 @@ describe("release automation", () => {
       ]),
     ).toMatchObject({
       issueTitle: "Improve release flow",
+      bump: "minor",
       labels: ["enhancement"],
       changesEn: ["Run checks in parallel."],
       changesZh: ["并行运行检查。"],
@@ -34,6 +38,8 @@ describe("release automation", () => {
       parseReleaseArgs([
         "--issue-title",
         "Broken input",
+        "--bump",
+        "patch",
         "--label",
         "bug",
         "--change-en",
@@ -42,9 +48,32 @@ describe("release automation", () => {
     ).toThrow("--change-en and --change-zh");
   });
 
-  test("increments stable patch versions", () => {
-    expect(nextPatchVersion("1.6.50")).toBe("1.6.51");
-    expect(() => nextPatchVersion("1.6")).toThrow("stable X.Y.Z");
+  test("increments stable semantic versions", () => {
+    expect(nextVersion("1.6.50", "patch")).toBe("1.6.51");
+    expect(nextVersion("1.6.50", "minor")).toBe("1.7.0");
+    expect(nextVersion("1.6.50", "major")).toBe("2.0.0");
+    expect(() => nextVersion("1.6", "patch")).toThrow("stable X.Y.Z");
+    expect(() => nextVersion("1.6.50", "automatic")).toThrow("patch, minor, or major");
+  });
+
+  test("uses the stable tag as the GitHub Release title", () => {
+    expect(buildReleaseTitle("v1.6.55")).toBe("v1.6.55");
+    expect(() => buildReleaseTitle("1.6.55")).toThrow("stable vX.Y.Z tag");
+  });
+
+  test("requires an explicit version bump", () => {
+    expect(() =>
+      parseReleaseArgs([
+        "--issue-title",
+        "Missing bump",
+        "--label",
+        "bug",
+        "--change-en",
+        "Fix a bug.",
+        "--change-zh",
+        "修复问题。",
+      ])
+    ).toThrow("--bump must be patch, minor, or major");
   });
 
   test("builds required bilingual release note structure with real newlines", () => {
@@ -55,11 +84,14 @@ describe("release automation", () => {
       desktopRebuild: false,
       mobileRebuild: false,
       previousTag: "v1.6.50",
+      bump: "patch",
     });
     expect(notes).toContain("## Key Changes");
     expect(notes).toContain("Related Issue: #126");
     expect(notes).toContain("## 🇨🇳 中文说明 / Chinese Changelog");
     expect(notes).toContain("关联 Issue：#126");
+    expect(notes).toContain("Version bump: `patch`.");
+    expect(notes).toContain("版本递增级别：`patch`。");
     expect(notes).not.toContain("\\n");
   });
 
@@ -82,22 +114,27 @@ describe("release automation", () => {
     ).toBe(false);
   });
 
-  test("selects a reused DMG and derives its native version", () => {
+  test("selects the DMG matching the current Mac architecture", () => {
+    const assets = [
+      {
+        name: "EdgeEver-1.6.51-mac-arm64.dmg",
+        size: 10,
+        digest: "sha256:abc",
+      },
+      {
+        name: "EdgeEver-1.6.51-mac-x64.dmg",
+        size: 11,
+        digest: "sha256:def",
+      },
+    ];
     expect(
-      selectPublishedDmg([
-        {
-          name: "EdgeEver-1.6.51-mac-arm64.dmg",
-          size: 10,
-          digest: "sha256:abc",
-        },
-        {
-          name: "edgeever-android-v1.6.51-arm64-v8a.apk",
-          size: 10,
-          digest: "sha256:def",
-        },
-      ]),
+      selectPublishedDmg(assets, "arm64"),
     ).toMatchObject({
       asset: { name: "EdgeEver-1.6.51-mac-arm64.dmg" },
+      version: "1.6.51",
+    });
+    expect(selectPublishedDmg(assets, "x64")).toMatchObject({
+      asset: { name: "EdgeEver-1.6.51-mac-x64.dmg" },
       version: "1.6.51",
     });
   });

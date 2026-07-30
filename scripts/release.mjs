@@ -18,6 +18,7 @@ import { nativeReleaseAssetsReady } from "./check-native-release-assets.mjs";
 import { planNativeRelease } from "./plan-native-release.mjs";
 
 const DEFAULT_REPOSITORY = "tianma-if/edgeever";
+const VERSION_BUMPS = new Set(["patch", "minor", "major"]);
 const POLL_INTERVAL_MS = 10_000;
 const RUN_DISCOVERY_TIMEOUT_MS = 60_000;
 const RELEASE_WORKFLOWS = {
@@ -39,12 +40,15 @@ export const RELEASE_VALIDATIONS = [
       "scripts/release.test.mjs",
       "scripts/validate-store-delivery.test.mjs",
       "scripts/store-delivery.test.mjs",
+      "apps/web/src/lib/version-check.test.mjs",
+      "apps/mobile/src/lib/mobile-release.test.ts",
     ],
   },
 ];
 
 const usage = `Usage:
   bun run release -- \\
+    --bump minor \\
     --issue-title "Release issue title" \\
     --label bug \\
     --change-en "English user-facing change" \\
@@ -53,6 +57,7 @@ const usage = `Usage:
 Repeat --change-en and --change-zh for multiple paired release bullets.
 
 Options:
+  --bump <level>            Required version bump: patch, minor, or major
   --repository <owner/name>  GitHub repository (default: ${DEFAULT_REPOSITORY})
   --issue-title <title>      Required umbrella Issue title
   --label <label>            Required Issue label; may be repeated
@@ -66,6 +71,7 @@ Options:
 export const parseReleaseArgs = (argv) => {
   const options = {
     repository: DEFAULT_REPOSITORY,
+    bump: "",
     issueTitle: "",
     labels: [],
     changesEn: [],
@@ -77,6 +83,7 @@ export const parseReleaseArgs = (argv) => {
 
   const valueOptions = new Map([
     ["--repository", "repository"],
+    ["--bump", "bump"],
     ["--issue-title", "issueTitle"],
     ["--label", "labels"],
     ["--change-en", "changesEn"],
@@ -120,6 +127,9 @@ export const parseReleaseArgs = (argv) => {
   if (!/^[^/\s]+\/[^/\s]+$/.test(options.repository)) {
     throw new Error("--repository must use owner/name format.");
   }
+  if (!VERSION_BUMPS.has(options.bump)) {
+    throw new Error("--bump must be patch, minor, or major.");
+  }
   if (!options.issueTitle) {
     throw new Error("--issue-title is required.");
   }
@@ -135,12 +145,27 @@ export const parseReleaseArgs = (argv) => {
   return options;
 };
 
-export const nextPatchVersion = (version) => {
+export const nextVersion = (version, bump) => {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
   if (!match) {
     throw new Error(`Expected a stable X.Y.Z version, received: ${version}`);
   }
-  return `${match[1]}.${match[2]}.${Number(match[3]) + 1}`;
+  if (!VERSION_BUMPS.has(bump)) {
+    throw new Error(`Expected patch, minor, or major bump, received: ${bump}`);
+  }
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  if (bump === "major") return `${major + 1}.0.0`;
+  if (bump === "minor") return `${major}.${minor + 1}.0`;
+  return `${major}.${minor}.${patch + 1}`;
+};
+
+export const buildReleaseTitle = (tag) => {
+  if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+    throw new Error(`Expected a stable vX.Y.Z tag, received: ${tag}`);
+  }
+  return tag;
 };
 
 export const buildIssueBody = ({ changesEn, changesZh }) => [
@@ -155,7 +180,7 @@ export const buildIssueBody = ({ changesEn, changesZh }) => [
   "## Acceptance criteria",
   "",
   "- Required type checks, Web build, and native release planning tests pass.",
-  "- The Draft Release contains an audited macOS arm64 DMG and Android arm64 APK.",
+  "- The Draft Release contains audited macOS arm64 and x64 DMGs and an Android arm64 APK.",
   "- Post-publication native asset audits pass.",
 ].join("\n");
 
@@ -166,6 +191,7 @@ export const buildReleaseNotes = ({
   desktopRebuild,
   mobileRebuild,
   previousTag,
+  bump,
 }) => [
   "## Key Changes",
   "",
@@ -179,8 +205,9 @@ export const buildReleaseNotes = ({
   "- `bun run typecheck:mobile`",
   "- `bun run build:web`",
   "- Native release planning and asset audit tests.",
+  `- Version bump: \`${bump}\`.`,
   desktopRebuild
-    ? "- Desktop release plan: rebuild, sign, notarize, and verify a new macOS arm64 DMG."
+    ? "- Desktop release plan: rebuild, sign, notarize, and verify new macOS arm64 and x64 DMGs."
     : `- Desktop release plan: reuse the verified assets from ${previousTag} with their original filenames and checksums.`,
   mobileRebuild
     ? "- Android release plan: rebuild and verify a signed arm64 APK."
@@ -200,8 +227,9 @@ export const buildReleaseNotes = ({
   "- `bun run typecheck:mobile`",
   "- `bun run build:web`",
   "- 原生 Release 规划与资产审计测试。",
+  `- 版本递增级别：\`${bump}\`。`,
   desktopRebuild
-    ? "- 桌面端 Release 计划：重新构建、签名、公证并验证新的 macOS arm64 DMG。"
+    ? "- 桌面端 Release 计划：重新构建、签名、公证并验证新的 macOS arm64 与 x64 DMG。"
     : `- 桌面端 Release 计划：复用 ${previousTag} 已验证资产，并保留原始文件名与校验和。`,
   mobileRebuild
     ? "- Android Release 计划：重新构建并验证签名 arm64 APK。"
@@ -221,14 +249,17 @@ export const reusedAssetMatches = (previousAssets, currentAssets, name) => {
   );
 };
 
-export const selectPublishedDmg = (assets) => {
+export const selectPublishedDmg = (assets, arch = process.arch) => {
+  if (!["arm64", "x64"].includes(arch)) {
+    throw new Error(`Unsupported macOS architecture for installation: ${arch}.`);
+  }
   const matches = assets.filter((asset) =>
-    /^EdgeEver-(.+)-mac-arm64\.dmg$/.test(asset.name)
+    new RegExp(`^EdgeEver-(.+)-mac-${arch}\\.dmg$`).test(asset.name)
   );
   if (matches.length !== 1) {
-    throw new Error(`Expected exactly one macOS arm64 DMG, found ${matches.length}.`);
+    throw new Error(`Expected exactly one macOS ${arch} DMG, found ${matches.length}.`);
   }
-  const version = /^EdgeEver-(.+)-mac-arm64\.dmg$/.exec(matches[0].name)?.[1];
+  const version = new RegExp(`^EdgeEver-(.+)-mac-${arch}\\.dmg$`).exec(matches[0].name)?.[1];
   if (!version || !matches[0].digest?.startsWith("sha256:")) {
     throw new Error("Published DMG is missing its version or SHA-256 digest.");
   }
@@ -496,11 +527,11 @@ const assertDraftAssets = ({
     const previousDesktopNames = previousAssets
       .map((asset) => asset.name)
       .filter((name) =>
-        /^EdgeEver-.*-mac-arm64\.dmg(?:\.blockmap)?$/.test(name) ||
+        /^EdgeEver-.*-mac-(?:arm64|x64)\.(?:dmg|zip)(?:\.blockmap)?$/.test(name) ||
         name === "latest-mac.yml"
       );
     if (
-      previousDesktopNames.length !== 3 ||
+      previousDesktopNames.length !== 9 ||
       !previousDesktopNames.every((name) =>
         reusedAssetMatches(previousAssets, assets, name)
       )
@@ -640,7 +671,7 @@ const releaseMain = async (options) => {
 
   const rootPackage = readJson("package.json");
   const previousVersion = previousTag.replace(/^v/, "");
-  const expectedNextVersion = nextPatchVersion(previousVersion);
+  const expectedNextVersion = nextVersion(previousVersion, options.bump);
   const headShaBeforeRelease = run("git", ["rev-parse", "HEAD"], { capture: true });
   let resumedDraft = null;
   if (rootPackage.version === expectedNextVersion) {
@@ -668,8 +699,8 @@ const releaseMain = async (options) => {
       `package.json version ${rootPackage.version} must match ${previousVersion}, or ${expectedNextVersion} with a resumable Draft.`,
     );
   }
-  const nextVersion = resumedDraft ? rootPackage.version : expectedNextVersion;
-  const tag = `v${nextVersion}`;
+  const releaseVersion = resumedDraft ? rootPackage.version : expectedNextVersion;
+  const tag = `v${releaseVersion}`;
   const changedFiles = changedFilesBetween(previousTag, headShaBeforeRelease);
   if (changedFiles.length === 0) {
     throw new Error(`There are no committed changes after ${previousTag}.`);
@@ -689,6 +720,7 @@ const releaseMain = async (options) => {
       desktopRebuild: desktopPlan.rebuild,
       mobileRebuild: mobilePlan.rebuild,
       previousTag,
+      bump: options.bump,
     }));
     return;
   }
@@ -725,7 +757,7 @@ const releaseMain = async (options) => {
     console.log(`[release] created Issue #${issueNumber}: ${issueUrl}`);
 
     const versionPaths = updateReleaseVersions({
-      nextVersion,
+      nextVersion: releaseVersion,
       desktopRebuild: desktopPlan.rebuild,
       mobileRebuild: mobilePlan.rebuild,
     });
@@ -742,6 +774,7 @@ const releaseMain = async (options) => {
       desktopRebuild: desktopPlan.rebuild,
       mobileRebuild: mobilePlan.rebuild,
       previousTag,
+      bump: options.bump,
     });
     const draftUrl = run("gh", [
       "release",
@@ -752,7 +785,7 @@ const releaseMain = async (options) => {
       "--target",
       releaseSha,
       "--title",
-      tag,
+      buildReleaseTitle(tag),
       "--draft",
       "--notes",
       notes,
@@ -806,7 +839,7 @@ const releaseMain = async (options) => {
     assets: draft.assets,
     previousAssets: latestRelease.assets,
     tag,
-    version: nextVersion,
+    version: releaseVersion,
     desktopRebuild: desktopPlan.rebuild,
     mobileRebuild: mobilePlan.rebuild,
   });

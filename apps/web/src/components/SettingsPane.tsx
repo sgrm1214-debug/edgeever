@@ -26,11 +26,8 @@ import { PreferenceCard } from "./settings/PreferenceCard";
 import { PasswordCard } from "./settings/PasswordCard";
 import { SessionCard } from "./settings/SessionCard";
 import { UserManagementCard } from "./settings/UserManagementCard";
-import { WebDavBackupCard } from "./settings/WebDavBackupCard";
-import { DesktopLocalBackupCard } from "./settings/DesktopLocalBackupCard";
 import { ThemeToggle } from "./ThemeToggle";
 import type { AuthUser } from "@edgeever/shared";
-import { isNativeDesktopRuntime } from "@/lib/runtime";
 
 interface SettingsPaneProps {
   onClose: () => void;
@@ -199,7 +196,6 @@ export const SettingsPane = ({
         return (
           <SettingsGroup>
             <DataExportCard />
-            {isNativeDesktopRuntime() ? <><DesktopLocalBackupCard /><WebDavBackupCard /></> : null}
             <EvernoteImportGuideCard />
           </SettingsGroup>
         );

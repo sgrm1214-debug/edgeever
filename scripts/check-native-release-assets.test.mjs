@@ -46,6 +46,12 @@ describe("native release asset readiness", () => {
         assetNames: [
           "EdgeEver-1.6.33-mac-arm64.dmg",
           "EdgeEver-1.6.33-mac-arm64.dmg.blockmap",
+          "EdgeEver-1.6.33-mac-arm64.zip",
+          "EdgeEver-1.6.33-mac-arm64.zip.blockmap",
+          "EdgeEver-1.6.33-mac-x64.dmg",
+          "EdgeEver-1.6.33-mac-x64.dmg.blockmap",
+          "EdgeEver-1.6.33-mac-x64.zip",
+          "EdgeEver-1.6.33-mac-x64.zip.blockmap",
           "latest-mac.yml",
         ],
       }),
@@ -56,6 +62,12 @@ describe("native release asset readiness", () => {
     const current = [
       "EdgeEver-1.6.35-mac-arm64.dmg",
       "EdgeEver-1.6.35-mac-arm64.dmg.blockmap",
+      "EdgeEver-1.6.35-mac-arm64.zip",
+      "EdgeEver-1.6.35-mac-arm64.zip.blockmap",
+      "EdgeEver-1.6.35-mac-x64.dmg",
+      "EdgeEver-1.6.35-mac-x64.dmg.blockmap",
+      "EdgeEver-1.6.35-mac-x64.zip",
+      "EdgeEver-1.6.35-mac-x64.zip.blockmap",
       "latest-mac.yml",
     ];
     expect(
@@ -73,7 +85,25 @@ describe("native release asset readiness", () => {
         rebuild: true,
         currentTag: "v1.6.35",
         desktopVersion: "1.6.35",
-        assetNames: current.slice(0, 2),
+        assetNames: current.slice(0, 8),
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects a desktop set with one architecture missing", () => {
+    expect(
+      nativeReleaseAssetsReady({
+        platform: "desktop",
+        rebuild: false,
+        currentTag: "v1.6.35",
+        desktopVersion: "1.6.35",
+        assetNames: [
+          "EdgeEver-1.6.33-mac-arm64.dmg",
+          "EdgeEver-1.6.33-mac-arm64.dmg.blockmap",
+          "EdgeEver-1.6.33-mac-arm64.zip",
+          "EdgeEver-1.6.33-mac-arm64.zip.blockmap",
+          "latest-mac.yml",
+        ],
       }),
     ).toBe(false);
   });

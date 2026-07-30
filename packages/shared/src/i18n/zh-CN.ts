@@ -244,6 +244,13 @@ export const zhCN = {
     version: "版本号",
     releaseTime: "发版时间",
     build: "构建",
+    client: "客户端",
+    clients: {
+      desktopApp: "桌面应用",
+      mobileApp: "移动应用",
+      pwa: "PWA",
+      web: "网页",
+    },
     deployment: "自动部署方式",
     deploymentTriggers: {
       github_release: "正式 Release 触发",

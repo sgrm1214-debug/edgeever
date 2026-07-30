@@ -38,6 +38,18 @@ describe("native release planning", () => {
     });
   });
 
+  test("rebuilds desktop when its architecture packaging pipeline changes", () => {
+    const changedFiles = [
+      ".github/workflows/desktop-build.yml",
+      "scripts/create-mac-update-metadata.mjs",
+      "scripts/run-desktop-builder.mjs",
+    ];
+    expect(planNativeRelease("desktop", changedFiles)).toEqual({
+      rebuild: true,
+      relevantChanges: changedFiles,
+    });
+  });
+
   test("does not rebuild desktop for release notes or a root version bump alone", () => {
     expect(
       planNativeRelease("desktop", ["package.json", "AGENTS.md"]),

@@ -48,7 +48,7 @@ The public demo resets every Monday at 1:00 AM (China Standard Time) and restore
 - **Batch Operations & Flexible Sorting**: Easily merge or relocate multiple notes, with drag-and-drop notebook reordering.
 - **Offline Drafts & Queueing**: Draft and edit uninterrupted while offline; changes automatically sync once reconnected.
 - **Multi-Tenant Account Isolation**: Host multiple user accounts on a single instance with strictly partitioned spaces and clean admin account management.
-- **Everywhere You Need It**: Chrome/Edge Web Clipper published on Chrome Web Store; installable as a PWA; native Android app available on [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile), with APKs also downloadable from GitHub Releases; iOS app currently under App Store review; native desktop builds use Electron and a Rust sidecar.
+- **Everywhere You Need It**: Chrome/Edge Web Clipper published on Chrome Web Store; installable as a PWA; native Android app available on [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile), with APKs also downloadable from GitHub Releases; iOS app currently under App Store review; native desktop apps available for Apple Silicon and Intel Macs.
 
 ## Deployment
 
@@ -82,6 +82,10 @@ Complete setup in 4 simple web steps:
 
 > 📖 For full step-by-step instructions and configuration details, see the [Online Deployment Guide](docs/deploy-cloudflare-button.md).
 
+---
+
+> 💡 **Deployment Tip (Cloudflare R2 Billing)**: Although Cloudflare R2 offers a free tier, it requires binding a payment method (such as a dual-currency credit card) to activate. Based on personal experience, for users in mainland China, VISA cards from China Merchants Bank (CMB) or Shanghai Pudong Development Bank (SPDB) are typically the fastest to get verified (and most of these cards have no annual fees or easily waivable ones, so there are no extra holding costs).
+
 ## Multi-Account Login
 
 Once deployed, a single instance supports multi-account login.
@@ -105,7 +109,7 @@ The Chrome/Edge web clipper is officially published. You can install it directly
 
 The Android app is now available on [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile), with signed APKs also available from [GitHub Releases](https://github.com/tianma-if/edgeever/releases). The iOS app has been submitted and is currently under App Store review.
 
-The native desktop app is built with Electron and a Rust sidecar. Development and unsigned installer instructions are available in [`apps/desktop/README.md`](apps/desktop/README.md); signed release artifacts are produced by the desktop CI workflow.
+The macOS app is available from [GitHub Releases](https://github.com/tianma-if/edgeever/releases) for both Apple Silicon and Intel Macs. The Windows version will be released once the code-signing certificate issue is resolved.
 
 ## Tech Stack
 
@@ -222,7 +226,6 @@ If you want to migrate notes from other platforms to EdgeEver, please refer to t
 
 ## Acknowledgements
 
-- The visual design of the editor themes is inspired by [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill).
 - The "Minimal Emerald" theme typography layout is inspired by [obsidian-minimal](https://github.com/kepano/obsidian-minimal).
 - The "Outline Emerald" theme typography layout is inspired by [Outline](https://github.com/outline/outline).
 

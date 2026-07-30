@@ -29,6 +29,11 @@ extraResources:
     to: web
     filter:
       - "**/*"
+  - from: assets
+    to: tray
+    filter:
+      - "trayTemplate.png"
+      - "trayTemplate@2x.png"
   - from: ../../migrations
     to: migrations
     filter:
@@ -42,8 +47,7 @@ mac:
   category: public.app-category.productivity
   target:
     - target: dmg
-      arch:
-        - arm64
+    - target: zip
   artifactName: EdgeEver-${version}-mac-${arch}.${ext}
 dmg:
   title: "EdgeEver: double-click to install"

@@ -17,7 +17,7 @@ export const ReleaseUpdateNotice = () => {
     const controller = new AbortController();
     void fetchLatestRelease(controller.signal)
       .then((latest) => {
-        if (isVersionOutdated(__EDGEEVER_APP_VERSION__, latest.tagName)) setRelease(latest);
+        if (isVersionOutdated(__EDGEEVER_APP_VERSION__, latest.version)) setRelease(latest);
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -86,7 +86,7 @@ export const ReleaseUpdateNotice = () => {
                 ? t("systemInfo.desktopUpdateReady")
                 : nativeUpdateState === "error"
                   ? t("systemInfo.desktopUpdateFailed")
-                  : t("systemInfo.updateAvailableDescription", { version: release?.tagName ?? "" })}
+                  : t("systemInfo.updateAvailableDescription", { version: release?.version ?? "" })}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             {isNativeUpdate && nativeUpdateState !== "downloading" && nativeUpdateState !== "error" && (

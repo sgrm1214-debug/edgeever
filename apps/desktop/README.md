@@ -28,8 +28,10 @@ bun run build:desktop:sidecar
 CSC_IDENTITY_AUTO_DISCOVERY=false bun run --cwd apps/desktop dist -- --publish never
 ```
 
-The resulting DMG, NSIS installer, or AppImage is written under
-`release/desktop`. The CI workflow accepts optional signing secrets:
+The resulting DMG, ZIP updater package, NSIS installer, or AppImage is written
+under `release/desktop`. Formal macOS Releases contain separate `arm64` and
+`x64` DMGs; each package includes a Rust sidecar compiled for the same
+architecture. The CI workflow accepts optional signing secrets:
 
 On macOS, users can double-click EdgeEver in the mounted DMG and choose
 **Install and Launch**. The app moves itself to `Applications`, relaunches the
@@ -50,8 +52,9 @@ runs. When a GitHub Release is published, the workflow first compares it with
 the previous formal Release. It rebuilds and publishes the installer through
 electron-builder only when Electron, the Rust sidecar, native dependencies,
 packaging configuration, or desktop build tooling changed. Web-only Releases
-reuse the previous verified DMG, blockmap, and update metadata without renaming
-them, so the macOS runner and signing pipeline are not scheduled unnecessarily.
+reuse the previous verified arm64/x64 DMGs, updater ZIPs, blockmaps, and
+combined update metadata without renaming them, so the macOS runners and
+signing pipeline are not scheduled unnecessarily.
 
 The desktop Settings page exposes the sidecar's local backup list. Restoring a
 backup creates an additional protective backup first, restores the SQLite

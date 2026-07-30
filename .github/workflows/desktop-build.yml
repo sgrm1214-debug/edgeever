@@ -116,9 +116,15 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'EdgeEver-*-mac-arm64.dmg' \
             --pattern 'EdgeEver-*-mac-arm64.dmg.blockmap' \
+            --pattern 'EdgeEver-*-mac-arm64.zip' \
+            --pattern 'EdgeEver-*-mac-arm64.zip.blockmap' \
+            --pattern 'EdgeEver-*-mac-x64.dmg' \
+            --pattern 'EdgeEver-*-mac-x64.dmg.blockmap' \
+            --pattern 'EdgeEver-*-mac-x64.zip' \
+            --pattern 'EdgeEver-*-mac-x64.zip.blockmap' \
             --pattern 'latest-mac.yml' \
             --dir "$RUNNER_TEMP/native-assets"
-          test "$(find "$RUNNER_TEMP/native-assets" -type f | wc -l | tr -d ' ')" = "3"
+          test "$(find "$RUNNER_TEMP/native-assets" -type f | wc -l | tr -d ' ')" = "9"
           gh release upload "$CURRENT_TAG" "$RUNNER_TEMP/native-assets/"* \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
@@ -140,8 +146,16 @@ jobs:
           )
         )
       }}
-    name: macOS arm64
-    runs-on: macos-14
+    name: macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
 
     steps:
       - name: Check out source
@@ -159,7 +173,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-bun-${{ hashFiles('bun.lock') }}
 
       - name: Cache Rust dependencies and sidecar builds
         uses: actions/cache@v5
@@ -168,9 +182,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/desktop-sidecar/target
-          key: ${{ runner.os }}-rust-${{ hashFiles('crates/desktop-sidecar/Cargo.lock', 'crates/desktop-sidecar/**/*.rs') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-rust-${{ hashFiles('crates/desktop-sidecar/Cargo.lock', 'crates/desktop-sidecar/**/*.rs') }}
           restore-keys: |
-            ${{ runner.os }}-rust-
+            ${{ runner.os }}-${{ matrix.arch }}-rust-
 
       - name: Cache Electron downloads
         uses: actions/cache@v5
@@ -178,7 +192,7 @@ jobs:
           path: |
             ~/Library/Caches/electron
             ~/Library/Caches/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('bun.lock', 'apps/desktop/package.json') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-electron-${{ hashFiles('bun.lock', 'apps/desktop/package.json') }}
 
       - name: Import macOS signing identity
         env:
@@ -273,12 +287,67 @@ jobs:
           echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
 
       - name: Package desktop installer
+        env:
+          EDGE_EVER_DESKTOP_ARCH: ${{ matrix.arch }}
         run: bun scripts/run-desktop-builder.mjs --publish never
 
       - name: Verify desktop installer
         env:
+          EDGE_EVER_DESKTOP_ARCH: ${{ matrix.arch }}
           EDGE_EVER_VERIFY_TARGET: darwin
         run: bun scripts/verify-desktop-package.mjs
+
+      - name: Stage architecture-specific desktop assets
+        uses: actions/upload-artifact@v6
+        with:
+          name: edgeever-desktop-macOS-${{ matrix.arch }}-staging
+          path: |
+            release/desktop/EdgeEver-*-mac-${{ matrix.arch }}.dmg
+            release/desktop/EdgeEver-*-mac-${{ matrix.arch }}.dmg.blockmap
+            release/desktop/EdgeEver-*-mac-${{ matrix.arch }}.zip
+            release/desktop/EdgeEver-*-mac-${{ matrix.arch }}.zip.blockmap
+          if-no-files-found: error
+          retention-days: 14
+
+  desktop-assets:
+    needs: [release-plan, desktop]
+    if: >-
+      ${{
+        always() &&
+        needs.desktop.result == 'success' &&
+        (
+          (github.event_name == 'workflow_dispatch' && inputs.release_tag == '') ||
+          (
+            github.event_name == 'workflow_dispatch' &&
+            inputs.release_tag != '' &&
+            needs.release-plan.result == 'success' &&
+            needs.release-plan.outputs.asset_ready == 'false' &&
+            needs.release-plan.outputs.rebuild == 'true'
+          )
+        )
+      }}
+    name: Finalize macOS release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Download architecture-specific assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: edgeever-desktop-macOS-*-staging
+          path: release/desktop
+          merge-multiple: true
+
+      - name: Create and audit combined update metadata
+        run: |
+          version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
+          node scripts/create-mac-update-metadata.mjs release/desktop "$version"
+          asset_ready="$(
+            find release/desktop -maxdepth 1 -type f -exec basename {} \; |
+              node scripts/check-native-release-assets.mjs desktop true "v${version}" "$version"
+          )"
+          test "$asset_ready" = "true"
 
       - name: Upload verified desktop assets to Release
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
@@ -286,22 +355,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
-          gh release upload "$RELEASE_TAG" \
-            "release/desktop/EdgeEver-${version}-mac-arm64.dmg" \
-            "release/desktop/EdgeEver-${version}-mac-arm64.dmg.blockmap" \
-            "release/desktop/latest-mac.yml" \
+          gh release upload "$RELEASE_TAG" release/desktop/* \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
 
-      - name: Upload desktop installer and metadata
+      - name: Upload combined desktop installers and metadata
         uses: actions/upload-artifact@v6
         with:
-          name: edgeever-desktop-macOS-arm64
-          path: |
-            release/desktop/**/*.dmg
-            release/desktop/**/*.zip
-            release/desktop/**/*.blockmap
-            release/desktop/**/*.yml
+          name: edgeever-desktop-macOS-arm64-x64
+          path: release/desktop/*
           if-no-files-found: error
           retention-days: 14

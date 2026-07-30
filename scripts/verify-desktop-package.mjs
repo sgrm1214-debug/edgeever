@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { listPackage } from "@electron/asar";
 
 const outputDirectory = join(process.cwd(), "release", "desktop");
-const version = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")).version;
+const version = JSON.parse(
+  readFileSync(join(process.cwd(), "apps", "desktop", "package.json"), "utf8"),
+).version;
 
 const walk = (directory) => {
   if (!existsSync(directory)) return [];
@@ -20,6 +23,14 @@ const walk = (directory) => {
 const files = walk(outputDirectory);
 const matchingPrefix = (prefix) => files.filter((path) => basename(path).startsWith(prefix));
 const requestedPlatform = process.env.EDGE_EVER_VERIFY_TARGET ?? process.platform;
+const requestedArch = process.env.EDGE_EVER_DESKTOP_ARCH ?? process.arch;
+
+const verifyMachOArch = (path, arch, label) => {
+  const result = spawnSync("lipo", ["-archs", path], { encoding: "utf8" });
+  const expectedArch = arch === "x64" ? "x86_64" : arch;
+  assert.equal(result.status, 0, `${label} architecture inspection failed: ${result.stderr || result.stdout}`);
+  assert.deepEqual(result.stdout.trim().split(/\s+/), [expectedArch], `${label} must contain only ${expectedArch}`);
+};
 
 for (const sidecarPath of files.filter((path) => /[\\/]resources[\\/]sidecar[\\/]edgeever-sidecar(?:\.exe)?$/i.test(path))) {
   const bundleRoot = sidecarPath.replace(/[\\/]resources[\\/]sidecar[\\/]edgeever-sidecar(?:\.exe)?$/i, "");
@@ -28,12 +39,20 @@ for (const sidecarPath of files.filter((path) => /[\\/]resources[\\/]sidecar[\\/
 }
 
 if (requestedPlatform === "darwin") {
-  assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-arm64.dmg`)), "macOS package must contain the current arm64 DMG");
-  const unpackedApp = join(outputDirectory, "mac-arm64", "EdgeEver.app");
+  assert.ok(["arm64", "x64"].includes(requestedArch), `Unsupported macOS architecture: ${requestedArch}`);
+  assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-${requestedArch}.dmg`)), `macOS package must contain the current ${requestedArch} DMG`);
+  assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-${requestedArch}.dmg.blockmap`)), `macOS package must contain the current ${requestedArch} DMG blockmap`);
+  assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-${requestedArch}.zip`)), `macOS package must contain the current ${requestedArch} update ZIP`);
+  assert.ok(existsSync(join(outputDirectory, `EdgeEver-${version}-mac-${requestedArch}.zip.blockmap`)), `macOS package must contain the current ${requestedArch} ZIP blockmap`);
+  const unpackedDirectory = requestedArch === "x64" ? "mac" : `mac-${requestedArch}`;
+  const unpackedApp = join(outputDirectory, unpackedDirectory, "EdgeEver.app");
   assert.ok(existsSync(unpackedApp), "macOS package must contain the unpacked app bundle");
+  const executable = join(unpackedApp, "Contents", "MacOS", "EdgeEver");
   const appResources = join(unpackedApp, "Contents", "Resources");
   const sidecar = join(appResources, "sidecar", "edgeever-sidecar");
   assert.ok(existsSync(sidecar), `macOS app bundle is missing the sidecar: ${sidecar}`);
+  verifyMachOArch(executable, requestedArch, "Electron executable");
+  verifyMachOArch(sidecar, requestedArch, "Rust sidecar");
   const asarPath = join(appResources, "app.asar");
   assert.ok(existsSync(asarPath), `macOS app bundle is missing app.asar: ${asarPath}`);
   const asarFiles = new Set(listPackage(asarPath));

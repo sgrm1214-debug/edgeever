@@ -12,6 +12,7 @@ import {
   normalizeD1MigrationSql,
   runWranglerSync,
 } from "./wrangler-runner.mjs";
+import { writeWranglerNotice } from "./wrangler-output.mjs";
 
 const PLACEHOLDER_D1_ID = "00000000-0000-0000-0000-000000000000";
 const UUID_PATTERN =
@@ -120,7 +121,7 @@ if (migrationCommand) {
     );
   }
   changed = true;
-  console.log(`[ok] local D1 migrations: ${migrationFiles.length} files`);
+  writeWranglerNotice("ok", `local D1 migrations: ${migrationFiles.length} files`);
 }
 
 const replaceTomlValue = (source, key, value) => {
@@ -185,7 +186,7 @@ config = replaceTomlValue(config, "database_name", envValue("D1_DATABASE_NAME"))
 if (isRemoteCommand && config.includes(`database_id = "${PLACEHOLDER_D1_ID}"`)) {
   const databaseName = config.match(/^database_name\s*=\s*"([^"]+)"/m)?.[1];
   if (databaseName) {
-    console.log(`[info] resolving Cloudflare D1 database id for ${databaseName}`);
+    writeWranglerNotice("info", `resolving Cloudflare D1 database id for ${databaseName}`);
     const listResult = runWranglerSync(
       ["--config", baseConfigPath, "d1", "list", "--json"],
       {
@@ -200,7 +201,7 @@ if (isRemoteCommand && config.includes(`database_id = "${PLACEHOLDER_D1_ID}"`)) 
         const discoveredId = findD1DatabaseIdByName(listResult.stdout, databaseName);
         if (discoveredId && UUID_PATTERN.test(discoveredId)) {
           config = replaceTomlValue(config, "database_id", discoveredId);
-          console.log(`[ok] resolved D1 database ${databaseName}`);
+          writeWranglerNotice("ok", `resolved D1 database ${databaseName}`);
         }
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
@@ -336,7 +337,7 @@ if (isDeployCommand && Object.keys(authSecrets).length === 0 && !useExistingAuth
 }
 
 if (isDeployCommand && Object.keys(authSecrets).length === 0 && useExistingAuthSecret) {
-  console.log("[info] using the authentication Secret provisioned by Cloudflare");
+  writeWranglerNotice("info", "using the authentication Secret provisioned by Cloudflare");
 }
 
 if (isLocalDevCommand && !hasEnvFileArg) {

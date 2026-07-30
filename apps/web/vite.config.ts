@@ -57,6 +57,8 @@ const buildId = process.env.WORKERS_CI_COMMIT_SHA?.slice(0, 12)
   ?? "local";
 const gitDescription = readGitDescription();
 const appVersion = resolveAppVersion(readPackageVersion(), gitDescription);
+const OPTIONAL_CHUNK_WARNING_LIMIT_KB = 1_700;
+const TARGET_VENDOR_CHUNK_BYTES = 450 * 1024;
 const releaseTimestamp = resolveReleaseTimestamp(process.env.EDGE_EVER_RELEASED_AT) || readLatestReleaseCommitTimestamp();
 const deploymentTrigger = resolveDeploymentTrigger(
   process.env.EDGE_EVER_DEPLOYMENT_TRIGGER
@@ -161,9 +163,9 @@ export default defineConfig({
         ],
         globIgnores: [
           "index.html",
-          "**/vendor-beautiful-mermaid-*.js",
+          "**/*beautiful-mermaid*.js",
+          "**/*mermaid.core-*.js",
           "**/vendor-mermaid-*.js",
-          "**/mermaid.core-*.js",
           "**/*Diagram-*.js",
         ],
         navigateFallback: null,
@@ -200,7 +202,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url }) => /\/assets\/(?:vendor-(?:beautiful-mermaid|mermaid)|mermaid\.core|.*Diagram-)/.test(url.pathname),
+            urlPattern: ({ url }) => /\/assets\/(?:.*beautiful-mermaid|vendor-mermaid|.*mermaid\.core|.*Diagram-)/.test(url.pathname),
             handler: "CacheFirst",
             options: {
               cacheName: "edgeever-optional-diagrams",
@@ -238,6 +240,11 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // ELK is distributed as one ~1.6 MiB module by beautiful-mermaid. It is
+    // loaded only when a diagram is rendered and is excluded from HTML
+    // modulepreload and PWA precache; verify-web-performance.mjs enforces
+    // those constraints for every chunk above Vite's default 500 KiB limit.
+    chunkSizeWarningLimit: OPTIONAL_CHUNK_WARNING_LIMIT_KB,
     modulePreload: isDesktopBuild
       ? false
       : {
@@ -259,6 +266,7 @@ export default defineConfig({
               name: "vendor-code-highlight",
               test: /node_modules[\\/](?:lowlight|highlight\.js|@tiptap[\\/]extension-code-block-lowlight)[\\/]/,
               priority: 50,
+              maxSize: TARGET_VENDOR_CHUNK_BYTES,
             },
             {
               name: "vendor-react",
@@ -339,16 +347,19 @@ export default defineConfig({
               name: "vendor-mermaid-layout",
               test: /[\\/](?:cytoscape(?:-[^\\/@]+)?|dagre-d3-es|graphlib|roughjs|khroma|@upsetjs[\\/]venn\.js)(?:@|[\\/])/,
               priority: 11,
+              maxSize: TARGET_VENDOR_CHUNK_BYTES,
             },
             {
               name: "vendor-mermaid-render",
               test: /[\\/](?:@mermaid-js[\\/](?:parser|tiny)|katex|dompurify|stylis|dayjs|@iconify[\\/]utils)(?:@|[\\/])/,
               priority: 11,
+              maxSize: TARGET_VENDOR_CHUNK_BYTES,
             },
             {
               name: "vendor-beautiful-mermaid",
               test: /[\\/](?:beautiful-mermaid|elkjs|entities)(?:@|[\\/])/,
               priority: 13,
+              maxSize: TARGET_VENDOR_CHUNK_BYTES,
             },
             {
               name: "ui-primitives",
@@ -358,9 +369,13 @@ export default defineConfig({
             {
               name: "vendor",
               // Keep Mermaid's internally lazy-loaded diagram modules out of the
-              // catch-all vendor chunk so they remain on-demand.
+              // catch-all vendor chunk so they remain on-demand. Entry-aware
+              // splitting also prevents dependencies used only by lazy settings,
+              // export, and template screens from leaking into the app entry.
               test: /^(?!.*(?:[\\/]mermaid@|node_modules[\\/]mermaid[\\/])).*node_modules[\\/]/,
               priority: 5,
+              entriesAware: true,
+              maxSize: TARGET_VENDOR_CHUNK_BYTES,
             },
           ],
         },

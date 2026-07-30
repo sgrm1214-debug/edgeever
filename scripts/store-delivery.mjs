@@ -12,8 +12,7 @@ const usage = `Usage:
 Options:
   --release <tag>             Required formal GitHub Release tag
   --platform <target>         android, ios, or both (default: both)
-  --android-track <track>     internal, alpha, beta, or production (default: internal)
-  --confirm-production <tag>  Required when the Android track is production
+  --android-track <track>     production, alpha, beta, or internal (default: production)
   --repository <owner/name>   GitHub repository (default: ${DEFAULT_REPOSITORY})
   --dry-run                   Print the workflow dispatch plan
   --help                      Show this help
@@ -23,8 +22,7 @@ export const parseStoreDeliveryArgs = (argv) => {
   const options = {
     releaseTag: "",
     platform: "both",
-    androidTrack: "internal",
-    productionConfirmation: "",
+    androidTrack: "production",
     repository: DEFAULT_REPOSITORY,
     dryRun: false,
     help: false,
@@ -33,7 +31,6 @@ export const parseStoreDeliveryArgs = (argv) => {
     ["--release", "releaseTag"],
     ["--platform", "platform"],
     ["--android-track", "androidTrack"],
-    ["--confirm-production", "productionConfirmation"],
     ["--repository", "repository"],
   ]);
 
@@ -73,15 +70,6 @@ export const parseStoreDeliveryArgs = (argv) => {
       "--android-track must be internal, alpha, beta, or production.",
     );
   }
-  if (
-    options.androidTrack === "production" &&
-    options.platform !== "ios" &&
-    options.productionConfirmation !== options.releaseTag
-  ) {
-    throw new Error(
-      `Production delivery requires --confirm-production ${options.releaseTag}.`,
-    );
-  }
   if (!/^[^/\s]+\/[^/\s]+$/.test(options.repository)) {
     throw new Error("--repository must use owner/name format.");
   }
@@ -103,8 +91,6 @@ const run = (options) => {
     `platform=${options.platform}`,
     "-f",
     `android_track=${options.androidTrack}`,
-    "-f",
-    `production_confirmation=${options.productionConfirmation}`,
   ];
   if (options.dryRun) {
     console.log(`gh ${args.join(" ")}`);

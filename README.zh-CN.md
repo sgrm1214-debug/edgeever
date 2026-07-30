@@ -48,7 +48,7 @@ EdgeEver 是一款现代化的开源笔记工作区。它为你找回经典印�
 - **高效多选与批量操作**：支持笔记批量合并、批量移动，以及笔记本拖拽排序与层级调整。
 - **离线草稿与同步队列**：网络不稳定时自动保存离线草稿，恢复连线后自动入队同步。
 - **多账号与个人空间隔离**：单实例支持创建多个独立账号，用户数据相互隔离，配备直观的管理员账号管理与安全加密机制。
-- **全平台多端覆盖**：已上架 Chrome/Edge 网页裁剪插件；支持安装为 PWA 应用；原生 Android App 已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 GitHub Releases 下载 APK；iOS App 当前仍在 App Store 审核中；原生桌面端计划基于 Electron + Rust Sidecar 构建。
+- **全平台多端覆盖**：已上架 Chrome/Edge 网页裁剪插件；支持安装为 PWA 应用；原生 Android App 已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 GitHub Releases 下载 APK；iOS App 当前仍在 App Store 审核中；原生桌面端支持 Apple Silicon 和 Intel Mac。
 
 ## 部署
 
@@ -82,6 +82,10 @@ EdgeEver 采用纯 Serverless 架构，完全运行在 Cloudflare 免费配额�
 
 > 📖 包含具体参数与构建命令的详细步骤，请查看 [在线部署完整文档](docs/deploy-cloudflare-button.zh-CN.md)。
 
+---
+
+> 💡 **部署提示（Cloudflare R2 绑定）**：虽然 R2 存储提供免费额度，但开通时仍需绑定支付方式（双币信用卡）。根据个人经验，在国内 VISA 信用卡中，招商和浦发的验证与开通最快捷，且这类卡片大多免年费（或极易通过刷卡免年费），无需担心持有成本。
+
 ## 多账号登录
 
 部署完成后，单个实例支持多账号登录。
@@ -107,7 +111,7 @@ Chrome/Edge 网页裁剪插件已正式上架，您可以通过以下链接直�
 
 Android App 现已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载签名 APK。iOS App 已提交，目前仍在 App Store 审核中。
 
-原生桌面端 App 计划基于 Electron + Rust Sidecar 构建。
+macOS App 可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载，同时支持 Apple Silicon 和 Intel Mac。Windows 版本正在处理代码签名证书问题，解决后即可发布。
 
 ## 技术栈
 
@@ -236,7 +240,6 @@ Cloudflare Worker 侧执行图片处理会消耗计算/图片处理额度，因�
 
 ## 致谢
 
-- 编辑器主题的视觉设计参考自 [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill)。
 - “minimal品牌绿”主题排版架构借鉴于 [obsidian-minimal](https://github.com/kepano/obsidian-minimal)。
 - “Outline 品牌绿”主题排版架构借鉴于 [Outline](https://github.com/outline/outline)。
 

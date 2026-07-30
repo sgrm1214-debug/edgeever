@@ -4143,6 +4143,7 @@ const getMobileSystemInfoText = (localePreference: MobileLocaleMode) =>
     ? {
         appIdentifier: "App identifier",
         build: "Build",
+        client: "Client",
         description: "View the current app version, build identifier, and runtime environment.",
         disconnected: "Disconnected",
         followSystem: "Follow system",
@@ -4152,8 +4153,9 @@ const getMobileSystemInfoText = (localePreference: MobileLocaleMode) =>
         memoCount: "Notes",
         notSet: "Not set",
         notebookCount: "Notebooks",
-        platform: "Platform",
-        platformVersion: "Platform version",
+        platform: "System",
+        mobileApp: "Mobile app",
+        platformVersion: "System version",
         timeZone: "Time zone",
         title: "System info",
         unknown: "Unknown",
@@ -4162,6 +4164,7 @@ const getMobileSystemInfoText = (localePreference: MobileLocaleMode) =>
     : {
         appIdentifier: "应用标识",
         build: "构建",
+        client: "客户端",
         description: "查看当前应用版本、构建标识和运行环境。",
         disconnected: "未连接",
         followSystem: "跟随系统",
@@ -4171,8 +4174,9 @@ const getMobileSystemInfoText = (localePreference: MobileLocaleMode) =>
         memoCount: "笔记总数",
         notSet: "未设置",
         notebookCount: "笔记本数量",
-        platform: "平台",
-        platformVersion: "平台版本",
+        platform: "系统",
+        mobileApp: "移动应用",
+        platformVersion: "系统版本",
         timeZone: "时区",
         title: "系统信息",
         unknown: "未知",
@@ -4182,11 +4186,22 @@ const getMobileSystemInfoText = (localePreference: MobileLocaleMode) =>
 const getMobileSystemInfoItems = (localePreference: MobileLocaleMode) => {
   const copy = getMobileSystemInfoText(localePreference);
   const resolvedLocale = getResolvedMobileLocale(localePreference);
+  const platformName =
+    Platform.OS === "android"
+      ? "Android"
+      : Platform.OS === "ios"
+        ? "iOS"
+        : Platform.OS === "macos"
+          ? "macOS"
+          : Platform.OS === "windows"
+            ? "Windows"
+            : Platform.OS;
 
   return [
     { label: copy.version, value: `v${MOBILE_APP_VERSION}` },
     { label: copy.build, value: __DEV__ ? "development" : "production" },
-    { label: copy.platform, value: Platform.OS },
+    { label: copy.client, value: copy.mobileApp },
+    { label: copy.platform, value: platformName },
     { label: copy.platformVersion, value: String(Platform.Version) },
     { label: copy.language, value: localePreference === "system" ? `${resolvedLocale} (${copy.followSystem})` : resolvedLocale },
     { label: copy.timeZone, value: Intl.DateTimeFormat().resolvedOptions().timeZone || copy.unknown },

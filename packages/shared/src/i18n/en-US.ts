@@ -244,6 +244,13 @@ export const enUS = {
     version: "Version",
     releaseTime: "Release time",
     build: "Build",
+    client: "Client",
+    clients: {
+      desktopApp: "Desktop app",
+      mobileApp: "Mobile app",
+      pwa: "PWA",
+      web: "Web",
+    },
     deployment: "Deployment",
     deploymentTriggers: {
       github_release: "GitHub Release trigger",

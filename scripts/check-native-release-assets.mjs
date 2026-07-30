@@ -21,23 +21,36 @@ export const nativeReleaseAssetsReady = ({
   }
 
   if (platform === "desktop") {
-    const dmgNames = assetNames.filter((name) =>
-      /^EdgeEver-.*-mac-arm64\.dmg$/.test(name),
-    );
-    const blockmapNames = assetNames.filter((name) =>
-      /^EdgeEver-.*-mac-arm64\.dmg\.blockmap$/.test(name),
-    );
-    if (
-      dmgNames.length !== 1 ||
-      blockmapNames.length !== 1 ||
-      assetNames.filter((name) => name === "latest-mac.yml").length !== 1 ||
-      blockmapNames[0] !== `${dmgNames[0]}.blockmap`
-    ) {
-      return false;
+    const versions = new Set();
+    for (const arch of ["arm64", "x64"]) {
+      const dmgNames = assetNames.filter((name) =>
+        new RegExp(`^EdgeEver-(.+)-mac-${arch}\\.dmg$`).test(name)
+      );
+      const zipNames = assetNames.filter((name) =>
+        new RegExp(`^EdgeEver-(.+)-mac-${arch}\\.zip$`).test(name)
+      );
+      if (dmgNames.length !== 1 || zipNames.length !== 1) return false;
+      const prefix = dmgNames[0].replace(/\.dmg$/, "");
+      if (zipNames[0] !== `${prefix}.zip`) return false;
+      const version = new RegExp(`^EdgeEver-(.+)-mac-${arch}\\.dmg$`)
+        .exec(dmgNames[0])?.[1];
+      if (!version) return false;
+      versions.add(version);
+      for (const name of [
+        `${prefix}.dmg`,
+        `${prefix}.dmg.blockmap`,
+        `${prefix}.zip`,
+        `${prefix}.zip.blockmap`,
+      ]) {
+        if (assetNames.filter((assetName) => assetName === name).length !== 1) {
+          return false;
+        }
+      }
     }
     return (
-      !rebuild ||
-      dmgNames[0] === `EdgeEver-${desktopVersion}-mac-arm64.dmg`
+      versions.size === 1 &&
+      (!rebuild || versions.has(desktopVersion)) &&
+      assetNames.filter((name) => name === "latest-mac.yml").length === 1
     );
   }
 

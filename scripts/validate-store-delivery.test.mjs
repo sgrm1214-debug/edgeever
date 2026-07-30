@@ -9,8 +9,7 @@ const validInput = {
   previousVersionCode: 56,
   changedFiles: ["apps/mobile/src/screens/WorkspaceScreen.tsx"],
   platform: "both",
-  androidTrack: "internal",
-  productionConfirmation: "",
+  androidTrack: "production",
 };
 
 describe("store delivery validation", () => {
@@ -41,21 +40,5 @@ describe("store delivery validation", () => {
     expect(() =>
       validateStoreDelivery({ ...validInput, currentVersionCode: 56 })
     ).toThrow("versionCode must increase");
-  });
-
-  test("requires an exact confirmation for production delivery", () => {
-    expect(() =>
-      validateStoreDelivery({
-        ...validInput,
-        androidTrack: "production",
-      })
-    ).toThrow("--confirm-production v1.7.0");
-    expect(
-      validateStoreDelivery({
-        ...validInput,
-        androidTrack: "production",
-        productionConfirmation: "v1.7.0",
-      }).version,
-    ).toBe("1.7.0");
   });
 });

@@ -17,7 +17,6 @@ export const validateStoreDelivery = ({
   changedFiles,
   platform,
   androidTrack,
-  productionConfirmation,
 }) => {
   const version = STABLE_RELEASE_TAG.exec(releaseTag)?.[1];
   if (!version) {
@@ -50,16 +49,6 @@ export const validateStoreDelivery = ({
       `Android versionCode must increase beyond ${previousVersionCode}; received ${currentVersionCode}.`,
     );
   }
-  if (
-    platform !== "ios" &&
-    androidTrack === "production" &&
-    productionConfirmation !== releaseTag
-  ) {
-    throw new Error(
-      `Production delivery requires --confirm-production ${releaseTag}.`,
-    );
-  }
-
   return {
     version,
     versionCode: currentVersionCode,
@@ -74,12 +63,11 @@ const run = () => {
     releaseTag,
     previousTag,
     platform = "both",
-    androidTrack = "internal",
-    productionConfirmation = "",
+    androidTrack = "production",
   ] = process.argv.slice(2);
   if (!releaseTag || !previousTag) {
     console.error(
-      "Usage: node scripts/validate-store-delivery.mjs <release-tag> <previous-tag> [platform] [android-track] [production-confirmation]",
+      "Usage: node scripts/validate-store-delivery.mjs <release-tag> <previous-tag> [platform] [android-track]",
     );
     process.exit(2);
   }
@@ -105,7 +93,6 @@ const run = () => {
     changedFiles,
     platform,
     androidTrack,
-    productionConfirmation,
   });
 
   process.stdout.write(`version=${result.version}\n`);

@@ -3,6 +3,11 @@ import { spawnSync } from "node:child_process";
 const publishIndex = process.argv.indexOf("--publish");
 const publishMode = publishIndex >= 0 ? process.argv[publishIndex + 1] ?? "never" : "never";
 const environment = { ...process.env };
+const requestedArch = environment.EDGE_EVER_DESKTOP_ARCH;
+
+if (requestedArch && !["arm64", "x64"].includes(requestedArch)) {
+  throw new Error(`EDGE_EVER_DESKTOP_ARCH must be arm64 or x64, received: ${requestedArch}`);
+}
 
 // electron-builder treats an explicitly present empty CSC_LINK/WIN_CSC_LINK
 // as a path. Remove empty optional signing variables so unsigned CI builds
@@ -20,7 +25,7 @@ for (const key of [
 }
 environment.CSC_IDENTITY_AUTO_DISCOVERY ||= "false";
 
-const result = spawnSync(process.execPath, [
+const builderArgs = [
   "run",
   "--cwd",
   "apps/desktop",
@@ -28,7 +33,15 @@ const result = spawnSync(process.execPath, [
   "--",
   "--publish",
   publishMode,
-], { env: environment, stdio: "inherit" });
+];
+if (requestedArch) {
+  builderArgs.push("--mac", `--${requestedArch}`);
+}
+
+const result = spawnSync(process.execPath, builderArgs, {
+  env: environment,
+  stdio: "inherit",
+});
 
 if (result.error) throw result.error;
 process.exit(result.status ?? 1);

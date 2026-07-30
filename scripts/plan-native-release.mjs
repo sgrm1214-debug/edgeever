@@ -26,7 +26,9 @@ export const planNativeRelease = (platform, changedFiles) => {
     platform === "mobile"
       ? new Set(["bun.lock", "scripts/build-android-local.sh"])
       : new Set([
+          ".github/workflows/desktop-build.yml",
           "bun.lock",
+          "scripts/create-mac-update-metadata.mjs",
           "scripts/run-desktop-builder.mjs",
           "scripts/verify-desktop-package.mjs",
         ]);

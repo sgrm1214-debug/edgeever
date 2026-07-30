@@ -115,9 +115,11 @@ bunx eas-cli build --platform ios --profile production
 The first command requires the Apple Account Holder to authenticate and may
 prompt for two-factor authentication. The production profile automatically
 increments the App Store build number. Routine delivery should use the separate
-store-delivery workflow, which builds from an immutable formal Release tag and
-uploads to App Store Connect/TestFlight. Apple credentials, App Store Connect
-API keys, certificates, and provisioning profiles must never be committed.
+store-delivery workflow, which builds from an immutable formal Release tag,
+uploads to App Store Connect, and submits that exact build to App Review.
+Approved builds are released automatically. Apple credentials, App Store
+Connect API keys, certificates, and provisioning profiles must never be
+committed.
 
 ## EAS
 

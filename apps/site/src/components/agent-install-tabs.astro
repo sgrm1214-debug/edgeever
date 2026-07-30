@@ -182,19 +182,11 @@ const copy = isEnglish
         <Icon class="mt-0.5 h-4 w-4 shrink-0 text-amber-600/70" name="bx:bx-credit-card" />
         {isEnglish ? (
           <p>
-            <span class="font-semibold text-amber-950">Heads up:</span> Cloudflare{" "}
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">R2</code>,{" "}
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">D1</code>, and{" "}
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">Worker</code>{" "}
-            may ask you to add a <span class="font-semibold text-amber-950">Visa card</span> even when using free quotas.
+            <span class="font-semibold text-amber-950">Note:</span> Although Cloudflare R2 offers a free tier, it requires binding a payment method (such as a dual-currency credit card) to activate. Based on personal experience, for users in mainland China, VISA cards from China Merchants Bank (CMB) or Shanghai Pudong Development Bank (SPDB) are typically the fastest to get verified (and most of these cards have no annual fees or easily waivable ones, so there are no extra holding costs).
           </p>
         ) : (
           <p>
-            <span class="font-semibold text-amber-950">提示：</span>Cloudflare 的{" "}
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">R2</code>、
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">D1</code> 和{" "}
-            <code class="font-mono text-[11px] font-semibold text-amber-950 bg-amber-100/60 px-1 py-0.5 rounded">Worker</code>{" "}
-            即使使用免费额度，开通或使用时也可能要求绑定 <span class="font-semibold text-amber-950">Visa 卡</span>。国内用户可考虑使用招商银行多币种卡绑定。
+            <span class="font-semibold text-amber-950">提示：</span>Cloudflare R2 存储虽然提供免费额度，但开通时仍需绑定支付方式（双币信用卡）。根据个人经验，在国内 VISA 信用卡中，招商和浦发的验证与开通最快捷，且这类卡片大多免年费（或极易通过刷卡免年费），无需担心持有成本。
           </p>
         )}
       </div>

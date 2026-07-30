@@ -110,6 +110,7 @@ import { RELEASE_STATUS_EVENT } from "@/lib/release-notice";
 import { downloadMarkdownFile } from "@/lib/note-markdown-export";
 import { openNotePrintPreview, serializeNoteDocumentForPrint } from "@/lib/note-print";
 import { isBrowserOffline } from "@/lib/network-status";
+import { shouldOpenEditorLink } from "@/lib/editor-link-click";
 
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const MOBILE_EDITOR_QUERY = "(max-width: 639px)";
@@ -1214,7 +1215,7 @@ const RichEditorPane = ({
   useEffect(() => {
     const controller = new AbortController();
     void fetchLatestRelease(controller.signal)
-      .then((release) => setUpdateAvailable(isVersionOutdated(__EDGEEVER_APP_VERSION__, release.tagName)))
+      .then((release) => setUpdateAvailable(isVersionOutdated(__EDGEEVER_APP_VERSION__, release.version)))
       .catch(() => undefined);
     const handleReleaseStatus = () => setUpdateAvailable(true);
     window.addEventListener(RELEASE_STATUS_EVENT, handleReleaseStatus);
@@ -1411,7 +1412,10 @@ const RichEditorPane = ({
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit.configure({
+        codeBlock: false,
+        link: { openOnClick: false },
+      }),
       EdgeEverCodeBlock.configure({ lowlight: codeBlockLowlight, defaultLanguage: "plaintext" }),
       ThemeBlock,
       ResizableImage.configure({
@@ -1465,14 +1469,19 @@ const RichEditorPane = ({
         return true;
       },
       handleClick: (_view, _pos, event) => {
-        const target = event.target instanceof HTMLElement ? event.target.closest("a[href^='#memo=']") : null;
-        const memoId = parseMemoLinkHref(target?.getAttribute("href"));
-        if (!memoId || !onOpenMemo) {
+        const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+        if (!target || !shouldOpenEditorLink(event, _view.editable)) {
           return false;
         }
 
+        const href = target.getAttribute("href");
+        const memoId = parseMemoLinkHref(href);
         event.preventDefault();
-        onOpenMemo(memoId);
+        if (memoId) {
+          onOpenMemo?.(memoId);
+        } else if (href) {
+          window.open(target.href, "_blank", "noopener,noreferrer");
+        }
         return true;
       },
       handlePaste: (_view, event) => {

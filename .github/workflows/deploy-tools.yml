@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/cloudflare-deploy.mjs"
+      - "scripts/wrangler-output.mjs"
       - "scripts/run-wrangler.mjs"
       - "scripts/wrangler-runner.mjs"
       - "scripts/verify-deployment.mjs"
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - "scripts/cloudflare-deploy.mjs"
+      - "scripts/wrangler-output.mjs"
       - "scripts/run-wrangler.mjs"
       - "scripts/wrangler-runner.mjs"
       - "scripts/verify-deployment.mjs"

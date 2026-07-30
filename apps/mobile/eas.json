@@ -47,8 +47,7 @@
     "store-production": {
       "android": {
         "track": "production",
-        "releaseStatus": "draft",
-        "changesNotSentForReview": true
+        "releaseStatus": "completed"
       }
     },
     "store-ios": {

@@ -19,6 +19,7 @@ import {
 import { userDataDirectoryFromArguments } from "./user-data-directory.mjs";
 import { isAllowedPrintPreviewUrl } from "./window-open-policy.mjs";
 import { showWindow } from "./window-visibility.mjs";
+import { trayIconPath } from "./tray-icon.mjs";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
@@ -289,10 +290,14 @@ const buildApplicationMenu = () => {
 };
 
 const createTray = () => {
-  const iconPath = app.isPackaged
-    ? join(process.resourcesPath, "web", "pwa-192x192.png")
-    : join(projectRoot, "apps/web/public/pwa-192x192.png");
+  const iconPath = trayIconPath({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    projectRoot,
+    resourcesPath: process.resourcesPath,
+  });
   const icon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+  if (process.platform === "darwin") icon.setTemplateImage(true);
   tray = new Tray(icon);
   tray.setToolTip("EdgeEver");
   tray.setContextMenu(Menu.buildFromTemplate([

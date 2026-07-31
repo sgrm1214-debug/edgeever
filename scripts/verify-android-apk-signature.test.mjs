@@ -24,6 +24,28 @@ describe("Android APK signer verification", () => {
     ).toBe(EDGE_EVER_ANDROID_SIGNER_SHA256);
   });
 
+  test("accepts fingerprints wrapped and spaced by newer build tools", () => {
+    const fingerprint = EDGE_EVER_ANDROID_SIGNER_SHA256.toUpperCase()
+      .match(/.{2}/g)
+      .join(" ");
+    expect(
+      verifyAndroidSignerOutput(
+        `Signer #1 certificate SHA-256 digest: [${fingerprint}]`,
+      ),
+    ).toBe(EDGE_EVER_ANDROID_SIGNER_SHA256);
+  });
+
+  test("accepts scheme-prefixed signer output from Linux build tools", () => {
+    expect(
+      verifyAndroidSignerOutput(
+        [
+          "Number of signers: 1",
+          `V2 Signer: certificate SHA-256 digest: ${EDGE_EVER_ANDROID_SIGNER_SHA256}`,
+        ].join("\n"),
+      ),
+    ).toBe(EDGE_EVER_ANDROID_SIGNER_SHA256);
+  });
+
   test("rejects an APK signed by a different certificate", () => {
     expect(() =>
       verifyAndroidSignerOutput(

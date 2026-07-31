@@ -19,6 +19,8 @@ describe("native release planning", () => {
       "packages/shared/src/index.ts",
       "bun.lock",
       "scripts/build-android-local.sh",
+      "scripts/verify-android-apk-signature.mjs",
+      ".github/workflows/mobile-build.yml",
     ];
     expect(planNativeRelease("mobile", changedFiles)).toEqual({
       rebuild: true,

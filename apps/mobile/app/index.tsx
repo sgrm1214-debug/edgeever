@@ -1,4 +1,5 @@
 import * as SplashScreen from "expo-splash-screen";
+import { useIncomingShare } from "expo-sharing";
 import { useIsRestoring } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
@@ -15,6 +16,7 @@ const WorkspaceScreen = lazy(() =>
 export default function IndexScreen() {
   const { isLoading, session } = useSession();
   const isRestoringCache = useIsRestoring();
+  const { clearSharedPayloads, sharedPayloads } = useIncomingShare();
 
   useEffect(() => {
     if (!isLoading && !isRestoringCache) {
@@ -29,7 +31,10 @@ export default function IndexScreen() {
 
   return session ? (
     <Suspense fallback={<StartupPlaceholder showBrand />}>
-      <WorkspaceScreen />
+      <WorkspaceScreen
+        incomingSharePayloads={sharedPayloads}
+        onIncomingShareHandled={clearSharedPayloads}
+      />
     </Suspense>
   ) : (
     <LoginScreen />

@@ -27,6 +27,9 @@ bun run release -- \
 
 如果一个 Release 包含多项改动，请成对重复传入 `--change-en` 和
 `--change-zh`。跟踪 Issue 需要多个 Label 时，可以重复传入 `--label`。
+公开 Release 说明只包含用户可感知的变化、影响以及必要的升级或迁移提醒。
+类型检查、构建命令、签名、公证和资产审计等技术细节保留在 GitHub Actions
+与关联跟踪 Issue 中，不再重复写入公开说明。
 
 `--bump` 为必填项，必须根据整个 Release 对用户和兼容性的影响选择：
 

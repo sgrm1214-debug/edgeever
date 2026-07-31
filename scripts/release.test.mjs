@@ -76,22 +76,21 @@ describe("release automation", () => {
     ).toThrow("--bump must be patch, minor, or major");
   });
 
-  test("builds required bilingual release note structure with real newlines", () => {
+  test("builds concise user-facing bilingual release notes", () => {
     const notes = buildReleaseNotes({
       changesEn: ["Improve the release flow."],
       changesZh: ["优化发布流程。"],
       issueNumber: 126,
-      desktopRebuild: false,
-      mobileRebuild: false,
-      previousTag: "v1.6.50",
-      bump: "patch",
     });
     expect(notes).toContain("## Key Changes");
     expect(notes).toContain("Related Issue: #126");
     expect(notes).toContain("## 🇨🇳 中文说明 / Chinese Changelog");
     expect(notes).toContain("关联 Issue：#126");
-    expect(notes).toContain("Version bump: `patch`.");
-    expect(notes).toContain("版本递增级别：`patch`。");
+    expect(notes).not.toContain("## Verification");
+    expect(notes).not.toContain("## 验证");
+    expect(notes).not.toContain("bun run");
+    expect(notes).not.toContain("Version bump");
+    expect(notes).not.toContain("release plan");
     expect(notes).not.toContain("\\n");
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -21,6 +21,7 @@
     "dev:mobile": "bun --cwd apps/mobile expo start",
     "prepare:mobile:icons": "bun scripts/prepare-mobile-icons.mjs",
     "build:android:fast": "bash scripts/build-android-local.sh fast",
+    "build:android:fast:local": "bun --env-file=${EDGE_EVER_ANDROID_ENV_FILE:-$HOME/.config/edgeever/android/signing.env} run build:android:fast",
     "build:android:apk": "bash scripts/build-android-local.sh apk",
     "build:android:apk:local": "bun --env-file=${EDGE_EVER_ANDROID_ENV_FILE:-$HOME/.config/edgeever/android/signing.env} run build:android:apk",
     "build:android:play": "bash scripts/build-android-local.sh play",
@@ -38,7 +39,7 @@
     "build:desktop": "EDGE_EVER_DESKTOP_BUILD=1 bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
     "benchmark:desktop:sidecar": "bun scripts/benchmark-desktop-sidecar.mjs",
     "verify:web-performance": "bun scripts/verify-web-performance.mjs",
-    "test:release-planning": "bun test scripts/plan-native-release.test.mjs scripts/check-native-release-assets.test.mjs scripts/create-mac-update-metadata.test.mjs scripts/release.test.mjs scripts/validate-store-delivery.test.mjs scripts/store-delivery.test.mjs apps/web/src/lib/version-check.test.mjs apps/mobile/src/lib/mobile-release.test.ts",
+    "test:release-planning": "bun test scripts/plan-native-release.test.mjs scripts/check-native-release-assets.test.mjs scripts/create-mac-update-metadata.test.mjs scripts/release.test.mjs scripts/validate-store-delivery.test.mjs scripts/store-delivery.test.mjs scripts/verify-android-apk-signature.test.mjs apps/web/src/lib/version-check.test.mjs apps/mobile/src/lib/mobile-release.test.ts",
     "release": "bun scripts/release.mjs",
     "publish:stores": "bun scripts/store-delivery.mjs",
     "test:desktop:sidecar": "bun scripts/test-desktop-sidecar.mjs",

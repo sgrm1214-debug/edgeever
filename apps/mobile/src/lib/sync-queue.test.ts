@@ -1,4 +1,5 @@
 import { beforeEach, expect, mock, test } from "bun:test";
+import { ApiRequestError } from "@edgeever/client";
 import type { MemoDetail } from "@edgeever/shared";
 
 const storage = new Map<string, string>();
@@ -37,6 +38,29 @@ test("keeps pending updates isolated by instance", async () => {
 
   expect((await listMobileSyncQueueItems("https://one.example"))[0]?.payload.title).toBe("First");
   expect((await listMobileSyncQueueItems("https://two.example"))[0]?.payload.title).toBe("Second instance");
+});
+
+test("keeps a stale mobile edit as an explicit conflict without overwriting the cloud note", async () => {
+  const scope = "https://one.example";
+  await queueMobileMemoUpdate(scope, basePayload);
+  let updateCalled = false;
+  const client = {
+    createMemoEditSession: async () => ({
+      editSession: { id: "edit-2", baseRevision: 2, baseContentHash: "hash-2" },
+    }),
+    updateMemo: async () => {
+      updateCalled = true;
+      throw new ApiRequestError("Unexpected update", 500, "unexpected_update");
+    },
+  };
+
+  const result = await syncMobileQueuedChanges(client as never, scope);
+  const queued = (await listMobileSyncQueueItems(scope))[0];
+
+  expect(result.conflicted).toBe(1);
+  expect(updateCalled).toBe(false);
+  expect(queued?.status).toBe("conflict");
+  expect(queued?.payload.contentMarkdown).toBe("first");
 });
 
 test("rebases a newer local save when an older save finishes syncing", async () => {

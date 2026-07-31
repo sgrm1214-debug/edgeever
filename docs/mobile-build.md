@@ -1,6 +1,6 @@
 # EdgeEver Mobile Builds
 
-EdgeEver Mobile is built with Expo and React Native. Daily Android test packages are built directly on GitHub Actions, without using EAS Build quota.
+EdgeEver Mobile is built with Expo and React Native. Main-branch Android packages are built directly on GitHub Actions, without using EAS Build quota.
 
 ## App Updates
 
@@ -15,22 +15,32 @@ bunx eas-cli update --channel production --environment production --message "Des
 
 The update runtime uses the app-version policy. Any native dependency, Expo SDK, native module, or native configuration change requires incrementing `expo.version` and shipping a new store build before publishing code that depends on that native change. EAS Update does not replace Google Play or App Store updates for native binaries.
 
-## Android Debug APK
+## Main-Branch Android APK
 
-The `Build EdgeEver Mobile` workflow runs on GitHub Actions and produces a debug APK artifact.
+The `Build EdgeEver Mobile` workflow runs on GitHub Actions and produces a
+fast arm64 APK after mobile changes land on `main`. This APK uses the same
+pinned production signing certificate as formal GitHub Release APKs. The fast
+build only disables R8, resource shrinking, and PNG crunching; it must never
+fall back to `debug.keystore`.
 
 It runs:
 
 ```sh
 bun install --frozen-lockfile
 bun run typecheck:mobile
-cd apps/mobile
-bunx expo prebuild --platform android --non-interactive --clean
-cd android
-./gradlew assembleDebug
+bun run build:android:fast
 ```
 
-The APK is uploaded as a GitHub Actions artifact named `edgeever-android-debug-apk`.
+The APK is uploaded as a GitHub Actions artifact named
+`edgeever-android-main-apk`. If the stable signing credentials are unavailable,
+the workflow fails and does not upload an APK with a different signer.
+
+For a local fast build, load the same signing environment used for release
+builds:
+
+```sh
+bun run build:android:fast:local
+```
 
 ## Release Builds
 
@@ -42,15 +52,27 @@ Every formal GitHub Release must include a directly installable APK. Build the p
 bun run build:android:apk:local
 ```
 
-This produces `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`. Verify its application version, signer, and SHA-256 before uploading it to the matching GitHub Release. Additional ABIs should only be published for an explicit compatibility need; the Play AAB continues to include all supported architectures. A release whose audited change range affects mobile runtime code, shared code used by mobile, mobile dependencies, native configuration, or APK build tooling must rebuild the APK from that release commit.
+This produces `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`.
+Before upload, automation requires exactly one signer and pins its certificate
+SHA-256 to
+`22bf52a9501c89020f5acc966960152c826bfa64f31e578e858d088f8cd75d87`.
+Any other signer fails the build. Verify the application version and APK
+SHA-256 as well. Additional ABIs should only be published for an explicit
+compatibility need; the Play AAB continues to include all supported
+architectures. A release whose audited change range affects mobile runtime
+code, shared code used by mobile, mobile dependencies, native configuration,
+APK build tooling, or signer verification must rebuild the APK from that
+release commit.
 
 If the audited change range does not affect the mobile binary, the most recent compatible, verified APK may be attached again without rebuilding. Keep its original versioned filename and checksum, and state the source release explicitly; never rename an older binary to the current release version.
 
-The release workflow performs this audit automatically. Web-only releases use
-an Ubuntu planning job and copy the single verified `arm64-v8a` APK from the
-previous formal Release. The self-hosted Android runner is scheduled only when
-the audited range includes mobile runtime code, shared mobile packages,
-dependencies, native configuration, or Android build tooling.
+The release workflow performs this audit automatically and verifies the pinned
+signer for both newly built and reused APKs. Web-only releases use an Ubuntu
+planning job and copy the single verified `arm64-v8a` APK from the previous
+formal Release. The self-hosted Android runner is scheduled only when the
+audited range includes mobile runtime code, shared mobile packages,
+dependencies, native configuration, Android build tooling, or signer
+verification.
 
 ### Recommended local Play build
 

@@ -188,30 +188,12 @@ export const buildReleaseNotes = ({
   changesEn,
   changesZh,
   issueNumber,
-  desktopRebuild,
-  mobileRebuild,
-  previousTag,
-  bump,
 }) => [
   "## Key Changes",
   "",
   ...changesEn.map((change) => `- ${change}`),
   "",
   `Related Issue: #${issueNumber}`,
-  "",
-  "## Verification",
-  "",
-  "- `bun run typecheck`",
-  "- `bun run typecheck:mobile`",
-  "- `bun run build:web`",
-  "- Native release planning and asset audit tests.",
-  `- Version bump: \`${bump}\`.`,
-  desktopRebuild
-    ? "- Desktop release plan: rebuild, sign, notarize, and verify new macOS arm64 and x64 DMGs."
-    : `- Desktop release plan: reuse the verified assets from ${previousTag} with their original filenames and checksums.`,
-  mobileRebuild
-    ? "- Android release plan: rebuild and verify a signed arm64 APK."
-    : `- Android release plan: reuse the verified APK from ${previousTag} with its original filename and checksum.`,
   "",
   "## 🇨🇳 中文说明 / Chinese Changelog",
   "",
@@ -220,20 +202,6 @@ export const buildReleaseNotes = ({
   ...changesZh.map((change) => `- ${change}`),
   "",
   `关联 Issue：#${issueNumber}`,
-  "",
-  "## 验证",
-  "",
-  "- `bun run typecheck`",
-  "- `bun run typecheck:mobile`",
-  "- `bun run build:web`",
-  "- 原生 Release 规划与资产审计测试。",
-  `- 版本递增级别：\`${bump}\`。`,
-  desktopRebuild
-    ? "- 桌面端 Release 计划：重新构建、签名、公证并验证新的 macOS arm64 与 x64 DMG。"
-    : `- 桌面端 Release 计划：复用 ${previousTag} 已验证资产，并保留原始文件名与校验和。`,
-  mobileRebuild
-    ? "- Android Release 计划：重新构建并验证签名 arm64 APK。"
-    : `- Android Release 计划：复用 ${previousTag} 已验证 APK，并保留原始文件名与校验和。`,
   "",
 ].join("\n");
 
@@ -717,10 +685,6 @@ const releaseMain = async (options) => {
       changesEn: options.changesEn,
       changesZh: options.changesZh,
       issueNumber: 0,
-      desktopRebuild: desktopPlan.rebuild,
-      mobileRebuild: mobilePlan.rebuild,
-      previousTag,
-      bump: options.bump,
     }));
     return;
   }
@@ -771,10 +735,6 @@ const releaseMain = async (options) => {
       changesEn: options.changesEn,
       changesZh: options.changesZh,
       issueNumber,
-      desktopRebuild: desktopPlan.rebuild,
-      mobileRebuild: mobilePlan.rebuild,
-      previousTag,
-      bump: options.bump,
     });
     const draftUrl = run("gh", [
       "release",

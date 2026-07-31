@@ -17,7 +17,9 @@ on:
       - "packages/client/**"
       - "packages/shared/**"
       - "bun.lock"
+      - ".github/workflows/mobile-build.yml"
       - "scripts/build-android-local.sh"
+      - "scripts/verify-android-apk-signature.mjs"
 
 permissions:
   contents: write
@@ -117,6 +119,21 @@ jobs:
             exit 1
           fi
 
+      - name: Verify existing APK uses the pinned signer
+        if: steps.plan.outputs.asset_ready == 'true'
+        env:
+          CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-assets"
+          gh release download "$CURRENT_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'edgeever-android-v*-arm64-v8a.apk' \
+            --dir "$RUNNER_TEMP/native-assets"
+          apk_path="$(find "$RUNNER_TEMP/native-assets" -type f -name 'edgeever-android-v*-arm64-v8a.apk' -print -quit)"
+          test -n "$apk_path"
+          node scripts/verify-android-apk-signature.mjs "$apk_path"
+
   reuse-release-apk:
     needs: release-plan
     if: >-
@@ -130,6 +147,9 @@ jobs:
     name: Reuse Android release APK
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Copy latest compatible APK without renaming
         env:
           CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
@@ -142,6 +162,8 @@ jobs:
             --pattern 'edgeever-android-v*-arm64-v8a.apk' \
             --dir "$RUNNER_TEMP/native-assets"
           test "$(find "$RUNNER_TEMP/native-assets" -type f -name 'edgeever-android-v*-arm64-v8a.apk' | wc -l | tr -d ' ')" = "1"
+          apk_path="$(find "$RUNNER_TEMP/native-assets" -type f -name 'edgeever-android-v*-arm64-v8a.apk' -print -quit)"
+          node scripts/verify-android-apk-signature.mjs "$apk_path"
           gh release upload "$CURRENT_TAG" "$RUNNER_TEMP/native-assets/"* \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
@@ -190,18 +212,23 @@ jobs:
       - name: Reset Metro cache for this checkout
         run: bun --cwd apps/mobile expo export --platform android --clear --max-workers 1 --output-dir "$RUNNER_TEMP/edgeever-metro-warmup"
 
-      - name: Build fast test APK
-        if: github.event_name == 'push'
-        run: bun run build:android:fast
-
-      - name: Restore Android upload keystore
-        if: github.event_name == 'workflow_dispatch'
+      - name: Restore Android signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | openssl base64 -d -A > "$RUNNER_TEMP/edgeever-upload.p12"
           chmod 600 "$RUNNER_TEMP/edgeever-upload.p12"
+
+      - name: Build fast main-branch APK
+        if: github.event_name == 'push'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/edgeever-upload.p12
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EDGE_EVER_ANDROID_APK_ARCHS: arm64-v8a
+        run: bun run build:android:fast
 
       - name: Build signed release APK for GitHub Release
         if: github.event_name == 'workflow_dispatch'
@@ -215,15 +242,13 @@ jobs:
 
       - name: Verify release APK signature
         if: github.event_name == 'workflow_dispatch'
-        run: |
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
-        working-directory: apps/mobile/android
+        run: node scripts/verify-android-apk-signature.mjs apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
-          name: edgeever-android-test-release-apk
+          name: edgeever-android-main-apk
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           compression-level: 0
@@ -239,5 +264,5 @@ jobs:
           gh release upload "$RELEASE_TAG" "$release_asset" --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Remove temporary upload keystore
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always()
         run: rm -f "$RUNNER_TEMP/edgeever-upload.p12"

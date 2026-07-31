@@ -30,6 +30,10 @@ bun run release -- \
 
 Repeat `--change-en` and `--change-zh` in matching pairs when a Release contains
 multiple changes. Repeat `--label` when the tracking Issue needs multiple labels.
+Public Release notes contain only user-visible changes, their impact, and any
+required upgrade or migration guidance. Type checks, build commands, signing,
+notarization, and asset-audit details remain in GitHub Actions and the linked
+tracking Issue instead of being repeated in the public notes.
 
 `--bump` is required and must be selected from the user and compatibility impact
 of the complete Release:

@@ -1,0 +1,48 @@
+import { describe, expect, test } from "bun:test";
+import {
+  EDGE_EVER_ANDROID_SIGNER_SHA256,
+  verifyAndroidSignerOutput,
+} from "./verify-android-apk-signature.mjs";
+
+describe("Android APK signer verification", () => {
+  test("accepts the single pinned EdgeEver signer", () => {
+    expect(
+      verifyAndroidSignerOutput(
+        `Signer #1 certificate SHA-256 digest: ${EDGE_EVER_ANDROID_SIGNER_SHA256}`,
+      ),
+    ).toBe(EDGE_EVER_ANDROID_SIGNER_SHA256);
+  });
+
+  test("normalizes colon-separated uppercase fingerprints", () => {
+    const fingerprint = EDGE_EVER_ANDROID_SIGNER_SHA256.toUpperCase()
+      .match(/.{2}/g)
+      .join(":");
+    expect(
+      verifyAndroidSignerOutput(
+        `Signer #1 certificate SHA-256 digest: ${fingerprint}`,
+      ),
+    ).toBe(EDGE_EVER_ANDROID_SIGNER_SHA256);
+  });
+
+  test("rejects an APK signed by a different certificate", () => {
+    expect(() =>
+      verifyAndroidSignerOutput(
+        `Signer #1 certificate SHA-256 digest: ${"0".repeat(64)}`,
+      ),
+    ).toThrow("Android signer mismatch");
+  });
+
+  test("rejects missing or multiple signers", () => {
+    expect(() => verifyAndroidSignerOutput("Verified")).toThrow(
+      "Expected exactly one Android signer",
+    );
+    expect(() =>
+      verifyAndroidSignerOutput(
+        [
+          `Signer #1 certificate SHA-256 digest: ${EDGE_EVER_ANDROID_SIGNER_SHA256}`,
+          `Signer #2 certificate SHA-256 digest: ${EDGE_EVER_ANDROID_SIGNER_SHA256}`,
+        ].join("\n"),
+      ),
+    ).toThrow("Expected exactly one Android signer");
+  });
+});

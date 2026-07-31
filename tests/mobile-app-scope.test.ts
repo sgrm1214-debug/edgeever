@@ -29,4 +29,12 @@ describe("mobile app scope", () => {
       expect(accountSecuritySource).not.toContain(removedCapability);
     }
   });
+
+  test("keeps version history reachable from an active note", () => {
+    expect(workspaceSource).toMatch(
+      /\{memo && !memo\.isDeleted \? \(\s*<Pressable\s+accessibilityLabel="版本历史"/
+    );
+    expect(workspaceSource).toContain('syncStatus === "conflict"');
+    expect(workspaceSource).toContain("onResolveSyncConflict");
+  });
 });

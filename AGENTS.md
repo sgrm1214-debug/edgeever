@@ -18,7 +18,7 @@
 6. **桌面验证职责**：桌面 Release 工作流负责测试、包结构检查、签名与公证；代理不再重复下载 Draft 或执行本地首次启动验收，除非用户明确要求。
 7. **发布后安装**：正式发布后，从该 GitHub Release 下载与当前 Mac 架构匹配的最终 DMG，覆盖安装 `/Applications/EdgeEver.app` 并启动，保留用户数据。功能体验由用户在实际使用中验证。
 8. **失败处理**：工作流或资产审计失败时保持或恢复 Draft，修复后重跑；不得公开已知损坏的 Release。
-9. **Release 说明结构**：使用中英文双语格式（正文禁止包含字面量 `\n`）。功能/修复关联对应 Issue 并标记 Label，发布后回链并关闭 Issue。正文结构：
+9. **Release 说明结构**：使用中英文双语格式（正文禁止包含字面量 `\n`），只写用户可感知的变化、影响以及必要的升级或迁移提醒。类型检查、构建命令、签名、公证、资产复用等技术验证细节保留在 Actions 和关联 Issue 中，不写入公开 Release 正文。功能/修复关联对应 Issue 并标记 Label，发布后回链并关闭 Issue。正文结构：
 
 ```md
 ## Key Changes
@@ -27,10 +27,6 @@
 
 Related Issue: #<issue-number>
 
-## Verification
-
-- List completed tests, type checks, and build results in English.
-
 ## 🇨🇳 中文说明 / Chinese Changelog
 
 ## 主要更新
@@ -38,10 +34,6 @@ Related Issue: #<issue-number>
 - 面向用户说明本次变化及影响。
 
 关联 Issue：#<issue-number>
-
-## 验证
-
-- 列出实际完成的测试、类型检查和构建结果。
 ```
 
 ## 环境、部署与组件约束

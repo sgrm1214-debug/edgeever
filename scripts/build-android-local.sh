@@ -77,22 +77,6 @@ COMMON_ARGS=(
   -Dorg.gradle.jvmargs=-Xmx6g\ -XX:MaxMetaspaceSize=1g\ -Dfile.encoding=UTF-8
 )
 
-if [[ "$MODE" == "fast" ]]; then
-  echo "构建 arm64 真机测试 Release APK（关闭 R8、资源压缩和 PNG crunch）..."
-  run_timed "Gradle 快速 APK 构建" ./gradlew assembleRelease \
-    "${COMMON_ARGS[@]}" \
-    -PreactNativeArchitectures=arm64-v8a \
-    -Pandroid.enableMinifyInReleaseBuilds=false \
-    -Pandroid.enableShrinkResourcesInReleaseBuilds=false \
-    -Pandroid.enablePngCrunchInReleaseBuilds=false \
-    -Pandroid.injected.signing.store.file="$ANDROID_DIR/app/debug.keystore" \
-    -Pandroid.injected.signing.store.password=android \
-    -Pandroid.injected.signing.key.alias=androiddebugkey \
-    -Pandroid.injected.signing.key.password=android
-  echo "完成: $ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
-  exit 0
-fi
-
 : "${ANDROID_KEYSTORE_FILE:?请设置 ANDROID_KEYSTORE_FILE（本地上传密钥路径）}"
 : "${ANDROID_KEYSTORE_PASSWORD:?请设置 ANDROID_KEYSTORE_PASSWORD}"
 : "${ANDROID_KEY_ALIAS:?请设置 ANDROID_KEY_ALIAS}"
@@ -101,6 +85,30 @@ fi
 PLAY_ARCHS="${EDGE_EVER_ANDROID_ARCHS:-armeabi-v7a,arm64-v8a,x86,x86_64}"
 APK_ARCHS="${EDGE_EVER_ANDROID_APK_ARCHS:-arm64-v8a}"
 KEYSTORE_FILE="$(cd "$(dirname "$ANDROID_KEYSTORE_FILE")" && pwd)/$(basename "$ANDROID_KEYSTORE_FILE")"
+APK_PATH="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
+APKSIGNER_PATH="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+
+if [[ "$MODE" == "fast" ]]; then
+  echo "构建生产签名 arm64 快速 APK（关闭 R8、资源压缩和 PNG crunch）..."
+  run_timed "Gradle 快速 APK 构建" ./gradlew assembleRelease \
+    "${COMMON_ARGS[@]}" \
+    -PreactNativeArchitectures=arm64-v8a \
+    -Pandroid.enableMinifyInReleaseBuilds=false \
+    -Pandroid.enableShrinkResourcesInReleaseBuilds=false \
+    -Pandroid.enablePngCrunchInReleaseBuilds=false \
+    -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" \
+    -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+    -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+    -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD" \
+    -Pandroid.injected.signing.store.type=PKCS12
+  test -s "$APK_PATH"
+  test -x "$APKSIGNER_PATH"
+  run_timed "校验 APK 固定签名" \
+    node "$PROJECT_ROOT/scripts/verify-android-apk-signature.mjs" \
+    "$APK_PATH" "$APKSIGNER_PATH"
+  echo "完成: $APK_PATH"
+  exit 0
+fi
 
 if [[ "$MODE" == "apk" ]]; then
   echo "构建生产签名 APK（${APK_ARCHS}）..."
@@ -112,13 +120,13 @@ if [[ "$MODE" == "apk" ]]; then
     -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
     -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD" \
     -Pandroid.injected.signing.store.type=PKCS12
-  APK_PATH="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
-  APKSIGNER_PATH="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
   AAPT2_PATH="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2"
   test -s "$APK_PATH"
   test -x "$APKSIGNER_PATH"
   test -x "$AAPT2_PATH"
-  run_timed "校验 APK 签名" "$APKSIGNER_PATH" verify --verbose "$APK_PATH"
+  run_timed "校验 APK 固定签名" \
+    node "$PROJECT_ROOT/scripts/verify-android-apk-signature.mjs" \
+    "$APK_PATH" "$APKSIGNER_PATH"
   run_timed "读取 APK 信息" bash -c '"$1" dump badging "$2" | sed -n "1p"' _ "$AAPT2_PATH" "$APK_PATH"
   run_timed "计算 APK SHA-256" shasum -a 256 "$APK_PATH"
   echo "完成: $APK_PATH"

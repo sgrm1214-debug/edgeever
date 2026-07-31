@@ -1,0 +1,48 @@
+name: Build browser extensions
+
+on:
+  pull_request:
+    paths:
+      - "apps/extension/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/extension-build.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/extension/**"
+      - "package.json"
+      - "bun.lock"
+      - ".github/workflows/extension-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Chromium and Firefox
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test extension manifests
+        run: bun run test:extension
+
+      - name: Build Chromium extension
+        run: bun run build:extension
+
+      - name: Build Firefox extension
+        run: bun run build:extension:firefox
+
+      - name: Lint Firefox extension
+        run: bun run lint:extension:firefox

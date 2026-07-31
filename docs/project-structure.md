@@ -4,7 +4,7 @@
 edgeever/
 ├── apps/
 │   ├── web/              Vite + React product UI, PWA, offline drafts, sync queue
-│   ├── extension/        Chrome/Edge Manifest V3 web clipper
+│   ├── extension/        Chrome/Edge/Firefox Manifest V3 web clipper
 │   ├── api/              Cloudflare Worker + Hono API, OpenAPI, MCP endpoint
 │   ├── mobile/           Expo + React Native mobile app
 │   ├── desktop/          Electron shell, preload bridge, and packaging

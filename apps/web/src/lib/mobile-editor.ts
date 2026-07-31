@@ -15,6 +15,16 @@ export type MobileEditorReturnPreview = {
   updatedAt: string;
 };
 
+// The standalone web editor opens in a separate document and creates a server
+// edit session immediately, so it must never receive a local-first temporary ID.
+export const requiresRemoteMemoForStandaloneMobileEditor = ({
+  mobileViewport,
+  desktopRuntime,
+}: {
+  mobileViewport: boolean;
+  desktopRuntime: boolean;
+}) => mobileViewport && !desktopRuntime;
+
 export const getStandaloneMobileEditorReturnPath = (memoId: string) => {
   const params = new URLSearchParams({
     [MOBILE_EDITOR_RETURN_PARAM]: memoId,

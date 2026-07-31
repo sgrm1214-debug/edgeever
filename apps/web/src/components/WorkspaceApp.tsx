@@ -34,6 +34,7 @@ import {
   getStandaloneMobileEditorReturningMemoId,
   openStandaloneMobileEditor,
   readMobileEditorReturnPreview,
+  requiresRemoteMemoForStandaloneMobileEditor,
   type MobileEditorReturnPreview,
 } from "@/lib/mobile-editor";
 import { cn } from "@/lib/utils";
@@ -1624,9 +1625,16 @@ export const WorkspaceApp = ({
   });
 
   const createMemoMutation = useMutation({
-    mutationFn: repository.createMemo,
+    mutationFn: async (input: Parameters<typeof repository.createMemo>[0]) => {
+      const requiresRemoteMemo = requiresRemoteMemoForStandaloneMobileEditor({
+        mobileViewport: !isDesktopViewport(),
+        desktopRuntime: Boolean(window.edgeeverDesktop?.isAvailable),
+      });
+      const data = requiresRemoteMemo ? await api.createMemo(input) : await repository.createMemo(input);
+      await putLocalMemo(localDataScope, data.memo);
+      return data;
+    },
     onSuccess: (data) => {
-      void putLocalMemo(localDataScope, data.memo);
       const targetNotebookId = data.memo.notebookId;
 
       setMemoView("notebook");
@@ -1680,7 +1688,17 @@ export const WorkspaceApp = ({
   });
 
   const useTemplateMutation = useMutation({
-    mutationFn: (input: { templateId: string; notebookId: string }) => repository.useTemplate(input.templateId, input.notebookId),
+    mutationFn: async (input: { templateId: string; notebookId: string }) => {
+      const requiresRemoteMemo = requiresRemoteMemoForStandaloneMobileEditor({
+        mobileViewport: !isDesktopViewport(),
+        desktopRuntime: Boolean(window.edgeeverDesktop?.isAvailable),
+      });
+      const data = requiresRemoteMemo
+        ? await api.useTemplate(input.templateId, input.notebookId)
+        : await repository.useTemplate(input.templateId, input.notebookId);
+      await putLocalMemo(localDataScope, data.memo);
+      return data;
+    },
     onSuccess: (data) => {
       const targetNotebookId = data.memo.notebookId;
       setTemplatesOpen(false);

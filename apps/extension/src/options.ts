@@ -64,7 +64,7 @@ const getInstanceOrigin = (instanceUrl: string) => {
 };
 
 const getDiagnosticInfo = async (settings: ExtensionSettings): Promise<DiagnosticInfo> => {
-  const manifest = chrome.runtime.getManifest() as { version?: string };
+  const manifest = chrome.runtime.getManifest() as { manifest_version?: number; version?: string };
   const instanceOrigin = getInstanceOrigin(settings.instanceUrl);
   let instancePermission = t("permissionNotConfigured");
   if (instanceOrigin.startsWith("http")) {
@@ -74,7 +74,7 @@ const getDiagnosticInfo = async (settings: ExtensionSettings): Promise<Diagnosti
 
   return {
     extensionVersion: manifest.version || t("unknownValue"),
-    manifestVersion: manifest.version || t("unknownValue"),
+    manifestVersion: manifest.manifest_version ? String(manifest.manifest_version) : t("unknownValue"),
     browser: getBrowserLabel(),
     system: `${navigator.platform || t("unknownValue")} (${navigator.language || t("unknownValue")})`,
     extensionId: chrome.runtime.id || t("unknownValue"),

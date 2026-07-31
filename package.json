@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.6.54",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -28,6 +28,10 @@
     "dev:site": "bun --cwd apps/site dev",
     "build": "bun run build:web",
     "build:extension": "vite build --config apps/extension/vite.config.ts",
+    "build:extension:firefox": "bun run --cwd apps/extension build:firefox",
+    "lint:extension:firefox": "bun run --cwd apps/extension lint:firefox",
+    "package:extension:firefox": "bun run --cwd apps/extension package:firefox",
+    "test:extension": "bun run --cwd apps/extension test",
     "dev:extension": "vite --config apps/extension/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build:desktop:sidecar": "cargo build --manifest-path crates/desktop-sidecar/Cargo.toml --release",

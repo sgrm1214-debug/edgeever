@@ -24,7 +24,7 @@ import Layout from "@/layouts/Layout.astro";
             <ul class="mt-3 list-disc space-y-2 pl-6">
               <li>The mobile app processes the EdgeEver instance URL, username, and password that the user provides to sign in. The resulting session credential is stored in secure device storage.</li>
               <li>Notebooks, notes, tags, and attachments are transferred between the device and the user's self-hosted instance. The mobile app keeps the necessary local SQLite mirror, drafts, sync queue, and preferences to provide fast access and offline editing.</li>
-              <li>The Web Clipper processes the current page title, URL, selected content, or extracted article body only when the user chooses to save it. Its instance URL, API token, and default notebook settings are kept in Chrome local extension storage.</li>
+              <li>The Web Clipper processes the current page title, URL, selected content, or extracted article body only when the user chooses to save it. Its instance URL, API token, and default notebook settings are kept in the browser's local extension storage.</li>
             </ul>
           </section>
 
@@ -54,6 +54,11 @@ import Layout from "@/layouts/Layout.astro";
           <section>
             <h2 class="text-xl font-bold text-slate-900">Chrome Web Store Limited Use</h2>
             <p class="mt-3">Information received from Chrome APIs is used only to provide the user-facing web clipping feature described above. Its use complies with the Chrome Web Store User Data Policy, including the Limited Use requirements.</p>
+          </section>
+
+          <section>
+            <h2 class="text-xl font-bold text-slate-900">Firefox data-transmission disclosure</h2>
+            <p class="mt-3">The Firefox package declares authentication information, browsing activity, and website content under Mozilla's data taxonomy. These cover the API token, current page URL, and user-selected page content sent to the EdgeEver instance chosen by the user. The project maintainers do not receive or retain this data.</p>
           </section>
 
           <section>

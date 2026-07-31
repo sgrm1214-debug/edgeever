@@ -317,6 +317,9 @@ export const NotebookPane = ({
   // Temporarily keep template actions out of the primary workspace navigation.
   const showTemplateEntry = true;
   const { isInstallable, install } = usePwaInstall();
+  const clipperInstallUrl = typeof navigator !== "undefined" && /Firefox\//.test(navigator.userAgent)
+    ? "https://github.com/tianma-if/edgeever/tree/main/apps/extension#firefox"
+    : "https://chromewebstore.google.com/detail/edgeever-web-clipper/gjadpfmanienmlofajibkfkkpfdkclgo";
   const notebookScrollRef = useRef<HTMLDivElement | null>(null);
   const notebookDragScrollFrameRef = useRef<number | null>(null);
   const [expandSiblingsRequest, setExpandSiblingsRequest] = useState<{ parentId: string | null; token: number } | null>(null);
@@ -582,7 +585,7 @@ export const NotebookPane = ({
           )}
           {demoMode && (
             <a
-              href="https://chromewebstore.google.com/detail/edgeever-web-clipper/gjadpfmanienmlofajibkfkkpfdkclgo"
+              href={clipperInstallUrl}
               target="_blank"
               rel="noreferrer"
               className="flex h-8 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium leading-none text-slate-500 transition-colors duration-200 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"

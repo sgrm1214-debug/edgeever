@@ -48,7 +48,7 @@ The public demo resets every Monday at 1:00 AM (China Standard Time) and restore
 - **Batch Operations & Flexible Sorting**: Easily merge or relocate multiple notes, with drag-and-drop notebook reordering.
 - **Offline Drafts & Queueing**: Draft and edit uninterrupted while offline; changes automatically sync once reconnected.
 - **Multi-Tenant Account Isolation**: Host multiple user accounts on a single instance with strictly partitioned spaces and clean admin account management.
-- **Everywhere You Need It**: Chrome/Edge Web Clipper published on Chrome Web Store; installable as a PWA; native Android app available on [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile), with APKs also downloadable from GitHub Releases; iOS app currently under App Store review; native desktop apps available for Apple Silicon and Intel Macs.
+- **Everywhere You Need It**: Chrome/Edge Web Clipper published on Chrome Web Store, with a Firefox-compatible build available from source; installable as a PWA; native Android app available on [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile), with APKs also downloadable from GitHub Releases; iOS app currently under App Store review; native desktop apps available for Apple Silicon and Intel Macs.
 
 ## Deployment
 
@@ -84,7 +84,7 @@ Complete setup in 4 simple web steps:
 
 ---
 
-> 💡 **Deployment Tip (Cloudflare R2 Billing)**: Although Cloudflare R2 offers a free tier, it requires binding a payment method (such as a dual-currency credit card) to activate. Based on personal experience, for users in mainland China, VISA cards from China Merchants Bank (CMB) or Shanghai Pudong Development Bank (SPDB) are typically the fastest to get verified (and most of these cards have no annual fees or easily waivable ones, so there are no extra holding costs).
+> 💡 **Deployment Tip (Cloudflare R2 Billing)**: Although Cloudflare R2 offers a generous free tier that note-taking workloads are unlikely to ever exceed, it requires binding a payment method (such as a dual-currency credit card) to activate. Based on personal experience, for users in mainland China, VISA cards from China Merchants Bank (CMB) or Shanghai Pudong Development Bank (SPDB) are typically the fastest to get verified (and most of these cards have no annual fees or easily waivable ones, so there are no extra holding costs).
 
 ## Multi-Account Login
 
@@ -99,11 +99,13 @@ EdgeEver can be installed as a PWA on desktop or mobile home screens. On desktop
 
 > Common pitfall: When installing the PWA on mobile, Chrome or Edge is recommended. Other mobile browsers may encounter compatibility issues or unexpected errors during installation.
 
-## Chrome/Edge Web Clipper
+## Browser Web Clipper
 
 The Chrome/Edge web clipper is officially published. You can install it directly from the link below (Microsoft Edge users can also install directly from the Chrome Web Store):
 
 - [Chrome Web Store Link](https://chromewebstore.google.com/detail/edgeever-web-clipper/gjadpfmanienmlofajibkfkkpfdkclgo)
+
+The same clipper code also supports Firefox. Until the Firefox Add-ons listing is published, see the [extension development guide](apps/extension/README.md#firefox) to build and temporarily load the Firefox package from source.
 
 ## Native Clients
 
@@ -118,7 +120,8 @@ The macOS app is available from [GitHub Releases](https://github.com/tianma-if/e
 - Frontend: Vite, React, React Router, TanStack Query, Tailwind CSS, shadcn/ui, and Radix UI.
 - Editor: TipTap / ProseMirror with Markdown support; PWA uses vite-plugin-pwa, Workbox, and Dexie.
 - Mobile app: Expo + React Native, with SQLite local storage and incremental sync.
-- Web clipper: Manifest V3, Mozilla Readability, and Turndown for Chrome and Microsoft Edge.
+- Native desktop app: Electron + Rust sidecar combines a consistent cross-platform experience with high-performance local data services; SQLite enables offline editing, incremental sync when back online, and local backups.
+- Web clipper: Manifest V3, Mozilla Readability, and Turndown for Chrome, Microsoft Edge, and Firefox.
 - Backend: Cloudflare Workers, Hono, Zod, D1, and R2, with REST API, OpenAPI, and Remote MCP.
 
 ## Quick Start
@@ -158,7 +161,7 @@ bun run build
 
 ```text
 apps/web          Vite + React frontend, PWA, offline drafts, and sync queue
-apps/extension    Chrome/Edge Manifest V3 web clipper
+apps/extension    Chrome/Edge/Firefox Manifest V3 web clipper
 apps/api          Cloudflare Worker + Hono API, OpenAPI, MCP endpoint
 apps/mobile       Expo + React Native mobile app
 apps/desktop      Electron desktop shell, preload bridge, and native packaging

@@ -1,6 +1,6 @@
 # EdgeEver Web Clipper
 
-Chrome/Edge Manifest V3 extension for saving the current webpage or selected text to a user's self-hosted EdgeEver instance.
+Chrome, Edge, and Firefox Manifest V3 extension for saving the current webpage or selected text to a user's self-hosted EdgeEver instance.
 
 ## Current MVP
 
@@ -14,11 +14,13 @@ The extension does not use a central relay service. The page content is sent dir
 
 ## Localization
 
-The extension uses Chrome's native `chrome.i18n` support. English is the fallback locale, and Simplified Chinese is available for browsers whose UI language is Chinese.
+The extension uses the cross-browser `chrome.i18n` compatibility namespace. English is the fallback locale, and Simplified Chinese is available for browsers whose UI language is Chinese.
 
 User-visible strings live in `public/_locales/<locale>/messages.json`. Add or update every supported locale when changing interface copy. Chrome Web Store listing translations are maintained separately in the developer dashboard; ready-to-paste English and Simplified Chinese copy is available in `STORE_LISTING.md`.
 
 ## Development
+
+### Chromium
 
 From the repository root:
 
@@ -27,5 +29,34 @@ bun run build:extension
 ```
 
 Then open `apps/extension/dist` from `chrome://extensions` or `edge://extensions` with Developer mode enabled and choose **Load unpacked**.
+
+### Firefox
+
+Firefox uses the same application code with a Firefox-specific generated manifest:
+
+```sh
+bun run build:extension:firefox
+bun run lint:extension:firefox
+```
+
+Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `apps/extension/dist-firefox/manifest.json`.
+
+To create the unsigned AMO submission archive after building and linting:
+
+```sh
+bun run package:extension:firefox
+```
+
+The archive is written to `apps/extension/web-ext-artifacts`. Firefox requires AMO signing for normal installation. The manifest supports Firefox Desktop 140 or later and Firefox for Android 142 or later so Mozilla's built-in data-transmission consent UI is available.
+
+## Firefox data disclosure
+
+The Firefox package declares the data types required by its user-triggered clipping function:
+
+- `authenticationInfo`: the API token sent directly to the user's EdgeEver instance.
+- `browsingActivity`: the URL of the page the user chooses to clip.
+- `websiteContent`: the selected text or extracted article content the user chooses to clip.
+
+No data is sent to an EdgeEver-operated relay, analytics service, or advertising service.
 
 The next planned step is preserving a single-file HTML archive in R2 while keeping extracted text in the memo for search.

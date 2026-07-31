@@ -66,6 +66,7 @@ import { EditorOutline } from "./EditorOutline";
 import { WeChatIcon } from "./WeChatIcon";
 import { ThemeToggle } from "./ThemeToggle";
 import { useTheme } from "./ThemeProvider";
+import { sanitizeAndScopeCss } from "@/lib/css-sandbox";
 import { RevisionHistoryDialog } from "./dialogs/RevisionHistoryDialog";
 import { api } from "@/lib/api";
 import { isDesktopResourceRuntime, stageDesktopResource, toDesktopResourceUrl } from "@/lib/desktop-resources";
@@ -1160,7 +1161,7 @@ const RichEditorPane = ({
   onRequestMobileNativeEdit,
 }: RichEditorPaneProps) => {
   const { t, i18n } = useTranslation();
-  const { customEditorTheme, editorTheme } = useTheme();
+  const { customEditorTheme, editorTheme, resolvedTheme } = useTheme();
   const queryClient = useQueryClient();
   const isSelectionMode = Boolean(selectionActionBar);
   const [title, setTitle] = useState("");
@@ -3196,20 +3197,38 @@ const RichEditorPane = ({
 
       <div
         ref={setEditorScrollContainerRef}
-        data-editor-theme={editorTheme}
-        style={editorTheme === "custom" ? {
-          "--editor-theme-bg": customEditorTheme.background,
-          "--editor-theme-text": customEditorTheme.text,
-          "--editor-theme-heading": customEditorTheme.heading,
-          "--editor-theme-accent": customEditorTheme.accent,
-          "--editor-theme-soft": customEditorTheme.soft,
-          "--editor-theme-border": customEditorTheme.border,
-        } as CSSProperties : undefined}
+        data-editor-theme={
+          editorTheme === "default" || editorTheme === "minimal-emerald" || editorTheme === "outline-emerald"
+            ? editorTheme
+            : "custom"
+        }
+        style={
+          editorTheme !== "default" && editorTheme !== "minimal-emerald" && editorTheme !== "outline-emerald"
+            ? {
+                "--editor-theme-bg": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).background,
+                "--editor-theme-text": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).text,
+                "--editor-theme-heading": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).heading,
+                "--editor-theme-accent": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).accent,
+                "--editor-theme-soft": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).soft,
+                "--editor-theme-border": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).border,
+              } as CSSProperties
+            : undefined
+        }
         className={cn(
           "edgeever-editor relative min-h-0 flex-1 bg-white",
           useMobilePlainTextEditor ? "overflow-visible" : "overflow-y-auto"
         )}
       >
+        {editorTheme !== "default" &&
+          editorTheme !== "minimal-emerald" &&
+          editorTheme !== "outline-emerald" &&
+          customEditorTheme.customCss && (
+            <style
+              data-theme-custom-css
+              data-original-css={customEditorTheme.customCss}
+              dangerouslySetInnerHTML={{ __html: sanitizeAndScopeCss(customEditorTheme.customCss) }}
+            />
+          )}
         <div
           className={cn(
             "flex min-h-full items-start gap-8 px-6 py-6 sm:px-10 transition-all duration-200",

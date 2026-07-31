@@ -9,6 +9,8 @@ node_modules/
 .idea/
 dist/
 build/
+apps/extension/dist-firefox/
+apps/extension/web-ext-artifacts/
 release/desktop/
 coverage/
 

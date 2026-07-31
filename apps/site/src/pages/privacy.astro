@@ -24,7 +24,7 @@ import Layout from "@/layouts/Layout.astro";
             <ul class="mt-3 list-disc space-y-2 pl-6">
               <li>移动 App 会处理用户主动提供的 EdgeEver 实例地址、用户名和密码，以登录用户指定的实例；登录后获得的会话凭据保存在设备安全存储中。</li>
               <li>笔记本、笔记、标签及附件会在用户设备和自托管实例之间传输。移动 App 会在设备的 SQLite 数据库和本地存储中保留必要的数据镜像、草稿、同步队列与偏好设置，以支持快速读取和离线编辑。</li>
-              <li>Web Clipper 会在用户主动保存时处理当前页面标题、网址、选中内容或提取的正文，并发送到用户配置的 EdgeEver 实例。实例地址、API Token 和默认笔记本设置保存在 Chrome 本地扩展存储中。</li>
+              <li>Web Clipper 会在用户主动保存时处理当前页面标题、网址、选中内容或提取的正文，并发送到用户配置的 EdgeEver 实例。实例地址、API Token 和默认笔记本设置保存在浏览器的本地扩展存储中。</li>
             </ul>
           </section>
 
@@ -54,6 +54,11 @@ import Layout from "@/layouts/Layout.astro";
           <section>
             <h2 class="text-xl font-bold text-slate-900">Chrome Web Store Limited Use</h2>
             <p class="mt-3">通过 Chrome API 获取的信息仅用于提供上述面向用户的网页剪藏功能。对这些信息的使用遵守 Chrome Web Store User Data Policy，包括 Limited Use 要求。</p>
+          </section>
+
+          <section>
+            <h2 class="text-xl font-bold text-slate-900">Firefox 数据传输声明</h2>
+            <p class="mt-3">Firefox 版本会按 Mozilla 的数据分类声明认证信息、浏览活动和网页内容。具体包括发送到用户自选 EdgeEver 实例的 API Token、当前页面网址以及用户主动选择保存的网页内容。项目维护者不会接收或保留这些数据。</p>
           </section>
 
           <section>

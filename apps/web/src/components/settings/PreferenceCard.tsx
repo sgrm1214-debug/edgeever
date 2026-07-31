@@ -1,5 +1,5 @@
 import { ChartNoAxesCombined, Image, Languages, Palette, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { writeSyncIntervalPreference, type ShortcutSettings, type SyncIntervalPreference } from "@/lib/app-helpers";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,13 @@ import {
 } from "@/i18n";
 import { ShortcutSettingsItem } from "./ShortcutSettingsItem";
 import { CustomEditorThemeDialog } from "./CustomEditorThemeDialog";
-import { EDITOR_THEME_NAMES, MERMAID_THEME_NAMES, useTheme } from "../ThemeProvider";
+import {
+  MERMAID_THEME_NAMES,
+  useTheme,
+  DEFAULT_CUSTOM_LIGHT_COLORS,
+  DEFAULT_CUSTOM_DARK_COLORS,
+  type CustomEditorTheme,
+} from "../ThemeProvider";
 
 interface PreferenceCardProps {
   imageCompressionEnabled: boolean;
@@ -35,9 +41,64 @@ export const PreferenceCard = ({
   onShortcutSettingsChange,
 }: PreferenceCardProps) => {
   const { t } = useTranslation();
-  const { editorTheme, mermaidTheme, customEditorTheme, setCustomEditorTheme, setEditorTheme, setMermaidTheme } = useTheme();
+  const {
+    editorTheme,
+    mermaidTheme,
+    customEditorThemes,
+    setCustomEditorThemes,
+    setEditorTheme,
+    setMermaidTheme,
+  } = useTheme();
   const [customThemeDialogOpen, setCustomThemeDialogOpen] = useState(false);
+  const [editingTheme, setEditingTheme] = useState<CustomEditorTheme | null>(null);
   const [activeLocalePreference, setActiveLocalePreference] = useState<AppLocalePreference>(() => getAppLocalePreference());
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    setIsMobile(mediaQuery.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  const activeCustom = customEditorThemes.find((t) => t.id === editorTheme);
+  const isPreset = editorTheme === "default" || editorTheme === "minimal-emerald" || editorTheme === "outline-emerald";
+
+  const handleEditClick = () => {
+    if (activeCustom) {
+      setEditingTheme(activeCustom);
+    } else {
+      const newTheme: CustomEditorTheme = {
+        id: `custom-${Date.now()}`,
+        name: `New theme ${customEditorThemes.length + 1}`,
+        light: DEFAULT_CUSTOM_LIGHT_COLORS,
+        dark: DEFAULT_CUSTOM_DARK_COLORS,
+      };
+      setEditingTheme(newTheme);
+    }
+    setCustomThemeDialogOpen(true);
+  };
+
+  const handleSaveTheme = (saved: CustomEditorTheme) => {
+    const exists = customEditorThemes.some((t) => t.id === saved.id);
+    let nextThemes: CustomEditorTheme[];
+    if (exists) {
+      nextThemes = customEditorThemes.map((t) => (t.id === saved.id ? saved : t));
+    } else {
+      nextThemes = [...customEditorThemes, saved];
+    }
+    setCustomEditorThemes(nextThemes);
+    setEditorTheme(saved.id);
+  };
+
+  const handleDeleteTheme = (idToDelete: string) => {
+    const nextThemes = customEditorThemes.filter((t) => t.id !== idToDelete);
+    setCustomEditorThemes(nextThemes);
+    if (editorTheme === idToDelete) {
+      setEditorTheme("default");
+    }
+  };
 
   const handleLocalePreferenceChange = (preference: AppLocalePreference) => {
     setActiveLocalePreference(preference);
@@ -93,21 +154,51 @@ export const PreferenceCard = ({
             </div>
           </div>
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-80 sm:flex-row">
-            <Select value={editorTheme} onValueChange={(value) => setEditorTheme(value as typeof editorTheme)}>
+            <Select
+              value={isMobile && !isPreset ? "default" : editorTheme}
+              onValueChange={(value) => {
+                if (value === "create-new") {
+                  const newTheme: CustomEditorTheme = {
+                    id: `custom-${Date.now()}`,
+                    name: `New theme ${customEditorThemes.length + 1}`,
+                    light: DEFAULT_CUSTOM_LIGHT_COLORS,
+                    dark: DEFAULT_CUSTOM_DARK_COLORS,
+                  };
+                  setEditingTheme(newTheme);
+                  setCustomThemeDialogOpen(true);
+                } else {
+                  setEditorTheme(value);
+                }
+              }}
+            >
               <SelectTrigger aria-label={t("settings.editorThemeTitle")} className="h-9 w-full min-w-0 flex-1 bg-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {EDITOR_THEME_NAMES.map((theme) => (
-                  <SelectItem key={theme} value={theme}>
-                    {theme === "custom" ? customEditorTheme.name : t(`settings.editorThemes.${theme}`)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="default">{t("settings.editorThemes.default")}</SelectItem>
+                <SelectItem value="minimal-emerald">{t("settings.editorThemes.minimal-emerald")}</SelectItem>
+                <SelectItem value="outline-emerald">{t("settings.editorThemes.outline-emerald")}</SelectItem>
+                {!isMobile && (
+                  <>
+                    {customEditorThemes.length > 0 && <div className="my-1 border-t border-slate-100" />}
+                    {customEditorThemes.map((theme) => (
+                      <SelectItem key={theme.id} value={theme.id}>
+                        {theme.name}
+                      </SelectItem>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                    <SelectItem value="create-new" className="text-emerald-700 font-medium">
+                      + {t("settings.customEditorTheme.create", "Create New Theme...")}
+                    </SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="h-9 shrink-0 px-3 text-sm" onClick={() => setCustomThemeDialogOpen(true)}>
-              {t("settings.customEditorTheme.edit")}
-            </Button>
+            {!isMobile && (
+              <Button variant="outline" className="h-9 shrink-0 px-3 text-sm" onClick={handleEditClick}>
+                {activeCustom ? t("settings.customEditorTheme.edit") : t("settings.customEditorTheme.customize", "Customize")}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -193,12 +284,16 @@ export const PreferenceCard = ({
           />
         </div>
       </CardContent>
-      <CustomEditorThemeDialog
-        open={customThemeDialogOpen}
-        theme={customEditorTheme}
-        onOpenChange={setCustomThemeDialogOpen}
-        onSave={(theme) => { setCustomEditorTheme(theme); setEditorTheme("custom"); }}
-      />
+      {!isMobile && editingTheme && (
+        <CustomEditorThemeDialog
+          open={customThemeDialogOpen}
+          theme={editingTheme}
+          onOpenChange={setCustomThemeDialogOpen}
+          onSave={handleSaveTheme}
+          onDelete={handleDeleteTheme}
+          isDefaultTheme={editingTheme.id === "custom-default"}
+        />
+      )}
     </Card>
   );
 };

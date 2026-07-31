@@ -1,10 +1,28 @@
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
+import extensionPackage from "./package.json";
+import { buildExtensionManifest, type ExtensionTarget } from "./manifest";
+
+const target: ExtensionTarget = process.env.EDGE_EVER_EXTENSION_TARGET === "firefox"
+  ? "firefox"
+  : "chromium";
 
 export default defineConfig({
-  root: "apps/extension",
+  root: fileURLToPath(new URL(".", import.meta.url)),
+  plugins: [
+    {
+      name: "edgeever-extension-manifest",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "manifest.json",
+          source: `${JSON.stringify(buildExtensionManifest(target, extensionPackage.version), null, 2)}\n`,
+        });
+      },
+    },
+  ],
   build: {
-    outDir: "dist",
+    outDir: target === "firefox" ? "dist-firefox" : "dist",
     emptyOutDir: true,
     rollupOptions: {
       input: {

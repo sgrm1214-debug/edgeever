@@ -135,8 +135,8 @@ export const siteCopy = {
       items: [
         {
           tag: "剪藏插件",
-          title: "Chrome & Edge 插件",
-          desc: "官方商店一键安装，智能剪藏网页全文、选中文本与书签",
+          title: "Chrome、Edge 与 Firefox",
+          desc: "Chrome 官方商店版本与 Firefox 兼容构建，智能剪藏网页全文、选中文本与书签",
           icon: "bx:bx-extension",
           color: "from-emerald-500/10 to-teal-500/5",
         },
@@ -388,8 +388,8 @@ export const siteCopy = {
       items: [
         {
           tag: "Web Clipper",
-          title: "Chrome & Edge Extension",
-          desc: "Official Web Store extension to clip articles, selections, and bookmarks",
+          title: "Chrome, Edge & Firefox",
+          desc: "Chrome Web Store release and Firefox-compatible build for clipping articles, selections, and bookmarks",
           icon: "bx:bx-extension",
           color: "from-emerald-500/10 to-teal-500/5",
         },

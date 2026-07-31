@@ -27,7 +27,7 @@ const describeCaptureError = (error: unknown) => {
   if (message === t("captureTimeout")) {
     return message;
   }
-  if (/cannot access (contents|a page)|extensions gallery|chrome:\/\/|edge:\/\/|about:\/\//i.test(message)) {
+  if (/cannot access (contents|a page)|missing host permission|extensions gallery|chrome:\/\/|edge:\/\/|about:\/\//i.test(message)) {
     return t("pageAccessDenied");
   }
   return t("captureScriptFailed", message || t("captureUnknownError"));

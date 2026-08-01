@@ -92,6 +92,11 @@ import {
   replaceLocalMemoId,
 } from "@/lib/local-mirror";
 import { createRepository } from "@/lib/repository";
+import {
+  BACKGROUND_WORKSPACE_REFRESH_INTERVAL_MS,
+  refreshWorkspaceData,
+  type WorkspaceRefreshMode,
+} from "@/lib/workspace-refresh";
 
 const isDesktopViewport = () => window.matchMedia("(min-width: 1024px)").matches;
 const PULL_TO_REFRESH_TRIGGER_PX = 72;
@@ -887,6 +892,40 @@ export const WorkspaceApp = ({
     }
   }, [isOnline, queryClient]);
 
+  const invalidateWorkspaceQueries = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["memos"] }),
+      queryClient.invalidateQueries({ queryKey: ["memo"] }),
+      queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+      queryClient.invalidateQueries({ queryKey: ["tags"] }),
+      queryClient.invalidateQueries({ queryKey: ["resources"], refetchType: "all" }),
+    ]);
+  }, [queryClient]);
+
+  const refreshWorkspaceFromServer = useCallback(async (mode: WorkspaceRefreshMode) => {
+    if (isBrowserOffline()) {
+      setIsOnline(false);
+      return { changed: 0, skipped: true };
+    }
+
+    const isDesktopRuntime = Boolean(window.edgeeverDesktop?.isAvailable);
+
+    return refreshWorkspaceData({
+      mode,
+      hasPendingLocalChanges: syncSummary.total > 0,
+      // Desktop sync already pushes the outbox and pulls remote changes in
+      // one operation. The web repository keeps those phases separate.
+      pushLocalChanges: isDesktopRuntime ? async () => undefined : runQueuedSync,
+      pullRemoteChanges: isDesktopRuntime
+        ? async () => {
+            await runQueuedSync();
+            return { changed: 0 };
+          }
+        : repository.sync,
+      invalidateWorkspaceQueries,
+    });
+  }, [invalidateWorkspaceQueries, repository, runQueuedSync, syncSummary.total]);
+
   const refreshLatestMemos = useCallback(async () => {
     if (isBrowserOffline()) {
       setIsOnline(false);
@@ -897,16 +936,12 @@ export const WorkspaceApp = ({
     setIsPullRefreshing(true);
 
     try {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["memos"] }),
-        queryClient.invalidateQueries({ queryKey: ["memo"] }),
-        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
-      ]);
+      await refreshWorkspaceFromServer("manual");
     } finally {
       setIsPullRefreshing(false);
       setPullToRefreshDistance(0);
     }
-  }, [isOnline, localDataScope, queryClient]);
+  }, [refreshWorkspaceFromServer]);
 
   const syncMemosManually = useCallback(async () => {
     if (isBrowserOffline()) {
@@ -917,17 +952,11 @@ export const WorkspaceApp = ({
     setIsManualMemoSyncing(true);
 
     try {
-      await runQueuedSync();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["memos"] }),
-        queryClient.invalidateQueries({ queryKey: ["memo"] }),
-        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
-        queryClient.invalidateQueries({ queryKey: ["resources"], refetchType: "all" }),
-      ]);
+      await refreshWorkspaceFromServer("manual");
     } finally {
       setIsManualMemoSyncing(false);
     }
-  }, [queryClient, runQueuedSync]);
+  }, [refreshWorkspaceFromServer]);
 
   const notebooksQuery = useQuery({
     queryKey: ["notebooks"],
@@ -947,14 +976,7 @@ export const WorkspaceApp = ({
 
     const refreshLocalMirror = async () => {
       try {
-        const result = await repository.sync();
-        if (!cancelled && result.changed > 0) {
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
-            queryClient.invalidateQueries({ queryKey: ["memos"] }),
-            queryClient.invalidateQueries({ queryKey: ["memo"] }),
-          ]);
-        }
+        if (!cancelled) await refreshWorkspaceFromServer("background");
       } catch {
         // The existing remote queries remain the safe fallback when local
         // mirror sync is unavailable (for example before login or offline).
@@ -996,7 +1018,7 @@ export const WorkspaceApp = ({
       }
       window.removeEventListener("online", handleOnline);
     };
-  }, [queryClient, repository]);
+  }, [refreshWorkspaceFromServer]);
 
   const savedTemplates = templatesQuery.data?.templates ?? [];
 
@@ -1356,13 +1378,7 @@ export const WorkspaceApp = ({
 
       if (shouldRefresh) {
         setPullToRefreshDistance(PULL_TO_REFRESH_TRIGGER_PX);
-        if (isStandaloneRuntime) {
-          void refreshLatestMemos();
-          return;
-        }
-
-        setIsPullRefreshing(true);
-        window.location.reload();
+        void refreshLatestMemos();
       }
     };
 
@@ -1377,7 +1393,7 @@ export const WorkspaceApp = ({
       document.removeEventListener("touchend", handleTouchEnd);
       document.removeEventListener("touchcancel", reset);
     };
-  }, [isStandaloneRuntime, mobilePullToRefreshActive, refreshLatestMemos]);
+  }, [mobilePullToRefreshActive, refreshLatestMemos]);
 
   useEffect(() => {
     let active = true;
@@ -1386,7 +1402,9 @@ export const WorkspaceApp = ({
       if (!active) return;
       setIsOnline(online);
       if (online) {
-        void runQueuedSync();
+        void refreshWorkspaceFromServer("manual").catch(() => {
+          // Keep the current local mirror available when reconnect sync fails.
+        });
       }
     };
 
@@ -1399,7 +1417,7 @@ export const WorkspaceApp = ({
       window.removeEventListener("online", updateOnlineState);
       window.removeEventListener("offline", updateOnlineState);
     };
-  }, [runQueuedSync]);
+  }, [refreshWorkspaceFromServer]);
 
   useEffect(() => {
     runQueuedSyncRef.current = runQueuedSync;
@@ -1449,29 +1467,28 @@ export const WorkspaceApp = ({
   }, [syncIntervalMs]);
 
   useEffect(() => {
-    if (!isStandaloneRuntime) {
-      return;
-    }
-
-    const refreshWorkspaceQueries = () => {
+    const refreshVisibleWorkspace = () => {
       if (document.visibilityState === "hidden" || isBrowserOffline()) {
         return;
       }
 
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["memos"] }),
-        queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
-      ]);
+      void refreshWorkspaceFromServer("background").catch(() => {
+        // A later focus, visibility, or interval refresh will retry.
+      });
     };
 
-    window.addEventListener("pageshow", refreshWorkspaceQueries);
-    document.addEventListener("visibilitychange", refreshWorkspaceQueries);
+    const intervalId = window.setInterval(refreshVisibleWorkspace, BACKGROUND_WORKSPACE_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refreshVisibleWorkspace);
+    window.addEventListener("pageshow", refreshVisibleWorkspace);
+    document.addEventListener("visibilitychange", refreshVisibleWorkspace);
 
     return () => {
-      window.removeEventListener("pageshow", refreshWorkspaceQueries);
-      document.removeEventListener("visibilitychange", refreshWorkspaceQueries);
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshVisibleWorkspace);
+      window.removeEventListener("pageshow", refreshVisibleWorkspace);
+      document.removeEventListener("visibilitychange", refreshVisibleWorkspace);
     };
-  }, [isStandaloneRuntime, queryClient]);
+  }, [refreshWorkspaceFromServer]);
 
   useEffect(() => {
     if (syncSummary.total === 0) {

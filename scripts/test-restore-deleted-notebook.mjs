@@ -71,6 +71,7 @@ const createEnv = () => {
     sqlite,
     env: {
       DB: new SqliteD1Database(sqlite),
+      EDGE_EVER_ALLOW_UNAUTHENTICATED: "true",
       RESOURCES: {
         delete: async () => undefined,
         get: async () => null,

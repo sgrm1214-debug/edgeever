@@ -775,7 +775,7 @@ export const enUS = {
     subtitle: "AI Agent powered migration that preserves notebook stack hierarchy",
   },
   evernoteImport: {
-    title: "Import Evernote, Notion, and Memos",
+    title: "Import Evernote, flomo, Notion, and Memos",
     guide: "View migration guide",
     openGuideAria: "Open the Evernote migration guide in a new tab",
     description: "Migrate notes from third-party platforms with recommended MCP and AI Agent batch import.",

@@ -4,6 +4,8 @@ const storage = new Map();
 const calls = [];
 const events = [];
 let completeSave;
+let secureSessionToken = "";
+let failSecureSessionWrite = false;
 
 globalThis.window = {
   edgeeverDesktop: {
@@ -20,6 +22,16 @@ globalThis.window = {
       });
       calls.push(["bridge:complete", value]);
       return value;
+    },
+    getSessionToken: () => secureSessionToken,
+    setSessionToken: async (value) => {
+      if (failSecureSessionWrite) throw new Error("secure storage unavailable");
+      secureSessionToken = value;
+      return { stored: Boolean(value) };
+    },
+    clearSessionToken: async () => {
+      secureSessionToken = "";
+      return { stored: false };
     },
   },
   localStorage: {
@@ -42,6 +54,7 @@ const {
   DESKTOP_API_BASE_URL_STORAGE_KEY,
   api,
   cacheDesktopSession,
+  clearCachedDesktopSession,
   getConfiguredDesktopApiBaseUrl,
   getCachedDesktopSession,
   saveDesktopApiBaseUrl,
@@ -70,7 +83,7 @@ describe("desktop instance setup", () => {
     calls.length = 0;
     window.edgeeverDesktop.apiBaseUrl = "https://notes.example.com";
     storage.set(DESKTOP_API_BASE_URL_STORAGE_KEY, "https://notes.example.com");
-    cacheDesktopSession({
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -94,8 +107,8 @@ describe("desktop instance setup", () => {
     window.edgeeverDesktop.apiBaseUrl = "";
   });
 
-  test("preserves the desktop token when refreshing the same authenticated session", () => {
-    cacheDesktopSession({
+  test("preserves the desktop token when refreshing the same authenticated session", async () => {
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -103,7 +116,7 @@ describe("desktop instance setup", () => {
       user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
     });
 
-    cacheDesktopSession({
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -114,13 +127,12 @@ describe("desktop instance setup", () => {
       authRequired: true,
       authenticated: true,
       demoMode: false,
-      sessionToken: "desktop-session-token",
       user: { id: "user-1", username: "admin", displayName: "Owner", role: "owner" },
     });
   });
 
-  test("does not carry a desktop token into a different account session", () => {
-    cacheDesktopSession({
+  test("does not carry a desktop token into a different account session", async () => {
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -128,7 +140,7 @@ describe("desktop instance setup", () => {
       user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
     });
 
-    cacheDesktopSession({
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -138,11 +150,114 @@ describe("desktop instance setup", () => {
     expect(getCachedDesktopSession()?.sessionToken).toBeUndefined();
   });
 
+  test("migrates a legacy localStorage token into desktop secure storage", async () => {
+    clearCachedDesktopSession();
+    await Promise.resolve();
+    storage.set("edgeever.desktop.session", JSON.stringify({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "legacy-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    }));
+
+    const requests = [];
+    globalThis.fetch = async (_url, init) => {
+      requests.push(new Headers(init?.headers).get("Authorization"));
+      return Response.json({
+        authRequired: true,
+        authenticated: true,
+        demoMode: false,
+        user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+      });
+    };
+
+    const session = await api.getSession();
+    await cacheDesktopSession(session);
+
+    expect(requests).toEqual(["Bearer legacy-session-token"]);
+    expect(secureSessionToken).toBe("legacy-session-token");
+    expect(getCachedDesktopSession()?.sessionToken).toBeUndefined();
+  });
+
+  test("keeps a localStorage fallback when secure token persistence fails", async () => {
+    failSecureSessionWrite = true;
+    await cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "fallback-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+    failSecureSessionWrite = false;
+
+    expect(getCachedDesktopSession()?.sessionToken).toBe("fallback-session-token");
+  });
+
+  test("keeps secure credentials out of unauthenticated session snapshots", async () => {
+    await cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "desktop-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+    await Promise.resolve();
+
+    await cacheDesktopSession({
+      authRequired: true,
+      authenticated: false,
+      demoMode: false,
+      user: null,
+    });
+
+    expect(secureSessionToken).toBe("desktop-session-token");
+    expect(getCachedDesktopSession()).toEqual({
+      authRequired: true,
+      authenticated: false,
+      demoMode: false,
+      user: null,
+    });
+  });
+
+  test("clears a secure token only after the server rejects that exact credential", async () => {
+    events.length = 0;
+    await cacheDesktopSession({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "rejected-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+    await Promise.resolve();
+
+    globalThis.fetch = async () => Response.json({
+      authRequired: true,
+      authenticated: false,
+      demoMode: false,
+      user: null,
+    });
+
+    await expect(api.getSession()).resolves.toMatchObject({ authenticated: false });
+    await Promise.resolve();
+    expect(secureSessionToken).toBe("");
+    expect(events).toEqual(["edgeever:unauthorized"]);
+
+    globalThis.fetch = async () => Response.json({
+      authRequired: true,
+      authenticated: true,
+      demoMode: false,
+      sessionToken: "replacement-session-token",
+      user: { id: "user-1", username: "admin", displayName: null, role: "owner" },
+    });
+    await cacheDesktopSession(await api.login({ username: "admin", password: "secret" }));
+  });
+
   test("uses the desktop session token and stops network retries after a 401", async () => {
     calls.length = 0;
     events.length = 0;
     storage.set(DESKTOP_API_BASE_URL_STORAGE_KEY, "https://notes.example.com");
-    cacheDesktopSession({
+    await cacheDesktopSession({
       authRequired: true,
       authenticated: true,
       demoMode: false,
@@ -181,7 +296,7 @@ describe("desktop instance setup", () => {
     };
 
     const replacement = await api.login({ username: "admin", password: "secret" });
-    cacheDesktopSession(replacement);
+    await cacheDesktopSession(replacement);
     await api.syncBootstrap({ limit: 200 });
 
     expect(requests.at(-1)).toEqual({

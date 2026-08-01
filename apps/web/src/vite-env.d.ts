@@ -12,6 +12,9 @@ interface EdgeEverDesktopBridge {
   isAvailable: boolean;
   apiBaseUrl: string;
   setApiBaseUrl(value: string): Promise<string>;
+  getSessionToken(): string;
+  setSessionToken(value: string): Promise<{ stored: boolean }>;
+  clearSessionToken(): Promise<{ stored: false }>;
   sidecarStatus(): Promise<{ available: boolean; path: string; scope: string }>;
   setAccountScope(accountId: string | null): Promise<{ ready: true; scope: string }>;
   updateStatus(): Promise<{ state: "idle" | "available" | "downloaded" }>;

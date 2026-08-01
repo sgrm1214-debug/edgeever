@@ -112,6 +112,7 @@ import { downloadMarkdownFile } from "@/lib/note-markdown-export";
 import { openNotePrintPreview, serializeNoteDocumentForPrint } from "@/lib/note-print";
 import { isBrowserOffline } from "@/lib/network-status";
 import { shouldOpenEditorLink } from "@/lib/editor-link-click";
+import { processFilesSequentially } from "@/lib/file-batch";
 
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const MOBILE_EDITOR_QUERY = "(max-width: 639px)";
@@ -1343,70 +1344,74 @@ const RichEditorPane = ({
     void (async () => {
       setImageUploadState("uploading");
 
-      try {
-        for (const file of files) {
-          const isImage = SUPPORTED_PASTE_IMAGE_TYPES.has(file.type);
-          const shouldCompress = isImage && imageCompressionEnabledRef.current;
-          setImageUploadState(shouldCompress ? "compressing" : "uploading");
-          const uploadFile = shouldCompress ? (await compressImageForUpload(file)).file : file;
+      const results = await processFilesSequentially(files, async (file) => {
+        const isImage = SUPPORTED_PASTE_IMAGE_TYPES.has(file.type);
+        const shouldCompress = isImage && imageCompressionEnabledRef.current;
+        setImageUploadState(shouldCompress ? "compressing" : "uploading");
+        const uploadFile = shouldCompress ? (await compressImageForUpload(file)).file : file;
 
-          setImageUploadState("uploading");
-          let resource: { kind: "image" | "attachment"; filename: string | null; url: string };
-          try {
-            const uploadedResource = (await repository.uploadMemoResource(targetMemoId, uploadFile)).resource;
-            resource = { ...uploadedResource, url: toDesktopResourceUrl(uploadedResource.url) };
-          } catch (error) {
-            if (!isDesktopResourceRuntime()) throw error;
-            const staged = await stageDesktopResource(targetMemoId, uploadFile);
-            if (!staged) throw error;
-            resource = {
-              kind: isImage ? "image" : "attachment",
-              filename: uploadFile.name,
-              url: `edgeever-staged://${staged.id}`,
-            };
-          }
-          void queryClient.invalidateQueries({ queryKey: ["resources"] });
+        setImageUploadState("uploading");
+        let resource: { kind: "image" | "attachment"; filename: string | null; url: string };
+        try {
+          const uploadedResource = (await repository.uploadMemoResource(targetMemoId, uploadFile)).resource;
+          resource = { ...uploadedResource, url: toDesktopResourceUrl(uploadedResource.url) };
+        } catch (error) {
+          if (!isDesktopResourceRuntime()) throw error;
+          const staged = await stageDesktopResource(targetMemoId, uploadFile);
+          if (!staged) throw error;
+          resource = {
+            kind: isImage ? "image" : "attachment",
+            filename: uploadFile.name,
+            url: `edgeever-staged://${staged.id}`,
+          };
+        }
+        return resource;
+      });
 
-          const activeEditor = editorRef.current;
-          if (memoRef.current?.id !== targetMemoId || !isEditorReady(activeEditor)) {
-            setImageUploadState("idle");
-            return;
-          }
+      const successfulResults = results.filter((result) => result.status === "fulfilled");
+      if (successfulResults.length > 0) {
+        void queryClient.invalidateQueries({ queryKey: ["resources"] });
+      }
 
-          if (resource.kind === "image") {
-            activeEditor
-              .chain()
-              .focus()
-              .setImage({
+      const activeEditor = editorRef.current;
+      if (memoRef.current?.id !== targetMemoId || !isEditorReady(activeEditor)) {
+        setImageUploadState("idle");
+        return;
+      }
+
+      const content = successfulResults.map(({ file, value: resource }) =>
+        resource.kind === "image"
+          ? {
+              type: "image",
+              attrs: {
                 src: resource.url,
                 alt: file.name,
                 title: file.name,
                 width: DEFAULT_IMAGE_WIDTH_PERCENT,
-              })
-              .run();
-          } else {
-            activeEditor
-              .chain()
-              .focus()
-              .insertContent({
-                type: "paragraph",
-                content: [{
-                  type: "text",
-                  text: t("editor.attachmentLabel", { filename: resource.filename || file.name }),
-                  marks: [{
-                    type: "link",
-                    attrs: { href: resource.url, target: "_blank", class: "edgeever-attachment-link" },
-                  }],
+              },
+            }
+          : {
+              type: "paragraph",
+              content: [{
+                type: "text",
+                text: t("editor.attachmentLabel", { filename: resource.filename || file.name }),
+                marks: [{
+                  type: "link",
+                  attrs: { href: resource.url, target: "_blank", class: "edgeever-attachment-link" },
                 }],
-              })
-              .run();
-          }
-        }
+              }],
+            }
+      );
 
-        setImageUploadState("idle");
-      } catch {
+      if (content.length > 0) {
+        activeEditor.chain().focus().insertContent(content).run();
+      }
+
+      if (results.some((result) => result.status === "rejected")) {
         setImageUploadState("error");
         window.setTimeout(() => setImageUploadState("idle"), 2200);
+      } else {
+        setImageUploadState("idle");
       }
     })();
   }, [queryClient, repository, t]);

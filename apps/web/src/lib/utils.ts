@@ -29,12 +29,23 @@ export const buildNotebookTree = (notebooks: Notebook[], compareNodes: NotebookN
     }
   }
 
-  const sortNodes = (items: NotebookNode[]) => {
+  const rollUpAndSortNodes = (items: NotebookNode[]) => {
+    for (const item of items) {
+      rollUpAndSortNodes(item.children);
+
+      for (const child of item.children) {
+        item.memoCount += child.memoCount;
+
+        if (child.lastMemoUpdatedAt && (!item.lastMemoUpdatedAt || child.lastMemoUpdatedAt > item.lastMemoUpdatedAt)) {
+          item.lastMemoUpdatedAt = child.lastMemoUpdatedAt;
+        }
+      }
+    }
+
     items.sort(compareNodes);
-    items.forEach((item) => sortNodes(item.children));
   };
 
-  sortNodes(roots);
+  rollUpAndSortNodes(roots);
   return roots;
 };
 

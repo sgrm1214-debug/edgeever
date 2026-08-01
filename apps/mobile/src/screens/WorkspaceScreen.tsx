@@ -157,7 +157,7 @@ const MOBILE_LOCALE_OPTIONS: Array<{ label: string; value: MobileLocalePreferenc
   { label: "English", value: "en-US" },
 ];
 type MobileView = "notes" | "settings";
-type SettingsTab = "general" | "account";
+type SettingsTab = "general" | "account" | "system";
 type MemoView = "notebook" | "trash";
 type NotebookOption = {
   notebook: Notebook;
@@ -1895,7 +1895,11 @@ const SettingsView = ({
     { key: "general", label: "常规设置", icon: <SlidersHorizontal color="#059669" size={17} /> },
     { key: "account", label: "登录设置", icon: <ShieldCheck color="#059669" size={17} /> },
   ];
-  const title = tabs.find((tab) => tab.key === activeTab)?.label ?? "我的";
+  const systemInfoCopy = getMobileSystemInfoText(localePreference);
+  const activeTabItem = activeTab === "system"
+    ? { label: systemInfoCopy.title, icon: <Info color="#059669" size={17} /> }
+    : tabs.find((tab) => tab.key === activeTab);
+  const title = activeTabItem?.label ?? "我的";
   const activeLocaleLabel = MOBILE_LOCALE_OPTIONS.find((option) => option.value === localePreference)?.label ?? "跟随系统";
   const openLocalePicker = () => {
     localeSelectRef.current?.measureInWindow((left, top, width, height) => {
@@ -1921,6 +1925,13 @@ const SettingsView = ({
   }, [activeTab, onClose]);
 
   const renderContent = () => {
+    if (activeTab === "system") {
+      return (
+        <View style={styles.settingsDetailList}>
+          <SystemInfoCard defaultExpanded />
+        </View>
+      );
+    }
     if (activeTab === "general") {
       return (
         <View style={styles.settingsDetailList}>
@@ -1948,7 +1959,6 @@ const SettingsView = ({
                 </View>
               </View>
             </View>
-            <SystemInfoCard embedded />
           </SettingsGroup>
         </View>
       );
@@ -1987,7 +1997,7 @@ const SettingsView = ({
           <ChevronLeft color="#64748b" size={21} />
         </Pressable>
         <View style={styles.settingsHeaderTitle}>
-          {activeTab ? tabs.find((tab) => tab.key === activeTab)?.icon : <UserRound color="#047857" size={17} />}
+          {activeTab ? activeTabItem?.icon : <UserRound color="#047857" size={17} />}
           <Text numberOfLines={1} style={styles.settingsTitle}>{title}</Text>
         </View>
         <Pressable
@@ -2015,7 +2025,17 @@ const SettingsView = ({
               ))}
             </View>
             <View style={styles.settingsMenu}>
-              <Pressable accessibilityRole="link" onPress={openFeedback} style={styles.settingsMenuRow}>
+              <Pressable accessibilityRole="button" onPress={() => setActiveTab("system")} style={styles.settingsMenuRow}>
+                <View style={styles.settingsMenuLabel}>
+                  <View style={styles.settingsMenuIcon}><Info color="#059669" size={17} /></View>
+                  <View style={styles.settingsFeedbackCopy}>
+                    <Text style={styles.settingsMenuText}>{systemInfoCopy.title}</Text>
+                    <Text style={styles.settingsFeedbackDescription}>{systemInfoCopy.description}</Text>
+                  </View>
+                </View>
+                <ChevronRight color="#94a3b8" size={17} />
+              </Pressable>
+              <Pressable accessibilityRole="link" onPress={openFeedback} style={[styles.settingsMenuRow, styles.settingsMenuRowBorder]}>
                 <View style={styles.settingsMenuLabel}>
                   <View style={[styles.settingsMenuIcon, styles.settingsFeedbackIcon]}><MessageSquare color="#64748b" size={17} /></View>
                   <View style={styles.settingsFeedbackCopy}>
@@ -2523,9 +2543,9 @@ const CreateMemoModal = ({
   );
 };
 
-const SystemInfoCard = ({ embedded = false }: { embedded?: boolean }) => {
+const SystemInfoCard = ({ defaultExpanded = false }: { defaultExpanded?: boolean }) => {
   const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const { checkForUpdate, hasUpdate, status } = useMobileUpdate();
   const localePreference = useMobileLocalePreference();
   const copy = getMobileSystemInfoText(localePreference);
@@ -2538,7 +2558,7 @@ const SystemInfoCard = ({ embedded = false }: { embedded?: boolean }) => {
   };
 
   return (
-    <View style={[styles.settingsGroup, embedded && styles.settingsEmbeddedSection]}>
+    <View style={styles.settingsGroup}>
       <Pressable accessibilityState={{ expanded }} onPress={() => setExpanded((value) => !value)} style={styles.settingsAccordionHeader}>
         <View style={styles.settingsLinkCopy}>
           <View style={styles.settingsGroupHeader}>
@@ -5061,14 +5081,6 @@ const baseWorkspaceStyles = StyleSheet.create({
     borderWidth: 0,
   },
   settingsAiEmbeddedCard: {
-    borderBottomWidth: 0,
-    borderLeftWidth: 0,
-    borderRadius: 0,
-    borderRightWidth: 0,
-    borderTopColor: "#f1f5f9",
-    borderTopWidth: 1,
-  },
-  settingsEmbeddedSection: {
     borderBottomWidth: 0,
     borderLeftWidth: 0,
     borderRadius: 0,

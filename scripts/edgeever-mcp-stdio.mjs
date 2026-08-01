@@ -33,6 +33,7 @@ try {
 
 let inputBuffer = Buffer.alloc(0);
 let transportMode = null;
+let negotiatedProtocolVersion = null;
 
 process.stdin.on("data", (chunk) => {
   inputBuffer = Buffer.concat([inputBuffer, chunk]);
@@ -103,16 +104,22 @@ async function handleMessage(payload) {
 }
 
 async function forwardToEdgeEver(request) {
+  if (request?.method === "initialize") {
+    negotiatedProtocolVersion = request?.params?.protocolVersion || "2025-11-25";
+  }
+
   const response = await fetch(`${client.baseUrl}/mcp`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${client.token}`,
+      Accept: "application/json, text/event-stream",
       "Content-Type": "application/json",
+      ...(negotiatedProtocolVersion ? { "MCP-Protocol-Version": negotiatedProtocolVersion } : {}),
     },
     body: JSON.stringify(request),
   });
 
-  if (response.status === 204) {
+  if (response.status === 202 || response.status === 204) {
     return null;
   }
 
@@ -120,6 +127,10 @@ async function forwardToEdgeEver(request) {
 
   if (!body) {
     throw new Error(`${response.status} ${response.statusText}`);
+  }
+
+  if (request?.method === "initialize" && body?.result?.protocolVersion) {
+    negotiatedProtocolVersion = body.result.protocolVersion;
   }
 
   return body;

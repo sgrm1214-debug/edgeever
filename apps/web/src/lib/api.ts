@@ -60,6 +60,7 @@ type ListLoginDeviceSessionsResponse = { sessions: LoginDeviceSession[] };
 const WEB_DEVICE_ID_STORAGE_KEY = "edgeever.web.device-id";
 export const DESKTOP_API_BASE_URL_STORAGE_KEY = "edgeever.desktop.api-base-url";
 const DESKTOP_SESSION_STORAGE_KEY = "edgeever.desktop.session";
+let desktopSessionToken: string | null | undefined;
 
 export const getCachedDesktopSession = (): AuthSession | null => {
   if (typeof window === "undefined" || !window.edgeeverDesktop?.isAvailable) return null;
@@ -73,20 +74,54 @@ export const getCachedDesktopSession = (): AuthSession | null => {
   }
 };
 
-export const cacheDesktopSession = (session: AuthSession) => {
+const getDesktopSessionToken = () => {
+  if (typeof window === "undefined" || !window.edgeeverDesktop?.isAvailable) return undefined;
+  if (desktopSessionToken) return desktopSessionToken;
+
+  const storedToken = window.edgeeverDesktop.getSessionToken().trim();
+  const legacyToken = getCachedDesktopSession()?.sessionToken?.trim() ?? "";
+  // A legacy token remains only when secure persistence has not completed,
+  // so it must win over a possibly stale encrypted file from an earlier login.
+  desktopSessionToken = legacyToken || storedToken || null;
+  return desktopSessionToken ?? undefined;
+};
+
+const setDesktopSessionToken = async (value: string) => {
+  desktopSessionToken = value;
+  try {
+    await window.edgeeverDesktop?.setSessionToken(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const clearDesktopSessionToken = () => {
+  desktopSessionToken = null;
+  void window.edgeeverDesktop?.clearSessionToken().catch(() => {});
+};
+
+export const cacheDesktopSession = async (session: AuthSession) => {
   if (typeof window === "undefined" || !window.edgeeverDesktop?.isAvailable) return;
   try {
     const cached = getCachedDesktopSession();
-    const sessionToken =
+    const candidateToken = session.authenticated
+      ? session.sessionToken ?? cached?.sessionToken
+      : undefined;
+    let tokenStoredSecurely = true;
+    if (candidateToken) {
+      tokenStoredSecurely = await setDesktopSessionToken(candidateToken);
+    } else if (
       session.authenticated &&
-      !session.sessionToken &&
       cached?.authenticated &&
-      cached.user?.id === session.user?.id
-        ? cached.sessionToken
-        : session.sessionToken;
+      cached.user?.id !== session.user?.id
+    ) {
+      clearDesktopSessionToken();
+    }
+    const { sessionToken: _sessionToken, ...cachedSession } = session;
     window.localStorage.setItem(
       DESKTOP_SESSION_STORAGE_KEY,
-      JSON.stringify(sessionToken ? { ...session, sessionToken } : session),
+      JSON.stringify(candidateToken && !tokenStoredSecurely ? { ...cachedSession, sessionToken: candidateToken } : cachedSession),
     );
   } catch {
     // A session cache is an offline convenience and must never block login.
@@ -100,6 +135,7 @@ export const clearCachedDesktopSession = () => {
   } catch {
     // Ignore restricted storage contexts.
   }
+  clearDesktopSessionToken();
 };
 
 export const getConfiguredDesktopApiBaseUrl = () => {
@@ -208,7 +244,7 @@ const isDesktopAuthenticationRequest = (path: string) =>
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const headers = new Headers(init?.headers);
   const isDesktop = Boolean(window.edgeeverDesktop?.isAvailable);
-  const sessionToken = isDesktop ? getCachedDesktopSession()?.sessionToken : undefined;
+  const sessionToken = isDesktop ? getDesktopSessionToken() : undefined;
 
   if (isDesktop && desktopSessionRejected && !isDesktopAuthenticationRequest(path)) {
     throw new ApiRequestError("Authentication required", 401, "unauthorized");
@@ -253,6 +289,19 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   }
 
   const body = await response.json() as T;
+  if (
+    isDesktop &&
+    path === "/api/v1/auth/session" &&
+    sessionToken &&
+    body &&
+    typeof body === "object" &&
+    "authenticated" in body &&
+    body.authenticated === false
+  ) {
+    clearCachedDesktopSession();
+    desktopSessionRejected = true;
+    window.dispatchEvent(new CustomEvent("edgeever:unauthorized"));
+  }
   if (path === "/api/v1/auth/login") {
     desktopSessionRejected = false;
   }

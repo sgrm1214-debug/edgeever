@@ -1,10 +1,11 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, session, net, protocol, shell, dialog } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, ipcMain, session, net, protocol, shell, dialog, safeStorage } from "electron";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { SidecarRpcClient } from "./rpc.mjs";
+import { resourceRequestHeaders } from "./resource-request.mjs";
 import { isSafeResourceId, resourceIdFromRequest } from "./resource-url.mjs";
 import { isSupportedAssociatedFile } from "./file-association.mjs";
 import { accountDataDirectory, accountScopeKey } from "./account-scope.mjs";
@@ -57,9 +58,11 @@ let sidecarRestartInFlight = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const windowStatePath = () => join(app.getPath("userData"), "window-state.json");
 const instanceUrlPath = () => join(app.getPath("userData"), "instance-url");
+const sessionTokenPath = () => join(app.getPath("userData"), "session-token");
 const crashMarkerPath = () => join(app.getPath("userData"), "last-session-active");
 const installationMarkerPath = () => join(app.getPath("userData"), "installation-confirmed");
 const logPath = () => join(app.getPath("userData"), "logs", "desktop.log");
+let desktopSessionToken = "";
 const sidecarDataDirectory = (accountId = null) => {
   return accountId
     ? accountDataDirectory(app.getPath("userData"), configuredApiBaseUrl, accountId)
@@ -190,6 +193,29 @@ const loadConfiguredApiBaseUrl = async () => {
   } catch {
     // A first-run desktop app has no configured instance yet.
   }
+};
+
+const loadDesktopSessionToken = async () => {
+  try {
+    const encrypted = await readFile(sessionTokenPath());
+    desktopSessionToken = safeStorage.decryptString(encrypted);
+  } catch {
+    // Existing installations have no main-process credential until the
+    // renderer migrates the legacy localStorage token after upgrading.
+    desktopSessionToken = "";
+  }
+};
+
+const saveDesktopSessionToken = async (value) => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (normalized.length > 4096) throw new Error("Desktop session token is too long");
+  desktopSessionToken = normalized;
+  const encrypted = safeStorage.encryptString(normalized);
+  const temporaryPath = `${sessionTokenPath()}.tmp`;
+  await writeFile(temporaryPath, encrypted, { mode: 0o600 });
+  await restrictFile(temporaryPath);
+  await rename(temporaryPath, sessionTokenPath());
+  await restrictFile(sessionTokenPath());
 };
 
 const pendingDesktopCommands = [];
@@ -334,8 +360,8 @@ const registerResourceProtocol = () => {
     const sourceUrl = `${configuredApiBaseUrl}/api/v1/resources/${encodeURIComponent(resourceId)}/blob`;
     try {
       const cookies = await session.defaultSession.cookies.get({ url: sourceUrl });
-      const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
-      const response = await net.fetch(sourceUrl, cookieHeader ? { headers: { Cookie: cookieHeader } } : undefined);
+      const headers = resourceRequestHeaders({ cookies, sessionToken: desktopSessionToken });
+      const response = await net.fetch(sourceUrl, { headers });
       if (!response.ok) return new Response("Resource request failed", { status: response.status });
       const body = Buffer.from(await response.arrayBuffer());
       await mkdir(directory, { recursive: true });
@@ -581,6 +607,7 @@ app.whenReady().then(async () => {
     return;
   }
   await loadConfiguredApiBaseUrl();
+  await loadDesktopSessionToken();
   app.setAsDefaultProtocolClient("edgeever");
   const previousSessionWasActive = existsSync(crashMarkerPath());
   void writeDiagnostic(previousSessionWasActive ? "session.recovered-after-abnormal-exit" : "session.started");
@@ -615,6 +642,15 @@ app.whenReady().then(async () => {
     flushPendingMarkdownImport();
   });
   ipcMain.on("desktop:api-base-url-sync", (event) => { event.returnValue = configuredApiBaseUrl; });
+  ipcMain.on("desktop:session-token-sync", (event) => { event.returnValue = desktopSessionToken; });
+  ipcMain.handle("desktop:set-session-token", async (_event, value) => {
+    await saveDesktopSessionToken(value);
+    return { stored: Boolean(desktopSessionToken) };
+  });
+  ipcMain.handle("desktop:clear-session-token", async () => {
+    await saveDesktopSessionToken("");
+    return { stored: false };
+  });
   ipcMain.handle("desktop:set-api-base-url", async (_event, value) => {
     const normalized = typeof value === "string" ? value.trim().replace(/\/$/, "") : "";
     if (normalized) {

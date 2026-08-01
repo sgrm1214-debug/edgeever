@@ -123,48 +123,36 @@ async function main() {
     const targetNotebook = await findOrCreateNotebook(client, before.notebooks || [], fileInfo.name, index, parentId);
     const beforeMemoCount = Number(targetNotebook.memoCount || 0);
 
-    if (beforeMemoCount >= notes.length) {
-      console.log(`  Notebook "${stackPrefix}${fileInfo.name}" already fully imported (${beforeMemoCount}/${notes.length} notes). Skipping.`);
-      importedNotebookCount += 1;
-      continue;
-    }
-
     const createdMemoIds = [];
-
-    // Fetch existing memos in this notebook to support resume/idempotency
-    let existingMemos = [];
-    if (beforeMemoCount > 0 && client) {
-      try {
-        const searchResult = await mcpCall(client, "search_memos", {
-          notebookId: targetNotebook.id,
-          limit: 50,
-        });
-        existingMemos = searchResult.memos || [];
-      } catch (err) {
-        console.warn(`  [Warning] Failed to list existing memos for idempotency: ${err.message}`);
-      }
-    }
+    let skippedMemoCount = 0;
 
     await mapLimit(notes, 5, async (note, memoIndex) => {
-      // Check if note already exists
-      const isDuplicate = existingMemos.some(
-        (m) => m.title === note.title && m.createdAt === note.createdAt && m.updatedAt === note.updatedAt
-      );
-      if (isDuplicate) {
+      const result = await mcpCall(client, "import_memos", {
+        source: "evernote",
+        notebookId: targetNotebook.id,
+        items: [{
+          externalId: note.externalId,
+          title: note.title,
+          contentMarkdown: note.markdown,
+          tags: note.tags,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+        }],
+      });
+      const imported = result.results?.[0];
+      if (!imported || imported.status === "failed") {
+        throw new Error(imported?.error || `No result returned while importing ${note.title || note.externalId}`);
+      }
+      if (imported.status === "skipped") {
+        skippedMemoCount += 1;
         console.log(`  ${memoIndex + 1}/${notes.length} Skipped (already imported): ${note.title || "Untitled"}`);
         return;
       }
+      if (imported.status !== "created" || !imported.memo) {
+        throw new Error(`Unexpected import status "${imported.status}" for ${note.title || note.externalId}`);
+      }
 
-      const result = await mcpCall(client, "create_memo", {
-        notebookId: targetNotebook.id,
-        title: note.title,
-        contentMarkdown: note.markdown,
-        tags: note.tags,
-        createdAt: note.createdAt,
-        updatedAt: note.updatedAt,
-      });
-
-      assertImportedMemoTimestamps(result.memo, note);
+      assertImportedMemoTimestamps(imported.memo, note);
 
       // Handle resources (images / attachments) in parallel!
       let updatedMarkdown = note.markdown;
@@ -175,7 +163,7 @@ async function main() {
           try {
             const processedRes = await compressImageLocal(res);
             console.log(`    Uploading resource: ${processedRes.filename} (${processedRes.mimeType})`);
-            const resource = await uploadResource(client, result.memo.id, processedRes);
+            const resource = await uploadResource(client, imported.memo.id, processedRes);
             return { md5: res.md5, url: resource.url };
           } catch (err) {
             console.warn(`    [Warning] Failed to upload resource ${res.filename}: ${err.message}`);
@@ -197,7 +185,7 @@ async function main() {
       if (hasUploadedResources) {
         try {
           await mcpCall(client, "update_memo", {
-            memoId: result.memo.id,
+            memoId: imported.memo.id,
             contentMarkdown: updatedMarkdown,
             createdAt: note.createdAt,
             updatedAt: note.updatedAt,
@@ -207,7 +195,7 @@ async function main() {
         }
       }
 
-      createdMemoIds.push(result.memo.id);
+      createdMemoIds.push(imported.memo.id);
       console.log(`  ${memoIndex + 1}/${notes.length} ${note.title || "Untitled"}`);
     });
 
@@ -221,6 +209,7 @@ async function main() {
 
     console.log(`\nNotebook imported: ${fileInfo.name}`);
     console.log(`  Created memos: ${createdMemoIds.length}`);
+    console.log(`  Skipped memos: ${skippedMemoCount}`);
     console.log(`  Notebook memo count before: ${beforeMemoCount}`);
     console.log(`  Notebook memo count after:  ${afterMemoCount}`);
 
@@ -341,6 +330,9 @@ function normalizeNote(note, index) {
     throw new Error(`Note "${title}" is missing a valid Evernote created/updated timestamp.`);
   }
 
+  const externalId = getText(note.guid)?.trim()
+    || createHash("sha256").update([title, createdAt, updatedAt, content].join("\0")).digest("hex");
+
   let markdown = enexContentToMarkdown(content);
   const MAX_MARKDOWN_LENGTH = 400000; // Safe limit to prevent exceeding D1 1MB SQLITE_TOOBIG limit
   if (markdown.length > MAX_MARKDOWN_LENGTH) {
@@ -370,6 +362,7 @@ function normalizeNote(note, index) {
   }
 
   return {
+    externalId,
     title: title.slice(0, 160),
     markdown,
     tags,
@@ -471,7 +464,9 @@ async function mcpCall(client, toolName, args, retries = 5, delay = 1000) {
         method: "POST",
         headers: {
           Authorization: `Bearer ${client.token}`,
+          Accept: "application/json, text/event-stream",
           "Content-Type": "application/json",
+          "MCP-Protocol-Version": "2025-11-25",
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -486,8 +481,10 @@ async function mcpCall(client, toolName, args, retries = 5, delay = 1000) {
 
       const body = await response.json().catch(() => null);
 
-      if (!response.ok || body?.error) {
-        throw new Error(body?.error?.message || `${response.status} ${response.statusText}`);
+      if (!response.ok || body?.error || body?.result?.isError) {
+        const toolError = body?.result?.structuredContent?.error?.message
+          || body?.result?.content?.find((item) => item.type === "text")?.text;
+        throw new Error(toolError || body?.error?.message || `${response.status} ${response.statusText}`);
       }
 
       return parseMcpToolResult(body.result);
@@ -503,6 +500,10 @@ async function mcpCall(client, toolName, args, retries = 5, delay = 1000) {
 }
 
 function parseMcpToolResult(result) {
+  if (result?.structuredContent && typeof result.structuredContent === "object") {
+    return result.structuredContent;
+  }
+
   const text = result?.content?.find((item) => item.type === "text")?.text;
 
   if (!text) {

@@ -68,7 +68,7 @@ const AuthenticatedWorkspace = () => {
     queryFn: async () => {
       try {
         const session = await api.getSession();
-        cacheDesktopSession(session);
+        await cacheDesktopSession(session);
         return session;
       } catch (error) {
         const cached = getCachedDesktopSession();
@@ -106,10 +106,11 @@ const AuthenticatedWorkspace = () => {
       if (desktopBridge?.isAvailable && payload.instanceUrl !== undefined) {
         await saveDesktopApiBaseUrl(payload.instanceUrl);
       }
-      return api.login({ username: payload.username, password: payload.password });
+      const session = await api.login({ username: payload.username, password: payload.password });
+      await cacheDesktopSession(session);
+      return session;
     },
     onSuccess: (session) => {
-      cacheDesktopSession(session);
       queryClient.clear();
       queryClient.setQueryData(["auth", "session"], session);
     },

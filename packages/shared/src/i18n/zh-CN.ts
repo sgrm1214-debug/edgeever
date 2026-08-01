@@ -775,7 +775,7 @@ export const zhCN = {
     subtitle: "AI Agent 驱动一键迁移，无损保留笔记本组结构",
   },
   evernoteImport: {
-    title: "导入印象笔记、Notion、Memos",
+    title: "导入印象笔记、flomo、Notion、Memos",
     guide: "查看迁移指南",
     openGuideAria: "在新标签页打开印象笔记迁移指南",
     description: "支持从第三方平台快速迁移笔记，推荐使用 MCP 与 AI Agent 批量导入。",

@@ -8,6 +8,7 @@ import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
 import { useTranslation } from "react-i18next";
+import * as m from "motion/react-m";
 import {
   ChevronLeft,
   ChevronRight,
@@ -70,7 +71,6 @@ import { sanitizeAndScopeCss } from "@/lib/css-sandbox";
 import { RevisionHistoryDialog } from "./dialogs/RevisionHistoryDialog";
 import { api } from "@/lib/api";
 import { isDesktopResourceRuntime, stageDesktopResource, toDesktopResourceUrl } from "@/lib/desktop-resources";
-import { consumeStandaloneMobileEditorReturn, openStandaloneMobileEditor } from "@/lib/mobile-editor";
 import { cn, formatDateTime, parseTagsText } from "@/lib/utils";
 import { EDITOR_CONTENT_MAX_WIDTH, EDITOR_CONTENT_MAX_WIDTH_COLLAPSED } from "@/lib/workspace-ui";
 import {
@@ -113,6 +113,9 @@ import { openNotePrintPreview, serializeNoteDocumentForPrint } from "@/lib/note-
 import { isBrowserOffline } from "@/lib/network-status";
 import { shouldOpenEditorLink } from "@/lib/editor-link-click";
 import { processFilesSequentially } from "@/lib/file-batch";
+import { MEMO_ID_REMAPPED_EVENT } from "@/lib/sync-events";
+import { useStandaloneMobileEditor } from "@/hooks/useStandaloneMobileEditor";
+import { statusSettleMotion } from "@/lib/motion";
 
 const SUPPORTED_PASTE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
 const MOBILE_EDITOR_QUERY = "(max-width: 639px)";
@@ -550,563 +553,18 @@ type RichEditorPaneProps = EditorPaneProps & {
   onRequestMobileNativeEdit?: () => void;
 };
 
-const MobileNativeEditorPane = ({
-  memo,
-  repository,
-  notebooks,
-  isTrashView,
-  onBackToList,
-  onSaved,
-  onMobileDefaultEditConsumed,
-  onExitMobileNativeEdit,
-}: EditorPaneProps & { onExitMobileNativeEdit: () => void }) => {
-  const { t } = useTranslation();
-  const titleRef = useRef<HTMLInputElement | null>(null);
-  const tagsRef = useRef<HTMLInputElement | null>(null);
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
-  const draftTimerRef = useRef<number | null>(null);
-  const saveTimerRef = useRef<number | null>(null);
-  const memoRef = useRef<MemoDetail | null>(memo);
-  const editSessionRef = useRef<MemoEditSession | null>(null);
-  const editingMemoIdRef = useRef<string | null>(memo?.id ?? null);
-  const hasUnsavedChangesRef = useRef(false);
-  const hydratingRef = useRef(false);
-  const savingRef = useRef(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued" | "error" | "conflict">("idle");
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [notebookUpdatePending, setNotebookUpdatePending] = useState(false);
-  const [mobileNotebookSheetOpen, setMobileNotebookSheetOpen] = useState(false);
-  const notebookOptions = useMemo(() => getNotebookMoveOptions(notebooks), [notebooks]);
-  const readOnly = isTrashView || Boolean(memo?.isDeleted);
-  const currentNotebookLabel = notebookOptions.find((notebook) => notebook.id === memo?.notebookId)?.name ?? t("editor.notebookFallback");
-
-  const getTitleValue = useCallback(() => titleRef.current?.value ?? "", []);
-  const getTagsValue = useCallback(() => tagsRef.current?.value ?? "", []);
-  const getBodyValue = useCallback(() => bodyRef.current?.value ?? "", []);
-
-  const clearTimers = useCallback(() => {
-    if (draftTimerRef.current !== null) {
-      window.clearTimeout(draftTimerRef.current);
-      draftTimerRef.current = null;
-    }
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-  }, []);
-
-  const persistDraft = useCallback(() => {
-    const currentMemo = memoRef.current;
-    if (!currentMemo || currentMemo.isDeleted || editingMemoIdRef.current !== currentMemo.id) {
-      return;
-    }
-
-    void localDb.drafts.put({
-      memoId: currentMemo.id,
-      title: getTitleValue(),
-      tagsText: getTagsValue(),
-      contentJson: markdownToDoc(getBodyValue()),
-      updatedAt: new Date().toISOString(),
-    });
-  }, [getBodyValue, getTagsValue, getTitleValue]);
-
-  const currentSnapshot = useCallback(() => {
-    const currentMemo = memoRef.current;
-    if (!currentMemo) {
-      return null;
-    }
-
-    return JSON.stringify({
-      memoId: currentMemo.id,
-      title: getTitleValue(),
-      tagsText: getTagsValue(),
-      body: getBodyValue(),
-    });
-  }, [getBodyValue, getTagsValue, getTitleValue]);
-
-  const saveCurrent = useCallback(async () => {
-    const currentMemo = memoRef.current;
-    const snapshot = currentSnapshot();
-
-    const editSession = editSessionRef.current;
-    if (
-      !currentMemo ||
-      currentMemo.isDeleted ||
-      editingMemoIdRef.current !== currentMemo.id ||
-      !snapshot ||
-      savingRef.current ||
-      !editSession
-    ) {
-      return false;
-    }
-
-    clearTimers();
-    savingRef.current = true;
-    setSaveState("saving");
-
-    const contentJson = markdownToDoc(getBodyValue());
-    const payload: MemoUpdateSyncPayload = {
-      memoId: currentMemo.id,
-      expectedRevision: currentMemo.revision,
-      expectedContentHash: currentMemo.contentHash,
-      editSessionId: editSession.id,
-      title: getTitleValue(),
-      contentJson,
-      tags: parseTagsText(getTagsValue()),
-    };
-
-    try {
-      const { memo: localMemo } = await repository.updateMemo(currentMemo, payload);
-
-      memoRef.current = localMemo;
-      await onSaved(localMemo);
-
-      if (currentSnapshot() === snapshot) {
-        hasUnsavedChangesRef.current = false;
-        setHasUnsavedChanges(false);
-        await localDb.drafts.delete(localMemo.id);
-        setSaveState("queued");
-      } else {
-        persistDraft();
-        hasUnsavedChangesRef.current = true;
-        setHasUnsavedChanges(true);
-        setSaveState("idle");
-      }
-
-      return true;
-    } catch (error) {
-      const code = error && typeof error === "object" && "code" in error ? String(error.code) : null;
-
-      if (code === "revision_conflict") {
-        setSaveState("conflict");
-        return false;
-      }
-
-      if (shouldQueueMemoSaveError(error)) {
-        await queueMemoUpdate(payload);
-        await localDb.drafts.put({
-          memoId: payload.memoId,
-          title: payload.title,
-          tagsText: getTagsValue(),
-          contentJson: payload.contentJson,
-          updatedAt: new Date().toISOString(),
-        });
-        hasUnsavedChangesRef.current = false;
-        setHasUnsavedChanges(false);
-        setSaveState("queued");
-        return true;
-      }
-
-      setSaveState("error");
-      return false;
-    } finally {
-      savingRef.current = false;
-    }
-  }, [clearTimers, currentSnapshot, getBodyValue, getTagsValue, getTitleValue, onSaved, persistDraft, repository]);
-
-  const markDirty = useCallback(() => {
-    const currentMemo = memoRef.current;
-    if (hydratingRef.current || currentMemo?.isDeleted || !currentMemo || editingMemoIdRef.current !== currentMemo.id) {
-      return;
-    }
-
-    if (!hasUnsavedChangesRef.current) {
-      hasUnsavedChangesRef.current = true;
-      setHasUnsavedChanges(true);
-    }
-    setSaveState((current) => (current === "conflict" ? current : "idle"));
-
-    if (draftTimerRef.current !== null) {
-      window.clearTimeout(draftTimerRef.current);
-    }
-    draftTimerRef.current = window.setTimeout(() => {
-      draftTimerRef.current = null;
-      persistDraft();
-    }, MOBILE_DRAFT_PERSIST_DELAY_MS);
-
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      if (hasUnsavedChangesRef.current) {
-        void saveCurrent();
-      }
-    }, EDITOR_LOCAL_SAVE_DELAY_MS);
-  }, [persistDraft, saveCurrent]);
-
-  useEffect(() => {
-    document.documentElement.classList.add("edgeever-mobile-native-editing");
-    document.body.classList.add("edgeever-mobile-native-editing");
-
-    return () => {
-      document.documentElement.classList.remove("edgeever-mobile-native-editing");
-      document.body.classList.remove("edgeever-mobile-native-editing");
-    };
-  }, []);
-
-  useEffect(() => () => clearTimers(), [clearTimers]);
-
-  useEffect(() => {
-    const element = bodyRef.current;
-    if (!element) {
-      return;
-    }
-
-    element.addEventListener("input", markDirty);
-    return () => element.removeEventListener("input", markDirty);
-  }, [markDirty]);
-
-  useEffect(() => {
-    if (!memo) {
-      memoRef.current = null;
-      editSessionRef.current = null;
-      return;
-    }
-
-    let cancelled = false;
-    const sameMemo = editingMemoIdRef.current === memo.id;
-    memoRef.current = memo;
-
-    if (sameMemo && hasUnsavedChangesRef.current && !memo.isDeleted) {
-      return;
-    }
-
-    void (async () => {
-      let [draft, queuedUpdate, editSessionResponse] = memo.isDeleted
-        ? [null, null, null]
-        : await Promise.all([
-            localDb.drafts.get(memo.id),
-            localDb.syncQueue.get(getMemoUpdateQueueId(memo.id)),
-            requiresLocalEditSession(memo) ? Promise.resolve(null) : api.createMemoEditSession(memo.id),
-          ]);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (queuedUpdate && isMemoUpdateAlreadyApplied(memo, queuedUpdate)) {
-        await Promise.all([
-          localDb.syncQueue.delete(queuedUpdate.id),
-          localDb.drafts.delete(memo.id),
-        ]);
-        draft = null;
-        queuedUpdate = undefined;
-      }
-
-      const draftUpdatedAt = draft ? Date.parse(draft.updatedAt) : 0;
-      const remoteUpdatedAt = Date.parse(memo.updatedAt);
-      const useDraft = Boolean(draft && (queuedUpdate || draftUpdatedAt >= remoteUpdatedAt));
-      const nextTitle = useDraft && draft ? draft.title : getEditableMemoTitle(memo.title);
-      const nextTagsText = useDraft && draft ? draft.tagsText : memo.tags.join(", ");
-      const nextContent = useDraft && draft
-        ? draft.contentJson
-        : resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown);
-      editSessionRef.current = editSessionResponse?.editSession ?? (requiresLocalEditSession(memo) ? createLocalEditSession(memo) : null);
-
-      hydratingRef.current = true;
-      editingMemoIdRef.current = memo.id;
-      if (titleRef.current) {
-        titleRef.current.value = nextTitle;
-      }
-      if (tagsRef.current) {
-        tagsRef.current.value = nextTagsText;
-      }
-      if (bodyRef.current) {
-        bodyRef.current.value = docToMarkdown(nextContent);
-      }
-      hasUnsavedChangesRef.current = Boolean(useDraft && !queuedUpdate);
-      setHasUnsavedChanges(hasUnsavedChangesRef.current);
-      setSaveState(queuedUpdate ? syncStatusToSaveState(queuedUpdate.status) : "idle");
-      window.setTimeout(() => {
-        hydratingRef.current = false;
-        bodyRef.current?.focus({ preventScroll: true });
-      }, 0);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [memo]);
-
-  useEffect(() => {
-    const persistBeforeSuspend = () => {
-      if (hasUnsavedChangesRef.current) {
-        persistDraft();
-      }
-    };
-    const persistWhenHidden = () => {
-      if (document.visibilityState === "hidden") {
-        persistBeforeSuspend();
-      }
-    };
-
-    window.addEventListener("pagehide", persistBeforeSuspend);
-    document.addEventListener("visibilitychange", persistWhenHidden);
-
-    return () => {
-      window.removeEventListener("pagehide", persistBeforeSuspend);
-      document.removeEventListener("visibilitychange", persistWhenHidden);
-    };
-  }, [persistDraft]);
-
-  const finishEditing = async (goBack: boolean) => {
-    if (!readOnly && hasUnsavedChangesRef.current) {
-      const saved = await saveCurrent();
-      if (!saved && saveState !== "queued") {
-        return;
-      }
-    }
-
-    onMobileDefaultEditConsumed();
-    onExitMobileNativeEdit();
-    if (goBack) {
-      onBackToList();
-    }
-  };
-
-  const updateMemoNotebook = (notebookId: string, sourceMemo: MemoDetail = memoRef.current ?? memo!) => {
-    if (readOnly || !sourceMemo || notebookId === sourceMemo.notebookId || notebookUpdatePending) {
-      setMobileNotebookSheetOpen(false);
-      return;
-    }
-
-    setNotebookUpdatePending(true);
-    setSaveState("saving");
-
-    void api
-      .updateMemo(sourceMemo.id, {
-        expectedRevision: sourceMemo.revision,
-        notebookId,
-      })
-      .then(async (data) => {
-        memoRef.current = data.memo;
-        await onSaved(data.memo);
-        setSaveState("saved");
-        window.setTimeout(() => setSaveState("idle"), 1200);
-      })
-      .catch(() => setSaveState("error"))
-      .finally(() => {
-        setNotebookUpdatePending(false);
-        setMobileNotebookSheetOpen(false);
-      });
-  };
-
-  const handleNotebookChange = (notebookId: string) => {
-    if (!hasUnsavedChangesRef.current) {
-      updateMemoNotebook(notebookId);
-      return;
-    }
-
-    void saveCurrent().then((saved) => {
-      if (saved) {
-        updateMemoNotebook(notebookId);
-      }
-    });
-  };
-
-  const saveLabel =
-    saveState === "saving"
-      ? t("editor.saveState.saving")
-      : saveState === "saved"
-        ? t("editor.saveState.saved")
-        : saveState === "queued"
-          ? t("editor.saveState.queued")
-          : saveState === "conflict"
-            ? t("editor.saveState.conflict")
-            : saveState === "error"
-              ? t("editor.saveState.error")
-              : hasUnsavedChanges
-                ? t("editor.saveState.unsaved")
-                : t("editor.saveState.saved");
-
-  const saveStateClassName =
-    saveState === "error" || saveState === "conflict"
-      ? "bg-rose-50 text-rose-700"
-      : saveState === "queued"
-        ? "bg-amber-50/60 text-amber-600/80"
-        : saveState === "saving" || hasUnsavedChanges
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-slate-100 text-slate-500";
-
-  if (!memo) {
-    return (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white text-sm text-slate-500 sm:hidden">
-          {t("editor.loading")}
-        </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-[90] overflow-y-auto bg-white text-slate-950 sm:hidden" data-edgeever-mobile-native-editor>
-      <header className="flex min-h-12 items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2">
-        <Button
-          size="icon"
-          variant="ghost"
-          title={hasUnsavedChanges && !readOnly ? t("editor.saveAndBack") : t("editor.backToList")}
-          aria-label={hasUnsavedChanges && !readOnly ? t("editor.saveAndBack") : t("editor.backToList")}
-          disabled={savingRef.current || notebookUpdatePending}
-          onClick={() => void finishEditing(true)}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex min-w-0 flex-1 justify-end gap-2">
-          <span className={cn("inline-flex max-w-[5.5rem] truncate rounded-full px-2 py-1 text-[11px] font-medium", saveStateClassName)}>
-            {saveLabel}
-          </span>
-          <button
-            className="inline-flex h-8 items-center justify-center rounded-full bg-slate-950 px-3 text-xs font-semibold text-white disabled:bg-slate-200 disabled:text-slate-500"
-            type="button"
-            disabled={savingRef.current || notebookUpdatePending}
-            onClick={() => void finishEditing(false)}
-          >
-            {saveState === "saving" ? t("editor.saveState.saving") : t("editor.done")}
-          </button>
-        </div>
-      </header>
-
-      <main className="bg-white">
-        <div className="space-y-3 px-4 pb-4 pt-4">
-          <input
-            ref={titleRef}
-            defaultValue={getEditableMemoTitle(memo.title)}
-            readOnly={readOnly}
-            onInput={markDirty}
-            className="block w-full border-0 bg-transparent text-2xl font-bold leading-tight text-slate-950 outline-none placeholder:text-slate-300"
-            placeholder={t("common.untitledMemo")}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="flex h-8 min-w-0 max-w-full items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-medium text-slate-600 outline-none disabled:opacity-50"
-              type="button"
-              disabled={readOnly || notebookUpdatePending}
-              title={t("editor.currentNotebook")}
-              aria-label={t("editor.currentNotebookAria", { name: currentNotebookLabel })}
-              onClick={() => setMobileNotebookSheetOpen(true)}
-            >
-              <span className="min-w-0 truncate">{currentNotebookLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            </button>
-            <label className="flex h-8 min-w-[12rem] flex-1 items-center gap-2 rounded-md border border-transparent px-2 text-sm text-slate-500">
-              <Tags className="h-4 w-4" />
-              <input
-                ref={tagsRef}
-                defaultValue={memo.tags.join(", ")}
-                readOnly={readOnly}
-                onInput={markDirty}
-                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-slate-400"
-                placeholder={t("editor.tagPlaceholder")}
-              />
-            </label>
-          </div>
-        </div>
-
-        <textarea
-          ref={bodyRef}
-          defaultValue={docToMarkdown(resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown))}
-          autoCapitalize="sentences"
-          autoComplete="on"
-          autoCorrect="on"
-          enterKeyHint="enter"
-          inputMode="text"
-          name="memo-body-native"
-          spellCheck
-          readOnly={readOnly}
-          aria-label={t("editor.noteBodyAria")}
-          placeholder={t("editor.placeholder")}
-          className="block min-h-[70dvh] w-full resize-none border-0 bg-white px-4 py-4 text-base leading-7 text-slate-900 outline-none placeholder:text-slate-400"
-          style={{ WebkitUserSelect: "text", userSelect: "text", caretColor: "auto" }}
-        />
-      </main>
-
-      {mobileNotebookSheetOpen && (
-        <MobileNotebookSelectSheet
-          isUpdating={notebookUpdatePending || saveState === "saving"}
-          options={notebookOptions}
-          selectedNotebookId={memo.notebookId}
-          onClose={() => setMobileNotebookSheetOpen(false)}
-          onSelect={handleNotebookChange}
-        />
-      )}
-    </div>
-  );
-};
-
 export const EditorPane = (props: EditorPaneProps) => {
-  const [isMobileViewport, setIsMobileViewport] = useState(() =>
-    typeof window === "undefined" ? false : window.matchMedia(MOBILE_EDITOR_QUERY).matches
-  );
-  const [mobileNativeEditMemoId, setMobileNativeEditMemoId] = useState<string | null>(null);
-  const standaloneOpenMemoIdRef = useRef<string | null>(null);
   const { t } = useTranslation();
   const readOnly = props.isTrashView || Boolean(props.memo?.isDeleted);
-  const mobileDefaultEditRequested = Boolean(
-    props.memo?.id && props.memo.id === props.mobileDefaultEditMemoId && !readOnly
-  );
-  const mobileNativeEditingActive = Boolean(
-    isMobileViewport &&
-      props.memo &&
-      !readOnly &&
-      (mobileDefaultEditRequested || mobileNativeEditMemoId === props.memo.id)
-  );
+  const { editingActive, requestEdit } = useStandaloneMobileEditor({
+    memoId: props.memo?.id ?? null,
+    mobileDefaultEditMemoId: props.mobileDefaultEditMemoId,
+    onBackToList: props.onBackToList,
+    onDefaultEditConsumed: props.onMobileDefaultEditConsumed,
+    readOnly,
+  });
 
-  useEffect(() => {
-    if (isMobileViewport && mobileDefaultEditRequested && props.memo?.id) {
-      if (consumeStandaloneMobileEditorReturn(props.memo.id)) {
-        props.onMobileDefaultEditConsumed();
-        setMobileNativeEditMemoId(null);
-        props.onBackToList();
-        return;
-      }
-
-      if (standaloneOpenMemoIdRef.current === props.memo.id) {
-        return;
-      }
-
-      standaloneOpenMemoIdRef.current = props.memo.id;
-      props.onMobileDefaultEditConsumed();
-      openStandaloneMobileEditor(props.memo.id);
-    }
-  }, [isMobileViewport, mobileDefaultEditRequested, props.memo?.id, props.onBackToList, props.onMobileDefaultEditConsumed]);
-
-  useEffect(() => {
-    const clearReturnedStandaloneEditor = () => {
-      if (!consumeStandaloneMobileEditorReturn(props.memo?.id ?? null)) {
-        return;
-      }
-
-      props.onMobileDefaultEditConsumed();
-      setMobileNativeEditMemoId(null);
-      props.onBackToList();
-    };
-
-    clearReturnedStandaloneEditor();
-    window.addEventListener("pageshow", clearReturnedStandaloneEditor);
-    document.addEventListener("visibilitychange", clearReturnedStandaloneEditor);
-
-    return () => {
-      window.removeEventListener("pageshow", clearReturnedStandaloneEditor);
-      document.removeEventListener("visibilitychange", clearReturnedStandaloneEditor);
-    };
-  }, [props.memo?.id, props.onBackToList, props.onMobileDefaultEditConsumed]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(MOBILE_EDITOR_QUERY);
-    const updateMobileViewport = () => setIsMobileViewport(mediaQuery.matches);
-
-    updateMobileViewport();
-    mediaQuery.addEventListener("change", updateMobileViewport);
-
-    return () => mediaQuery.removeEventListener("change", updateMobileViewport);
-  }, []);
-
-  useEffect(() => {
-    setMobileNativeEditMemoId(null);
-  }, [props.memo?.id]);
-
-  if (mobileNativeEditingActive) {
+  if (editingActive) {
     return (
       <div className="flex h-full min-h-0 items-center justify-center bg-white text-sm font-medium text-slate-400">
         {t("editor.openEditor")}
@@ -1117,20 +575,11 @@ export const EditorPane = (props: EditorPaneProps) => {
   return (
     <RichEditorPane
       {...props}
-      // On desktop this is also the create-note autofocus request. On mobile
-      // the native editor branch above consumes it before RichEditorPane is
-      // rendered.
       mobileDefaultEditMemoId={props.mobileDefaultEditMemoId}
-      onRequestMobileNativeEdit={() => {
-        if (props.memo?.id && !readOnly) {
-          setMobileNativeEditMemoId(props.memo.id);
-          openStandaloneMobileEditor(props.memo.id);
-        }
-      }}
+      onRequestMobileNativeEdit={requestEdit}
     />
   );
 };
-
 const RichEditorPane = ({
   memo,
   repository,
@@ -1248,6 +697,47 @@ const RichEditorPane = ({
   const hasUnsavedChangesRef = useRef(false);
   const editingMemoIdRef = useRef<string | null>(memo?.id ?? null);
   const imageCompressionEnabledRef = useRef(imageCompressionEnabled);
+
+  useEffect(() => {
+    const handleMemoIdRemapped = (event: Event) => {
+      const mappings = (event as CustomEvent<ReadonlyMap<string, string>>).detail;
+      const currentMemo = memoRef.current;
+      if (!currentMemo || !mappings) return;
+
+      const nextMemoId = mappings.get(currentMemo.id);
+      if (!nextMemoId || nextMemoId === currentMemo.id) return;
+
+      const previousMemoId = currentMemo.id;
+      memoRef.current = { ...currentMemo, id: nextMemoId };
+      if (editingMemoIdRef.current === previousMemoId) editingMemoIdRef.current = nextMemoId;
+      if (hydratedMemoIdRef.current === previousMemoId) {
+        hydratedMemoIdRef.current = nextMemoId;
+        setHydratedEditorMemoId(nextMemoId);
+      }
+      if (editSessionRef.current?.memoId === previousMemoId) {
+        editSessionRef.current = {
+          ...editSessionRef.current,
+          id: `local-edit:${nextMemoId}`,
+          memoId: nextMemoId,
+        };
+      }
+
+      // A draft may already have been persisted during image processing.
+      // Move it to the durable server id so a reload cannot orphan it under
+      // the temporary id.
+      void localDb.drafts.get(previousMemoId).then(async (draft) => {
+        if (!draft) return;
+        await localDb.drafts.put({ ...draft, memoId: nextMemoId });
+        await localDb.drafts.delete(previousMemoId);
+      }).catch(() => {
+        // The live editor content remains authoritative; draft persistence can
+        // retry on the next editor update.
+      });
+    };
+
+    window.addEventListener(MEMO_ID_REMAPPED_EVENT, handleMemoIdRemapped);
+    return () => window.removeEventListener(MEMO_ID_REMAPPED_EVENT, handleMemoIdRemapped);
+  }, []);
 
   const focusMobileInputTarget = useCallback(() => {
     if (mobileTextAreaRef.current) {
@@ -2814,12 +2304,33 @@ const RichEditorPane = ({
                     : t("editor.uploadState.fileUploading")}
               </span>
             )}
-            <span className={cn("hidden rounded-md px-2 py-1 text-xs font-medium sm:inline-flex", saveStateClassName)}>
+            <m.span
+              key={`${saveState}-${String(hasUnsavedChanges)}`}
+              className={cn("hidden items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium sm:inline-flex", saveStateClassName)}
+              role="status"
+              aria-live="polite"
+              {...statusSettleMotion}
+            >
+              {saveState === "saving" ? (
+                <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
+              ) : saveState === "error" || saveState === "conflict" || saveState === "queued" ? (
+                <CircleAlert className="h-3 w-3" aria-hidden="true" />
+              ) : hasUnsavedChanges ? (
+                <Pencil className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <Check className="h-3 w-3" aria-hidden="true" />
+              )}
               {saveLabel}
-            </span>
-            <span className={cn("inline-flex max-w-[5.5rem] truncate rounded-full px-2 py-1 text-[11px] font-medium sm:hidden", mobileStatusClassName)}>
+            </m.span>
+            <m.span
+              key={`${imageUploadState}-${saveState}-${String(hasUnsavedChanges)}`}
+              className={cn("inline-flex max-w-[5.5rem] truncate rounded-full px-2 py-1 text-[11px] font-medium sm:hidden", mobileStatusClassName)}
+              role="status"
+              aria-live="polite"
+              {...statusSettleMotion}
+            >
               {mobileStatusLabel}
-            </span>
+            </m.span>
             {mobileEditingActive && !readOnly && (
               <button
                 className="inline-flex h-8 items-center justify-center rounded-full bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500 sm:hidden"

@@ -1,6 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ApiRequestError, type createEdgeEverClient } from "@edgeever/client";
-import type { MemoDetail } from "@edgeever/shared";
+import {
+  createEmptySyncQueueSummary,
+  createEmptySyncRunResult,
+  getNextSyncQueueRetryDelay,
+  getSyncRetryAt,
+  summarizeSyncQueue,
+  type MemoDetail,
+  type SyncQueueSummary,
+  type SyncRunResult,
+} from "@edgeever/shared";
 
 const LEGACY_SYNC_QUEUE_KEY = "edgeever.mobile.syncQueue.v1";
 const SYNC_QUEUE_KEY_PREFIX = "edgeever.mobile.syncQueue.v2";
@@ -50,28 +59,10 @@ export type MobileSyncQueueItem = MobileMemoUpdateSyncQueueItem | MobileMemoCrea
 
 let syncQueueWriteChain: Promise<void> = Promise.resolve();
 
-export type MobileSyncQueueSummary = {
-  total: number;
-  pending: number;
-  syncing: number;
-  conflict: number;
-  error: number;
-};
+export type MobileSyncQueueSummary = SyncQueueSummary;
+export type MobileSyncRunResult = SyncRunResult;
 
-export type MobileSyncRunResult = {
-  attempted: number;
-  synced: number;
-  failed: number;
-  conflicted: number;
-};
-
-export const emptyMobileSyncQueueSummary = (): MobileSyncQueueSummary => ({
-  total: 0,
-  pending: 0,
-  syncing: 0,
-  conflict: 0,
-  error: 0,
-});
+export const emptyMobileSyncQueueSummary = createEmptySyncQueueSummary;
 
 export const getMobileMemoUpdateQueueId = (memoId: string) => `memo.update:${memoId}`;
 export const getMobileMemoCreateQueueId = (memoId: string) => `memo.create:${memoId}`;
@@ -143,19 +134,8 @@ export const queueMobileMemoUpdate = async (scope: string, payload: MobileMemoUp
 
 export const loadMobileSyncQueueSummary = async (scope: string) => summarizeMobileSyncQueue(await readMobileSyncQueue(scope));
 
-export const getMobileSyncRetryDelay = async (scope: string) => {
-  const now = Date.now();
-  const retryTimes = (await readMobileSyncQueue(scope))
-    .filter((item) => item.status === "pending" || item.status === "error" || item.status === "syncing")
-    .map((item) => (item.nextAttemptAt ? Date.parse(item.nextAttemptAt) : now))
-    .filter(Number.isFinite);
-
-  if (retryTimes.length === 0) {
-    return null;
-  }
-
-  return Math.max(250, Math.min(...retryTimes) - now);
-};
+export const getMobileSyncRetryDelay = async (scope: string) =>
+  getNextSyncQueueRetryDelay(await readMobileSyncQueue(scope));
 
 export const listMobileSyncQueueItems = async (scope: string) =>
   (await readMobileSyncQueue(scope)).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -172,12 +152,7 @@ export const syncMobileQueuedChanges = async (
     onSynced?: (memo: MemoDetail, item: MobileSyncQueueItem) => void | Promise<void>;
   } = {}
 ): Promise<MobileSyncRunResult> => {
-  const result: MobileSyncRunResult = {
-    attempted: 0,
-    synced: 0,
-    failed: 0,
-    conflicted: 0,
-  };
+  const result = createEmptySyncRunResult();
   const now = new Date();
   const items = (await readMobileSyncQueue(scope))
     .filter((item) => item.status === "pending" || item.status === "error" || item.status === "syncing")
@@ -213,7 +188,7 @@ export const syncMobileQueuedChanges = async (
         status,
         attemptCount,
         lastError: getErrorMessage(error),
-        nextAttemptAt: status === "error" ? nextRetryAt(attemptCount) : null,
+        nextAttemptAt: status === "error" ? getSyncRetryAt(attemptCount) : null,
         updatedAt: new Date().toISOString(),
       }, itemVersion);
 
@@ -397,11 +372,7 @@ const mutateMobileSyncQueue = async (scope: string, mutate: (items: MobileSyncQu
 const getSyncQueueStorageKey = (scope: string) => `${SYNC_QUEUE_KEY_PREFIX}:${encodeURIComponent(scope.trim().toLowerCase())}`;
 
 const summarizeMobileSyncQueue = (items: MobileSyncQueueItem[]) =>
-  items.reduce((summary, item) => {
-    summary.total += 1;
-    summary[item.status] += 1;
-    return summary;
-  }, emptyMobileSyncQueueSummary());
+  summarizeSyncQueue(items);
 
 const isMobileSyncQueueItem = (value: unknown): value is MobileSyncQueueItem => {
   if (!value || typeof value !== "object") {
@@ -415,8 +386,3 @@ const isMobileSyncQueueItem = (value: unknown): value is MobileSyncQueueItem => 
 const isRevisionConflict = (error: unknown) => error instanceof ApiRequestError && error.code === "revision_conflict";
 
 const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "Sync failed");
-
-const nextRetryAt = (attemptCount: number) => {
-  const delayMs = Math.min(5 * 60_000, 2 ** Math.min(attemptCount, 6) * 1000);
-  return new Date(Date.now() + delayMs).toISOString();
-};

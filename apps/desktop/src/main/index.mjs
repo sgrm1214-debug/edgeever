@@ -11,7 +11,7 @@ import { isSupportedAssociatedFile } from "./file-association.mjs";
 import { accountDataDirectory, accountScopeKey } from "./account-scope.mjs";
 import { rotateDiagnosticLog } from "./diagnostic-log.mjs";
 import { restrictDirectory, restrictFile } from "./file-permissions.mjs";
-import { normalizeStagedResourceInput } from "./staged-resource.mjs";
+import { normalizeStagedResourceInput, remapStagedResourceMetadata } from "./staged-resource.mjs";
 import {
   isMountedDiskImageVolume,
   isMountedInstallerPath,
@@ -696,6 +696,25 @@ app.whenReady().then(async () => {
       try { result.push(JSON.parse(await readFile(join(directory, name), "utf8"))); } catch {}
     }
     return result;
+  });
+  ipcMain.handle("desktop:remap-staged-resource-memo-ids", async (_event, mappings) => {
+    if (!Array.isArray(mappings) || mappings.length === 0) return { updated: 0 };
+    const directory = stagedResourceDirectory();
+    try { await mkdir(directory, { recursive: true }); await restrictDirectory(directory); } catch {}
+    const names = await readdir(directory);
+    let updated = 0;
+    for (const name of names.filter((value) => value.endsWith(".json"))) {
+      const metadataPath = join(directory, name);
+      try {
+        const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+        const remapped = remapStagedResourceMetadata(metadata, mappings);
+        if (remapped === metadata) continue;
+        await writeFile(metadataPath, JSON.stringify(remapped), { mode: 0o600 });
+        await restrictFile(metadataPath);
+        updated += 1;
+      } catch {}
+    }
+    return { updated };
   });
   ipcMain.handle("desktop:read-staged-resource", async (_event, id) => {
     if (!isSafeResourceId(id)) throw new Error("Invalid staged resource id");

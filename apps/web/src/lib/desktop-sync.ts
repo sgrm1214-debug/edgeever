@@ -5,14 +5,55 @@ import { isDesktopResourceRuntime } from "@/lib/desktop-resources";
 type StagedResourceRewrite = { memoId: string; placeholder: string; url: string };
 let lastSyncFailed = false;
 
+const STAGED_RESOURCE_ID_CHARACTER = /[A-Za-z0-9_-]/;
+
+const stringReferencesStagedResource = (value: string, placeholder: string) => {
+  let index = value.indexOf(placeholder);
+  while (index >= 0) {
+    const nextCharacter = value[index + placeholder.length];
+    if (!nextCharacter || !STAGED_RESOURCE_ID_CHARACTER.test(nextCharacter)) return true;
+    index = value.indexOf(placeholder, index + placeholder.length);
+  }
+  return false;
+};
+
+const valueReferencesStagedResource = (value: unknown, placeholder: string): boolean => {
+  if (typeof value === "string") return stringReferencesStagedResource(value, placeholder);
+  if (Array.isArray(value)) return value.some((item) => valueReferencesStagedResource(item, placeholder));
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => valueReferencesStagedResource(item, placeholder));
+  }
+  return false;
+};
+
+export const isStagedResourceReferenced = (payloads: unknown[], stagedId: string) => {
+  const placeholder = `edgeever-staged://${stagedId}`;
+  return payloads.some((payload) => valueReferencesStagedResource(payload, placeholder));
+};
+
+const remapStagedResourceMemoIds = async (memoIdMappings: ReadonlyMap<string, string>) => {
+  if (memoIdMappings.size === 0) return;
+  // Keep sync compatible with a renderer hot-reload or an older native shell
+  // that does not expose the new remapping IPC yet.
+  await window.edgeeverDesktop?.remapStagedResourceMemoIds?.([...memoIdMappings]);
+};
+
 const syncStagedResources = async (memoIdMappings: Map<string, string>) => {
   if (!isDesktopResourceRuntime() || (typeof navigator !== "undefined" && !navigator.onLine)) return { attempted: 0, synced: 0, failed: 0, rewrites: [] as StagedResourceRewrite[], stagedIds: [] as string[] };
   const staged = await window.edgeeverDesktop!.listStagedResources();
+  const pending = await request("sync.outbox.list", { limit: 200 });
+  const pendingPayloads = pending.items.map((item) => item.payload);
   let synced = 0;
   let failed = 0;
   const rewrites: StagedResourceRewrite[] = [];
   const stagedIds: string[] = [];
   for (const item of staged) {
+    // An image can finish staging before the editor's debounced local save
+    // has queued the memo update that references it. Uploading and deleting
+    // the staged file in that gap leaves the memo with an unrecoverable
+    // edgeever-staged:// URL. Keep it durable until an outbox payload proves
+    // that the note content containing the placeholder has been saved.
+    if (!isStagedResourceReferenced(pendingPayloads, item.id)) continue;
     try {
       const stored = await window.edgeeverDesktop!.readStagedResource(item.id);
       const memoId = memoIdMappings.get(item.memoId) ?? item.memoId;
@@ -370,28 +411,59 @@ const pullRemoteChanges = async () => {
   await request("sync.cursor.set", { cursor: response.cursor ?? cursor, syncIdentity: response.syncIdentity ?? status.syncIdentity });
 };
 
-let activeSync: Promise<{ attempted: number; synced: number; failed: number; conflicted: number }> | null = null;
+export type DesktopSyncResult = {
+  attempted: number;
+  synced: number;
+  failed: number;
+  conflicted: number;
+  memoIdMappings: Map<string, string>;
+};
+
+export const mergeMemoIdMappings = (
+  target: Map<string, string>,
+  source: ReadonlyMap<string, string>,
+) => {
+  for (const [temporaryId, remoteId] of source) target.set(temporaryId, remoteId);
+  return target;
+};
+
+let activeSync: Promise<DesktopSyncResult> | null = null;
 
 export const syncDesktopData = () => {
   if (activeSync) return activeSync;
   activeSync = (async () => {
+    const memoIdMappings = new Map<string, string>();
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      return { attempted: 0, synced: 0, failed: 0, conflicted: 0 };
+      return { attempted: 0, synced: 0, failed: 0, conflicted: 0, memoIdMappings };
     }
     try {
       const creates = await syncOutbox([], new Set(["memo.create"]));
+      mergeMemoIdMappings(memoIdMappings, creates.memoIdMappings);
+      await remapStagedResourceMemoIds(creates.memoIdMappings);
       const stagedResources = await syncStagedResources(creates.memoIdMappings);
       const outbox = await syncOutbox(stagedResources.rewrites);
+      mergeMemoIdMappings(memoIdMappings, outbox.memoIdMappings);
       if (stagedResources.failed === 0 && outbox.failed === 0 && outbox.conflicted === 0 && creates.conflicted === 0) {
         await removeSyncedStagedResources(stagedResources.stagedIds);
       }
       if (outbox.conflicted === 0 && creates.conflicted === 0 && (typeof navigator === "undefined" || navigator.onLine)) await pullRemoteChanges();
+      // Catch resources staged while the network sync itself was running.
+      await remapStagedResourceMemoIds(creates.memoIdMappings);
       lastSyncFailed = false;
-      return { ...outbox, attempted: creates.attempted + outbox.attempted + stagedResources.attempted, synced: creates.synced + outbox.synced + stagedResources.synced, failed: creates.failed + outbox.failed + stagedResources.failed, conflicted: creates.conflicted + outbox.conflicted };
+      return {
+        attempted: creates.attempted + outbox.attempted + stagedResources.attempted,
+        synced: creates.synced + outbox.synced + stagedResources.synced,
+        failed: creates.failed + outbox.failed + stagedResources.failed,
+        conflicted: creates.conflicted + outbox.conflicted,
+        memoIdMappings,
+      };
     } catch (error) {
       lastSyncFailed = true;
       console.error("[desktop-sync] Sync failed", error);
-      return { attempted: 0, synced: 0, failed: 1, conflicted: 0 };
+      // A create may already have been acknowledged before a later upload or
+      // pull failed. Preserve its id mapping so the UI cannot keep editing an
+      // obsolete temporary id merely because the overall sync was partial.
+      return { attempted: 0, synced: 0, failed: 1, conflicted: 0, memoIdMappings };
     }
   })().finally(() => { activeSync = null; });
   return activeSync;

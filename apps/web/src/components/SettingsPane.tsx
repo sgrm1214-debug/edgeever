@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import * as m from "motion/react-m";
 import { SystemInfoDialog } from "@/components/SystemInfoDialog";
 import { Button } from "@/components/ui/button";
 import type { ShortcutSettings } from "@/lib/app-helpers";
@@ -30,6 +31,7 @@ import { SessionCard } from "./settings/SessionCard";
 import { UserManagementCard } from "./settings/UserManagementCard";
 import { ThemeToggle } from "./ThemeToggle";
 import type { AuthUser } from "@edgeever/shared";
+import { contentEnterMotion } from "@/lib/motion";
 
 interface SettingsPaneProps {
   onClose: () => void;
@@ -276,9 +278,9 @@ export const SettingsPane = ({
 
           {/* 右侧设置内容区 */}
           <main className="flex-1 min-w-0 overflow-y-auto pr-2">
-            <div className="grid gap-4">
+            <m.div key={activeTab} className="grid gap-4" {...contentEnterMotion}>
               {renderTabContent(activeTab)}
-            </div>
+            </m.div>
           </main>
         </div>
 
@@ -345,9 +347,9 @@ export const SettingsPane = ({
             </div>
           ) : (
             /* 详情页面 */
-            <div className="grid gap-4">
+            <m.div key={activeMobileTab} className="grid gap-4" {...contentEnterMotion}>
               {renderTabContent(activeMobileTab)}
-            </div>
+            </m.div>
           )}
         </div>
       </div>

@@ -27,6 +27,22 @@ export type TiptapDoc = {
 
 export const DEFAULT_MEMO_TITLE = "无标题笔记";
 
+export const resolveMergedMemoTitle = (
+  inputTitle: string | null | undefined,
+  sourceMemos: Array<{ title: string | null | undefined }>,
+  date = new Date(),
+) => {
+  const explicitTitle = inputTitle?.trim();
+  if (explicitTitle) {
+    return explicitTitle;
+  }
+
+  const customTitle = sourceMemos
+    .map((memo) => memo.title?.trim())
+    .find((title): title is string => Boolean(title && title !== DEFAULT_MEMO_TITLE));
+  return customTitle ?? `合并笔记 ${date.toLocaleDateString("zh-CN")}`;
+};
+
 export const emptyDoc = (): TiptapDoc => ({
   type: "doc",
   content: [{ type: "paragraph" }],
@@ -221,6 +237,17 @@ export const docToMarkdown = (doc: unknown): string => {
 
   return markdownManager.serialize(stripEditorOnlyNodes(doc) as Parameters<typeof markdownManager.serialize>[0]);
 };
+
+/**
+ * Returns the best complete Markdown representation available for a memo.
+ * Some older rich-editor saves populated contentJson while leaving the
+ * Markdown compatibility copy empty, so merge/export callers must not trust
+ * contentMarkdown alone.
+ */
+export const resolveMemoContentMarkdown = (
+  contentJson: TiptapDoc | null | undefined,
+  contentMarkdown: string | null | undefined,
+) => docToMarkdown(resolveMemoContentDoc(contentJson, contentMarkdown));
 
 /**
  * Theme blocks are richer editor-only nodes. Markdown has no portable equivalent,

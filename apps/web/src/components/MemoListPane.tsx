@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import * as m from "motion/react-m";
 import {
   X,
   ChevronLeft,
@@ -61,6 +62,7 @@ import type {
   MemoContextMenuState,
   NotebookMoveOption,
 } from "@/lib/app-helpers";
+import { contentEnterMotion, paneEnterMotion } from "@/lib/motion";
 import type { SyncQueueSummary } from "@/lib/sync-queue";
 import {
   getMemoFilterOptions,
@@ -132,7 +134,7 @@ export const MemoSelectionActionBar = ({
 
   return (
     <div className="hidden h-full min-h-0 flex-1 items-center justify-start bg-white px-16 py-10 lg:flex lg:pl-44 xl:px-24 xl:pl-44">
-      <div className="w-72 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+      <m.div className="w-72 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg" {...paneEnterMotion}>
         <div className="flex h-9 items-center gap-2 px-3 text-xs font-semibold text-slate-400">
           <CheckSquare className="h-4 w-4" />
           {getSelectionCountLabel(selectedCount, t)}
@@ -206,7 +208,7 @@ export const MemoSelectionActionBar = ({
           <X className="h-4 w-4" />
           {t("memoList.clearSelection")}
         </Button>
-      </div>
+      </m.div>
     </div>
   );
 };
@@ -1284,7 +1286,7 @@ export const MemoListPane = ({
         </div>
 
         {hasListConstraint && (
-          <div
+          <m.div
             className={cn(
               "mt-3 flex min-h-8 items-center gap-2 rounded-md border px-3 py-1.5 text-xs",
               searchActive
@@ -1292,6 +1294,7 @@ export const MemoListPane = ({
                 : "border-slate-200 bg-white text-slate-500"
             )}
             role="status"
+            {...contentEnterMotion}
           >
             {searchActive && (
               <span className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-2 py-1 font-semibold text-white">
@@ -1317,7 +1320,7 @@ export const MemoListPane = ({
             >
               {searchActive ? t("memoList.cancelSearch") : t("memoList.reset")}
             </button>
-          </div>
+          </m.div>
         )}
       </header>
 

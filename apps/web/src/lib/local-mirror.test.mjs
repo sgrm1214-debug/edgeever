@@ -13,6 +13,7 @@ const {
   listLocalTags,
   listLocalMemos,
   putLocalTemplate,
+  putLocalMemo,
   putLocalMemoUpdate,
   applyLocalTagRename,
   applyLocalMemoMove,
@@ -82,6 +83,7 @@ describe("local mirror", () => {
     expect(updated.id).toBe(memo.id);
     expect((await getLocalMemo(scope, memo.id))?.title).toBe("Updated locally");
     expect((await getLocalMemo(scope, memo.id))?.tags).toEqual(["updated"]);
+    expect((await getLocalMemo(scope, memo.id))?.contentMarkdown).toContain("Changed");
   });
 
   test("caches templates inside the same local data scope", async () => {
@@ -159,6 +161,48 @@ describe("local mirror", () => {
     expect(merged?.sourceMemoIds).toEqual([first.id, second.id]);
     expect((await getLocalMemo(scope, first.id))?.isDeleted).toBe(true);
     expect((await getLocalMemo(scope, second.id))?.mergedIntoMemoId).toBe(merged?.id);
+  });
+
+  test("uses a custom source title when the first merged memo is untitled", async () => {
+    const scope = createLocalDataScope("https://demo.edgeever.org", "user-1");
+    const untitled = await createLocalMemo(scope, { notebookId: "inbox", title: "无标题笔记", contentMarkdown: "one" });
+    const titled = await createLocalMemo(scope, { notebookId: "inbox", title: "手动设置的标题", contentMarkdown: "two" });
+
+    const merged = await mergeLocalMemos(scope, { memoIds: [untitled.id, titled.id] });
+
+    expect(merged?.title).toBe("手动设置的标题");
+  });
+
+  test("recovers rich content when source Markdown copies are empty", async () => {
+    const scope = createLocalDataScope("https://demo.edgeever.org", "user-1");
+    const first = await createLocalMemo(scope, { notebookId: "inbox", title: "First" });
+    const second = await createLocalMemo(scope, { notebookId: "inbox", title: "Second" });
+    first.contentJson = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "第一篇真实正文" }] }] };
+    first.contentText = "第一篇真实正文";
+    second.contentJson = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "第二篇真实正文" }] }] };
+    second.contentText = "第二篇真实正文";
+    await putLocalMemo(scope, first);
+    await putLocalMemo(scope, second);
+
+    const merged = await mergeLocalMemos(scope, { memoIds: [first.id, second.id] });
+
+    expect(merged?.contentMarkdown).toContain("第一篇真实正文");
+    expect(merged?.contentMarkdown).toContain("第二篇真实正文");
+    expect(merged?.contentText).toContain("第一篇真实正文");
+    expect((await getLocalMemo(scope, first.id))?.isDeleted).toBe(true);
+  });
+
+  test("cancels a merge before deleting sources when cached content is inconsistent", async () => {
+    const scope = createLocalDataScope("https://demo.edgeever.org", "user-1");
+    const unsafe = await createLocalMemo(scope, { notebookId: "inbox", title: "Unsafe" });
+    const second = await createLocalMemo(scope, { notebookId: "inbox", title: "Second", contentMarkdown: "正常正文" });
+    unsafe.contentText = "缓存声称这里有正文";
+    await putLocalMemo(scope, unsafe);
+
+    await expect(mergeLocalMemos(scope, { memoIds: [unsafe.id, second.id] }))
+      .rejects.toThrow("Merge was cancelled");
+    expect((await getLocalMemo(scope, unsafe.id))?.isDeleted).toBe(false);
+    expect((await getLocalMemo(scope, second.id))?.isDeleted).toBe(false);
   });
 
   test("caches memo revisions by account scope", async () => {

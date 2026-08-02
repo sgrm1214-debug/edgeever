@@ -53,6 +53,15 @@ assert.equal((await request("memo.get", { memoId: first.memo.id })).memo.id, fir
 const second = await request("memo.create", { notebookId: inbox.id, title: "Second memo", contentMarkdown: "another body", tags: [] });
 const search = await request("memo.list", { q: "searchable", limit: 20 });
 assert.deepEqual(search.memos.map((memo) => memo.id), [first.memo.id]);
+const childNotebook = (await request("notebook.create", { name: "Inbox child", parentId: inbox.id })).notebook;
+const childMemo = await request("memo.create", { notebookId: childNotebook.id, title: "Nested memo", contentMarkdown: "nested body", tags: [] });
+const subtree = await request("memo.list", {
+  notebookId: inbox.id,
+  notebookIds: [inbox.id, childNotebook.id],
+  limit: 20,
+});
+assert.ok(subtree.memos.some((memo) => memo.id === first.memo.id), "parent notebook notes should remain in a subtree query");
+assert.ok(subtree.memos.some((memo) => memo.id === childMemo.memo.id), "subtree queries should include child notebook notes");
 await request("memo.update", {
   memoId: first.memo.id,
   title: "Local first updated",
@@ -195,4 +204,4 @@ assert.equal((await request("sync.status")).conflict, 0);
 
 child.stdin.end();
 await new Promise((resolve) => child.once("close", resolve));
-console.log(JSON.stringify({ ok: true, checked: ["memo.create", "memo.list.search", "memo.update", "memo.update.coalesce", "memo.revisions", "memo.restoreRevision", "memo.revision.cache", "tag.rename", "memo.moveBatch", "memo.pinBatch", "memo.deleteBatch", "memo.restore", "memo.emptyTrash", "memo.merge", "template.cache", "template.create.payload", "template.delete", "storage.backup", "storage.backups", "storage.restore", "sync.outbox", "sync.outbox.discard"] }));
+console.log(JSON.stringify({ ok: true, checked: ["memo.create", "memo.list.search", "memo.list.subtree", "memo.update", "memo.update.coalesce", "memo.revisions", "memo.restoreRevision", "memo.revision.cache", "tag.rename", "memo.moveBatch", "memo.pinBatch", "memo.deleteBatch", "memo.restore", "memo.emptyTrash", "memo.merge", "template.cache", "template.create.payload", "template.delete", "storage.backup", "storage.backups", "storage.restore", "sync.outbox", "sync.outbox.discard"] }));

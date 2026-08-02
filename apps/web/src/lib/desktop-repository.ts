@@ -6,7 +6,7 @@ import type {
   DesktopRpcParams,
   DesktopRpcResponses,
 } from "@edgeever/shared";
-import { docToText, type MemoDetail } from "@edgeever/shared";
+import { docToMarkdown, docToText, type MemoDetail } from "@edgeever/shared";
 import type { EdgeEverRepository } from "@/lib/repository";
 import { api, getConfiguredDesktopApiBaseUrl } from "@/lib/api";
 import { createStagedResourceListItem, mapMarkdownResourceUrls, mapTiptapResourceUrls, toApiResourceUrl, toDesktopResourceUrl } from "@/lib/desktop-resources";
@@ -195,7 +195,7 @@ export const createDesktopRepository = (): EdgeEverRepository => ({
   listMemos: (params) => {
     const rpcParams: DesktopMemoListParams = {
       ...params,
-      notebookId: params.notebookId ?? params.notebookIds?.[0] ?? null,
+      notebookId: params.notebookIds?.length ? null : (params.notebookId ?? null),
     };
     return request("memo.list", rpcParams);
   },
@@ -214,13 +214,17 @@ export const createDesktopRepository = (): EdgeEverRepository => ({
   },
 
   updateMemo: async (memo: MemoDetail, input) => {
+    const portableContentJson = mapTiptapResourceUrls(input.contentJson, toApiResourceUrl);
+    const contentMarkdown = input.contentMarkdown === undefined
+      ? docToMarkdown(portableContentJson)
+      : mapMarkdownResourceUrls(input.contentMarkdown, toApiResourceUrl);
     const rpcParams: DesktopMemoUpdateParams & { contentText: string } = {
       memoId: memo.id,
       expectedRevision: memo.revision,
       expectedContentHash: memo.contentHash,
       title: input.title,
-      contentJson: mapTiptapResourceUrls(input.contentJson, toApiResourceUrl),
-      contentMarkdown: mapMarkdownResourceUrls(input.contentMarkdown, toApiResourceUrl),
+      contentJson: portableContentJson,
+      contentMarkdown,
       contentText: docToText(input.contentJson),
       tags: input.tags,
     };

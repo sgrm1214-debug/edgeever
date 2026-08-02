@@ -1,0 +1,68 @@
+import { describe, expect, test } from "bun:test";
+import {
+  createEmptySyncQueueSummary,
+  createEmptySyncRunResult,
+  getNextSyncQueueRetryDelay,
+  getSyncRetryAt,
+  getSyncRetryDelayMs,
+  summarizeSyncQueue,
+} from "./sync.ts";
+
+describe("shared sync queue contract", () => {
+  test("creates independent empty summaries and run results", () => {
+    const firstSummary = createEmptySyncQueueSummary();
+    const secondSummary = createEmptySyncQueueSummary();
+    firstSummary.pending = 1;
+
+    expect(secondSummary).toEqual({
+      total: 0,
+      pending: 0,
+      syncing: 0,
+      conflict: 0,
+      error: 0,
+    });
+    expect(createEmptySyncRunResult()).toEqual({
+      attempted: 0,
+      synced: 0,
+      failed: 0,
+      conflicted: 0,
+    });
+  });
+
+  test("summarizes every queue status", () => {
+    expect(summarizeSyncQueue([
+      { status: "pending" },
+      { status: "pending" },
+      { status: "syncing" },
+      { status: "conflict" },
+      { status: "error" },
+    ])).toEqual({
+      total: 5,
+      pending: 2,
+      syncing: 1,
+      conflict: 1,
+      error: 1,
+    });
+  });
+
+  test("shares capped exponential retry timing", () => {
+    const now = Date.parse("2026-08-01T00:00:00.000Z");
+
+    expect(getSyncRetryDelayMs(1)).toBe(2_000);
+    expect(getSyncRetryDelayMs(20)).toBe(64_000);
+    expect(getSyncRetryAt(2, now)).toBe("2026-08-01T00:00:04.000Z");
+  });
+
+  test("finds the earliest retry while ignoring conflicts", () => {
+    const now = Date.parse("2026-08-01T00:00:00.000Z");
+    const items = [
+      { status: "pending", nextAttemptAt: null },
+      { status: "error", nextAttemptAt: "2026-08-01T00:00:05.000Z" },
+      { status: "conflict", nextAttemptAt: "2026-08-01T00:00:01.000Z" },
+    ];
+
+    expect(getNextSyncQueueRetryDelay(items, now)).toBe(250);
+    expect(getNextSyncQueueRetryDelay(items.slice(1), now)).toBe(5_000);
+    expect(getNextSyncQueueRetryDelay(items.slice(2), now)).toBeNull();
+  });
+});

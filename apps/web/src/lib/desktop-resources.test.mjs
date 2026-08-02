@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 globalThis.window = {
+  location: { hostname: "notes.example.com", origin: "https://notes.example.com" },
   edgeeverDesktop: { isAvailable: true, apiBaseUrl: "https://notes.example.com" },
 };
 

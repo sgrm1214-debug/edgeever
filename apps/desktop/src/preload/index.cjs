@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("edgeeverDesktop", Object.freeze({
   sidecarRequest: (method, params = {}) => ipcRenderer.invoke("desktop:sidecar-request", method, params),
   stageResource: (input) => ipcRenderer.invoke("desktop:stage-resource", input),
   listStagedResources: () => ipcRenderer.invoke("desktop:list-staged-resources"),
+  remapStagedResourceMemoIds: (mappings) => ipcRenderer.invoke("desktop:remap-staged-resource-memo-ids", mappings),
   readStagedResource: (id) => ipcRenderer.invoke("desktop:read-staged-resource", id),
   removeStagedResource: (id) => ipcRenderer.invoke("desktop:remove-staged-resource", id),
   onCommand: (callback) => {

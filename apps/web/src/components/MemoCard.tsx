@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import * as m from "motion/react-m";
 import { Star, Check, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import type { MemoSummary } from "@edgeever/shared";
 import { cn } from "@/lib/utils";
+import { selectionSettleMotion } from "@/lib/motion";
 import type { MemoListDensity } from "@/lib/app-helpers";
 import { isDefaultMemoTitle, MEMO_DRAG_MIME, setMemoDragPreview } from "@/lib/app-helpers";
 
@@ -310,7 +312,7 @@ export const MemoCard = ({
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       className={cn(
-        "group overflow-hidden border border-slate-100 bg-white transition lg:rounded-none lg:border-x-0 lg:border-t-0 lg:border-slate-200 lg:shadow-none lg:last:border-b-0 dark:lg:border-slate-300/70 transition-all duration-200 select-none",
+        "group relative overflow-hidden border border-slate-100 bg-white transition lg:rounded-none lg:border-x-0 lg:border-t-0 lg:border-slate-200 lg:shadow-none lg:last:border-b-0 dark:lg:border-slate-300/70 transition-all duration-200 select-none",
         listDensity === "compact" ? "rounded-md shadow-none" : "rounded-lg shadow-[0_4px_16px_rgba(15,23,42,0.045)]",
         !selectionMode && selected
           ? "lg:bg-slate-100"
@@ -319,6 +321,13 @@ export const MemoCard = ({
             : "active:bg-slate-50 lg:hover:bg-slate-50"
       )}
     >
+      {!selectionMode && selected ? (
+        <m.span
+          className="pointer-events-none absolute inset-y-3 left-0 z-10 hidden w-[3px] origin-center rounded-r-full bg-emerald-500 lg:block"
+          aria-hidden="true"
+          {...selectionSettleMotion}
+        />
+      ) : null}
       <div className={cn("flex min-h-[132px] items-center", listDensity === "compact" && "min-h-[84px] lg:min-h-[76px]")}>
         {showSelectionControl && (
           <button

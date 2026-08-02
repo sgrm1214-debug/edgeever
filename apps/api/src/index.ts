@@ -10,6 +10,8 @@ import {
   LoginSchema,
   LoginDeviceSessionUpdateSchema,
   markdownToDoc,
+  resolveMemoContentMarkdown,
+  resolveMergedMemoTitle,
   isSuspiciousMemoOverwrite,
   isMemoEditBindingValid,
   JsonBackupResourceMetadataSchema,
@@ -21,11 +23,8 @@ import {
   MergeMemosSchema,
   MoveMemosSchema,
   normalizeTags,
-  TagRenameSchema,
   UserCreateSchema,
   UserUpdateSchema,
-  NotebookCreateSchema,
-  NotebookUpdateSchema,
   RestoreJsonMemosSchema,
   RestoreJsonNotebooksSchema,
   type ApiToken,
@@ -41,12 +40,9 @@ import {
   type JsonBackupNotebook,
   type JsonBackupResource,
   type JsonBackupRevision,
-  type Notebook,
-  type NotebookCreateInput,
   type Resource,
   type ResourceListItem,
   type ResourceStorageSummary,
-  type TagSummary,
   type TiptapDoc,
   type InstanceUser,
 } from "@edgeever/shared";
@@ -91,11 +87,73 @@ import {
 import { createCloudflareStorageAdapter } from "./cloudflare-storage-adapter";
 import type {
   BlobStoreAdapter,
-  CloudflareStorageBindings,
   DatabaseAdapter,
   PreparedStatementAdapter,
-  StorageAdapter,
 } from "./storage-contract";
+import type { AppContext, AppEnv, AuditActor, AuthContext, Bindings, WorkerBindings } from "./api-context";
+import { AppError } from "./app-error";
+import { hashPassword, randomToken, SESSION_TOKEN_BYTES, verifyPassword } from "./auth-crypto";
+import {
+  apiError,
+  authNotConfigured,
+  badRequest,
+  conflict,
+  databaseNotReady,
+  forbidden,
+  notFound,
+  unauthorized,
+} from "./http-errors";
+import {
+  asRecord,
+  decodeBase64Data,
+  escapeMarkdownImageAlt,
+  escapeMarkdownLinkLabel,
+  getJsonRpcId,
+  getOptionalString,
+  getOptionalStringArray,
+  getRequiredString,
+  getRequiredStringArray,
+  jsonRpcError,
+  jsonRpcResult,
+  mapMcpToolError,
+  type JsonRpcHandlerResult,
+  type JsonRpcRequest,
+} from "./mcp-json-rpc";
+import { MCP_TOOLS } from "./mcp-tools";
+import { audit, auditStatement } from "./audit";
+import { createId, isoNow, parseJsonArray } from "./entity-utils";
+import {
+  createNotebookRecord,
+  findNotebooks,
+  getNotebook,
+  listNotebooks,
+  mapNotebook,
+  notebookSelectSql,
+  resolveNotebookPath,
+  updateNotebookRecord,
+  type NotebookRow,
+} from "./notebook-service";
+import {
+  listTagSummaries,
+  previewTagRename,
+  updateTagAcrossMemos,
+  updateTagsForMemos,
+} from "./tag-service";
+import {
+  ALL_TOKEN_SCOPES,
+  assertScope,
+  getActorLabel,
+  getAuditActor,
+  getWorkspaceId,
+  hasScopes,
+  normalizeTokenScopes,
+  requireOwner,
+  requireScopes,
+  requireUser,
+  type TokenScope,
+} from "./request-auth";
+import { registerTagRoutes } from "./tag-routes";
+import { registerNotebookRoutes } from "./notebook-routes";
 
 // Compatibility aliases keep the existing SQL-heavy implementation small
 // while routing its dependency through the platform-neutral contract above.
@@ -103,59 +161,6 @@ import type {
 type D1Database = DatabaseAdapter;
 type D1PreparedStatement = PreparedStatementAdapter;
 type R2Bucket = BlobStoreAdapter;
-
-type Bindings = CloudflareStorageBindings & {
-  /** The only persistence dependency exposed to application code. */
-  storage: StorageAdapter;
-  EDGE_EVER_AUTH_USERNAME?: string;
-  EDGE_EVER_RUNTIME?: string;
-  EDGE_EVER_AUTH_PASSWORD?: string;
-  EDGE_EVER_AUTH_PASSWORD_HASH?: string;
-  EDGE_EVER_SESSION_TTL_DAYS?: string;
-  EDGE_EVER_AUTH_LOGIN_WINDOW_SECONDS?: string;
-  EDGE_EVER_AUTH_LOGIN_USERNAME_MAX_ATTEMPTS?: string;
-  EDGE_EVER_AUTH_LOGIN_USERNAME_COOLDOWN_SECONDS?: string;
-  EDGE_EVER_AUTH_LOGIN_IP_MAX_ATTEMPTS?: string;
-  EDGE_EVER_AUTH_LOGIN_IP_COOLDOWN_SECONDS?: string;
-  EDGE_EVER_R2_BUCKET_NAME?: string;
-  EDGE_EVER_DEMO_MODE?: string;
-  EDGE_EVER_LOCAL_DEMO_SEED?: string;
-  EDGE_EVER_ALLOW_UNAUTHENTICATED?: string;
-};
-
-type WorkerBindings = Omit<Bindings, "storage">;
-
-type AuthContext = {
-  kind: "user" | "agent";
-  actorType: "user" | "agent";
-  actorId: string | null;
-  username: string;
-  displayName: string | null;
-  scopes: string[];
-  workspaceId: string;
-  role: "owner" | "member";
-  sessionId?: string;
-  tokenId?: string;
-};
-
-type AuditActor = {
-  actorType: "user" | "agent";
-  actorId: string | null;
-};
-
-type NotebookRow = {
-  id: string;
-  parent_id: string | null;
-  name: string;
-  slug: string | null;
-  icon: string | null;
-  color: string | null;
-  sort_order: number;
-  memo_count: number | null;
-  last_memo_updated_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
 
 type MemoSummaryRow = {
   id: string;
@@ -292,19 +297,6 @@ type MemoImportSourceRow = {
   source_updated_at: string | null;
 };
 
-type TagSummaryRow = {
-  name: string;
-  memo_count: number;
-  updated_at: string | null;
-};
-
-type MemoTagUpdateRow = {
-  id: string;
-  title: string | null;
-  tags_json: string;
-  content_text: string;
-};
-
 type ResourceRow = {
   id: string;
   memo_id: string;
@@ -335,18 +327,11 @@ type ResourceStatsRow = {
   attachment_count: number;
 };
 
-type AppContext = Context<{ Bindings: Bindings; Variables: { auth: AuthContext } }>;
-
 const SESSION_COOKIE = "edgeever_session";
 const DEFAULT_WORKSPACE_ID = "ws_default";
 const DEFAULT_MEMO_LIST_LIMIT = 100;
 const MAX_MEMO_LIST_LIMIT = 200;
 const UNTITLED_MEMO_TITLE = "无标题笔记";
-const PASSWORD_HASH_ALGORITHM = "pbkdf2-sha256";
-const PASSWORD_HASH_ITERATIONS = 100_000;
-const PASSWORD_HASH_BYTES = 32;
-const PASSWORD_SALT_BYTES = 16;
-const SESSION_TOKEN_BYTES = 32;
 const DEFAULT_SESSION_TTL_DAYS = 400;
 const MAX_SESSION_TTL_DAYS = 400;
 const DEFAULT_R2_BUCKET_NAME = "edgeever-resources";
@@ -433,17 +418,6 @@ const MAX_ATTACHMENT_UPLOAD_BYTES = 100 * 1024 * 1024;
 const REVISION_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 const API_TOKEN_BYTES = 32;
 const API_TOKEN_PREFIX = "eev";
-const ALL_TOKEN_SCOPES = [
-  "read:notebooks",
-  "write:notebooks",
-  "read:memos",
-  "write:memos",
-  "read:resources",
-  "write:resources",
-  "read:tags",
-  "write:tags",
-] as const;
-type TokenScope = (typeof ALL_TOKEN_SCOPES)[number];
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -452,7 +426,7 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/avif",
 ]);
 
-const app = new Hono<{ Bindings: Bindings; Variables: { auth: AuthContext } }>();
+const app = new Hono<AppEnv>();
 
 app.use(
   "/api/*",
@@ -1004,26 +978,8 @@ app.delete("/api/v1/api-tokens/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-app.get("/api/v1/notebooks", async (c) => {
-  const denied = requireScopes(c, "read:notebooks");
-
-  if (denied) {
-    return denied;
-  }
-
-  if (isDemoMode(c.env)) {
-    await ensureDemoSeed(c.env);
-  }
-
-  const rows = await c.env.storage.db.prepare(
-    notebookSelectSql(
-      `WHERE n.workspace_id = ? AND n.is_deleted = 0
-       GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at
-       ORDER BY n.parent_id IS NOT NULL, n.sort_order ASC, n.name ASC`
-    )
-  ).bind(getWorkspaceId(c)).all<NotebookRow>();
-
-  return c.json({ notebooks: rows.results.map(mapNotebook) });
+registerNotebookRoutes(app, async (env) => {
+  if (isDemoMode(env)) await ensureDemoSeed(env);
 });
 
 app.get("/api/v1/sync/bootstrap", async (c) => {
@@ -1155,161 +1111,7 @@ app.get("/api/v1/sync/changes", async (c) => {
   });
 });
 
-app.post("/api/v1/notebooks", zValidator("json", NotebookCreateSchema), async (c) => {
-  const denied = requireScopes(c, "write:notebooks");
-
-  if (denied) {
-    return denied;
-  }
-
-  const input = c.req.valid("json");
-  const actor = getAuditActor(c);
-
-  try {
-    const notebook = await createNotebookRecord(c.env.storage.db, getWorkspaceId(c), input, actor);
-    return c.json({ notebook }, 201);
-  } catch (error) {
-    if (error instanceof AppError) {
-      return apiError(c, error.code, error.message, error.status);
-    }
-
-    throw error;
-  }
-});
-
-app.patch("/api/v1/notebooks/:id", zValidator("json", NotebookUpdateSchema), async (c) => {
-  const denied = requireScopes(c, "write:notebooks");
-
-  if (denied) {
-    return denied;
-  }
-
-  const id = c.req.param("id");
-  const input = c.req.valid("json");
-  const actor = getAuditActor(c);
-
-  try {
-    const notebook = await updateNotebookRecord(c.env.storage.db, getWorkspaceId(c), id, input, actor);
-    return c.json({ notebook });
-  } catch (error) {
-    if (error instanceof AppError) {
-      return apiError(c, error.code, error.message, error.status);
-    }
-
-    throw error;
-  }
-});
-
-app.delete("/api/v1/notebooks/:id", async (c) => {
-  const denied = requireScopes(c, "write:notebooks");
-
-  if (denied) {
-    return denied;
-  }
-
-  const id = c.req.param("id");
-  const actor = getAuditActor(c);
-  const now = isoNow();
-  const workspaceId = getWorkspaceId(c);
-  const current = await getNotebook(c.env.storage.db, workspaceId, id);
-
-  if (!current) {
-    return notFound(c, "Notebook not found");
-  }
-
-  if (id === "nb_inbox" || current.slug === "inbox") {
-    return badRequest(c, "等待分类不能删除。");
-  }
-
-  const [childCount, memoCount] = await Promise.all([
-    c.env.storage.db.prepare(`SELECT COUNT(*) AS count FROM notebooks WHERE workspace_id = ? AND parent_id = ? AND is_deleted = 0`)
-      .bind(workspaceId, id)
-      .first<{ count: number }>(),
-    c.env.storage.db.prepare(`SELECT COUNT(*) AS count FROM memos WHERE workspace_id = ? AND notebook_id = ? AND is_deleted = 0`)
-      .bind(workspaceId, id)
-      .first<{ count: number }>(),
-  ]);
-
-  if ((childCount?.count ?? 0) > 0 || (memoCount?.count ?? 0) > 0) {
-    return conflict(c, "notebook_not_empty", "Move or delete child notebooks and memos before deleting this notebook.");
-  }
-
-  await c.env.storage.db.prepare(
-    `UPDATE notebooks
-     SET is_deleted = 1, deleted_at = ?, updated_at = ?
-     WHERE id = ? AND workspace_id = ? AND slug <> 'inbox'`
-  )
-    .bind(now, now, id, workspaceId)
-    .run();
-
-  await audit(c.env.storage.db, actor.actorType, actor.actorId, "notebook.delete", "notebook", id, {});
-  return c.json({ ok: true });
-});
-
-app.post("/api/v1/notebooks/:id/restore", async (c) => {
-  const denied = requireScopes(c, "write:notebooks");
-  if (denied) return denied;
-
-  const id = c.req.param("id");
-  const workspaceId = getWorkspaceId(c);
-  const actor = getAuditActor(c);
-  const current = await c.env.storage.db.prepare(
-    `SELECT id FROM notebooks WHERE id = ? AND workspace_id = ? AND is_deleted = 1`
-  ).bind(id, workspaceId).first<{ id: string }>();
-  if (!current) return notFound(c, "Deleted notebook not found");
-
-  const now = isoNow();
-  await c.env.storage.db.batch([
-    c.env.storage.db.prepare(
-      `UPDATE notebooks SET is_deleted = 0, deleted_at = NULL, updated_at = ? WHERE id = ? AND workspace_id = ?`
-    ).bind(now, id, workspaceId),
-    auditStatement(c.env.storage.db, actor.actorType, actor.actorId, "notebook.restore", "notebook", id, {}),
-  ]);
-  const notebook = await getNotebook(c.env.storage.db, workspaceId, id);
-  if (!notebook) return notFound(c, "Notebook not found after restore");
-  return c.json({ notebook });
-});
-
-app.get("/api/v1/tags", async (c) => {
-  const denied = requireScopes(c, "read:tags");
-
-  if (denied) {
-    return denied;
-  }
-
-  return c.json({ tags: await listTagSummaries(c.env.storage.db, getWorkspaceId(c)) });
-});
-
-app.patch("/api/v1/tags/:tag", zValidator("json", TagRenameSchema), async (c) => {
-  const denied = requireScopes(c, "write:tags");
-
-  if (denied) {
-    return denied;
-  }
-
-  const oldTag = decodeTagParam(c.req.param("tag"));
-  const input = c.req.valid("json");
-  const actor = getAuditActor(c);
-  const actorLabel = getActorLabel(c);
-  const updated = await updateTagAcrossMemos(c.env.storage.db, getWorkspaceId(c), oldTag, input.name, actor, actorLabel);
-
-  return c.json({ ok: true, updated });
-});
-
-app.delete("/api/v1/tags/:tag", async (c) => {
-  const denied = requireScopes(c, "write:tags");
-
-  if (denied) {
-    return denied;
-  }
-
-  const tag = decodeTagParam(c.req.param("tag"));
-  const actor = getAuditActor(c);
-  const actorLabel = getActorLabel(c);
-  const updated = await updateTagAcrossMemos(c.env.storage.db, getWorkspaceId(c), tag, null, actor, actorLabel);
-
-  return c.json({ ok: true, updated });
-});
+registerTagRoutes(app);
 
 app.get("/api/v1/templates", async (c) => {
   const rows = await c.env.storage.db.prepare(
@@ -2973,31 +2775,6 @@ app.onError((error, c) => {
 
 export default worker;
 
-type JsonRpcRequest = {
-  jsonrpc?: string;
-  id?: string | number | null;
-  method?: string;
-  params?: unknown;
-};
-
-type JsonRpcId = string | number | null;
-type JsonRpcHandlerResult = {
-  body: unknown;
-  status: number;
-};
-
-class AppError extends Error {
-  code: string;
-  status: number;
-
-  constructor(code: string, message: string, status = 400) {
-    super(message);
-    this.name = "AppError";
-    this.code = code;
-    this.status = status;
-  }
-}
-
 const MCP_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
 type McpProtocolVersion = (typeof MCP_PROTOCOL_VERSIONS)[number];
 const MCP_PROTOCOL_VERSION: McpProtocolVersion = MCP_PROTOCOL_VERSIONS[0];
@@ -3121,520 +2898,6 @@ const handleMcpMessage = async (c: AppContext, payload: unknown): Promise<JsonRp
 
   return { body: jsonRpcError(request.id ?? null, -32601, "Method not found"), status: 404 };
 };
-
-const mapMcpToolError = (error: unknown) => {
-  if (error instanceof AppError) {
-    const rpcCode =
-      error.status === 401
-        ? -32001
-        : error.status === 403
-          ? -32003
-          : error.status === 404
-            ? -32004
-            : error.status === 409
-              ? -32009
-              : -32602;
-
-    return {
-      rpcCode,
-      status: error.status,
-      message: error.message,
-      data: {
-        code: error.code,
-      },
-    };
-  }
-
-  return {
-    rpcCode: -32000,
-    status: 400,
-    message: error instanceof Error ? error.message : "Tool call failed",
-    data: undefined,
-  };
-};
-
-const MCP_TOOL_DEFINITIONS = [
-  {
-    name: "get_current_user",
-    description:
-      "Identify the EdgeEver user and personal workspace authorized by the current session or API token. Use this before imports when the destination account must be confirmed.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-  {
-    name: "search_memos",
-    description: "Search active EdgeEver memos by text, tag, notebook, time range, pin state, or resource presence.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        query: { type: "string" },
-        notebookId: { type: "string" },
-        tags: { type: "array", items: { type: "string" } },
-        createdAfter: { type: "string", format: "date-time" },
-        createdBefore: { type: "string", format: "date-time" },
-        updatedAfter: { type: "string", format: "date-time" },
-        updatedBefore: { type: "string", format: "date-time" },
-        isPinned: { type: "boolean" },
-        hasResources: { type: "boolean" },
-        limit: { type: "integer", minimum: 1, maximum: 50 },
-      },
-    },
-  },
-  {
-    name: "list_memos",
-    description: "List EdgeEver memos with pagination. Use includeContent when full Markdown is needed.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        notebookId: { type: "string" },
-        limit: { type: "integer", minimum: 1, maximum: 100 },
-        offset: { type: "integer", minimum: 0 },
-        includeContent: { type: "boolean" },
-        includeDeleted: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "get_memo",
-    description: "Read a memo with Markdown content.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        includeDeleted: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "create_memo",
-    description: "Create a memo in a notebook.",
-    inputSchema: {
-      type: "object",
-      required: ["notebookId"],
-      additionalProperties: false,
-      properties: {
-        notebookId: { type: "string" },
-        title: { type: "string" },
-        contentMarkdown: { type: "string" },
-        tags: { type: "array", items: { type: "string" } },
-        createdAt: { type: "string", format: "date-time" },
-        updatedAt: { type: "string", format: "date-time" },
-      },
-    },
-  },
-  {
-    name: "import_memos",
-    description:
-      "Import up to 25 memos from an external service with database-backed idempotency. Reusing the same source and externalId returns skipped instead of creating a duplicate. Results are reported per item.",
-    inputSchema: {
-      type: "object",
-      required: ["source", "notebookId", "items"],
-      additionalProperties: false,
-      properties: {
-        source: {
-          type: "string",
-          minLength: 1,
-          maxLength: 80,
-          pattern: "^[A-Za-z0-9._-]+$",
-          description: "Stable source identifier such as flomo, notion, memos, or evernote.",
-        },
-        notebookId: { type: "string", description: "Destination notebook for every item in this batch." },
-        dryRun: { type: "boolean", description: "Validate and report existing items without creating memos." },
-        items: {
-          type: "array",
-          minItems: 1,
-          maxItems: 25,
-          items: {
-            type: "object",
-            required: ["externalId"],
-            additionalProperties: false,
-            properties: {
-              externalId: {
-                type: "string",
-                minLength: 1,
-                maxLength: 512,
-                description: "Stable ID from the source system. It is the idempotency key within source and workspace.",
-              },
-              title: { type: "string", maxLength: 160 },
-              contentMarkdown: { type: "string" },
-              tags: { type: "array", maxItems: 100, items: { type: "string" } },
-              createdAt: { type: "string", format: "date-time" },
-              updatedAt: { type: "string", format: "date-time" },
-            },
-          },
-        },
-      },
-    },
-  },
-  {
-    name: "update_memo",
-    description: "Update memo title, Markdown, tags, notebook, or pinned state.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        title: { type: "string" },
-        isPinned: { type: "boolean" },
-        contentMarkdown: { type: "string" },
-        tags: { type: "array", items: { type: "string" } },
-        notebookId: { type: "string" },
-        expectedRevision: { type: "integer", minimum: 0 },
-        createdAt: { type: "string", format: "date-time" },
-        updatedAt: { type: "string", format: "date-time" },
-      },
-    },
-  },
-  {
-    name: "trash_memos",
-    description: "Move one or more active memos to trash. Use dryRun to preview affected memos.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "restore_memos",
-    description: "Restore one or more trashed memos. If the original notebook is gone, memos are restored to the default inbox.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "move_memos",
-    description: "Move one or more active memos to another notebook. Use dryRun to preview affected memos.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds", "notebookId"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
-        notebookId: { type: "string" },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "add_tags_to_memos",
-    description: "Add tags to one or more active memos. Use dryRun to preview changed tags.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds", "tags"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
-        tags: { type: "array", minItems: 1, maxItems: 20, items: { type: "string" } },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "remove_tags_from_memos",
-    description: "Remove tags from one or more active memos. Use dryRun to preview changed tags.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds", "tags"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
-        tags: { type: "array", minItems: 1, maxItems: 20, items: { type: "string" } },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "rename_tag",
-    description: "Rename a tag across all active memos. This merges into an existing tag with the same normalized name.",
-    inputSchema: {
-      type: "object",
-      required: ["from", "to"],
-      additionalProperties: false,
-      properties: {
-        from: { type: "string" },
-        to: { type: "string" },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "delete_tag",
-    description: "Remove a tag from all active memos.",
-    inputSchema: {
-      type: "object",
-      required: ["tag"],
-      additionalProperties: false,
-      properties: {
-        tag: { type: "string" },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "merge_memos",
-    description: "Merge multiple active memos into a new memo and soft-delete the sources.",
-    inputSchema: {
-      type: "object",
-      required: ["memoIds"],
-      additionalProperties: false,
-      properties: {
-        memoIds: { type: "array", minItems: 2, maxItems: 50, items: { type: "string" } },
-        notebookId: { type: "string" },
-        title: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "upload_memo_image",
-    description:
-      "Upload a base64-encoded image resource to a memo and return Markdown that can be inserted into memo content. Images are stored as provided; server-side compression is disabled to avoid Cloudflare Images quota usage.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId", "mimeType", "dataBase64"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        filename: { type: "string" },
-        mimeType: { type: "string", enum: ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"] },
-        dataBase64: { type: "string" },
-        alt: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "upload_memo_attachment",
-    description: "Upload a base64-encoded attachment resource to a memo and return Markdown link text that can be inserted into memo content.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId", "filename", "mimeType", "dataBase64"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        filename: { type: "string" },
-        mimeType: { type: "string" },
-        dataBase64: { type: "string" },
-        label: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "list_memo_resources",
-    description: "List active resources attached to a memo.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "list_resources",
-    description: "List active workspace resources with storage summary.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        limit: { type: "integer", minimum: 1, maximum: 500 },
-      },
-    },
-  },
-  {
-    name: "list_memo_revisions",
-    description: "List revision history for a memo.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        limit: { type: "integer", minimum: 1, maximum: 100 },
-      },
-    },
-  },
-  {
-    name: "restore_memo_revision",
-    description: "Restore a memo to a previous revision. Use dryRun to preview the target revision.",
-    inputSchema: {
-      type: "object",
-      required: ["memoId", "revisionId"],
-      additionalProperties: false,
-      properties: {
-        memoId: { type: "string" },
-        revisionId: { type: "string" },
-        dryRun: { type: "boolean" },
-      },
-    },
-  },
-  {
-    name: "move_notebook",
-    description: "Move a notebook under another notebook or root and update its sort order.",
-    inputSchema: {
-      type: "object",
-      required: ["notebookId"],
-      additionalProperties: false,
-      properties: {
-        notebookId: { type: "string" },
-        parentId: { type: ["string", "null"] },
-        sortOrder: { type: "integer" },
-      },
-    },
-  },
-  {
-    name: "create_notebook",
-    description: "Create a notebook at the root or under another notebook.",
-    inputSchema: {
-      type: "object",
-      required: ["name"],
-      additionalProperties: false,
-      properties: {
-        name: { type: "string", minLength: 1, maxLength: 80 },
-        parentId: { type: ["string", "null"] },
-        sortOrder: { type: "integer" },
-      },
-    },
-  },
-  {
-    name: "get_notebook",
-    description: "Get one active notebook by ID from the authenticated user's workspace.",
-    inputSchema: {
-      type: "object",
-      required: ["notebookId"],
-      additionalProperties: false,
-      properties: {
-        notebookId: { type: "string", description: "The exact EdgeEver notebook ID." },
-      },
-    },
-  },
-  {
-    name: "find_notebooks",
-    description: "Find active notebooks by name, optionally restricted to a parent notebook or the workspace root.",
-    inputSchema: {
-      type: "object",
-      required: ["name"],
-      additionalProperties: false,
-      properties: {
-        name: { type: "string", minLength: 1, description: "Full or partial notebook name, matched case-insensitively." },
-        parentId: {
-          type: ["string", "null"],
-          description: "Parent notebook ID. Pass null to search only root notebooks; omit to search all levels.",
-        },
-        exact: { type: "boolean", description: "Require an exact name match. Defaults to false." },
-        limit: { type: "integer", minimum: 1, maximum: 50 },
-      },
-    },
-  },
-  {
-    name: "resolve_notebook_path",
-    description:
-      "Resolve a slash-separated notebook path such as 'Imports/Flomo' to one exact notebook. Returns a diagnostic result instead of guessing when a segment is missing or ambiguous.",
-    inputSchema: {
-      type: "object",
-      required: ["path"],
-      additionalProperties: false,
-      properties: {
-        path: { type: "string", minLength: 1, description: "Slash-separated notebook names from the workspace root." },
-      },
-    },
-  },
-  {
-    name: "list_notebooks",
-    description:
-      "List active notebooks in the authenticated user's workspace. Every returned notebook is owned by that workspace; notebooks from other users are never returned.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-  {
-    name: "list_tags",
-    description: "List tags and memo counts.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-  {
-    name: "get_workspace_stats",
-    description: "Get notebook, memo, tag, and resource counts for workspace diagnostics.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-];
-
-const READ_ONLY_MCP_TOOLS = new Set([
-  "get_current_user",
-  "search_memos",
-  "list_memos",
-  "get_memo",
-  "list_memo_resources",
-  "list_resources",
-  "list_memo_revisions",
-  "get_notebook",
-  "find_notebooks",
-  "resolve_notebook_path",
-  "list_notebooks",
-  "list_tags",
-  "get_workspace_stats",
-]);
-const NON_DESTRUCTIVE_MCP_TOOLS = new Set([
-  "create_memo",
-  "import_memos",
-  "restore_memos",
-  "move_memos",
-  "add_tags_to_memos",
-  "upload_memo_image",
-  "upload_memo_attachment",
-  "move_notebook",
-  "create_notebook",
-]);
-const IDEMPOTENT_MCP_TOOLS = new Set([
-  "restore_memos",
-  "move_memos",
-  "add_tags_to_memos",
-  "remove_tags_from_memos",
-  "import_memos",
-  "move_notebook",
-]);
-
-const MCP_TOOLS = MCP_TOOL_DEFINITIONS.map((tool) => {
-  const readOnly = READ_ONLY_MCP_TOOLS.has(tool.name);
-  return {
-    ...tool,
-    title: tool.name.split("_").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" "),
-    outputSchema: { type: "object" },
-    annotations: {
-      readOnlyHint: readOnly,
-      destructiveHint: readOnly ? false : !NON_DESTRUCTIVE_MCP_TOOLS.has(tool.name),
-      idempotentHint: readOnly || IDEMPOTENT_MCP_TOOLS.has(tool.name),
-      openWorldHint: false,
-    },
-  };
-});
 
 const callMcpTool = async (
   c: AppContext,
@@ -4028,81 +3291,6 @@ const callMcpTool = async (
   }
 };
 
-const jsonRpcResult = (id: JsonRpcId, result: unknown) => ({
-  jsonrpc: "2.0",
-  id,
-  result,
-});
-
-const jsonRpcError = (id: JsonRpcId, code: number, message: string, data?: unknown) => ({
-  jsonrpc: "2.0",
-  id,
-  error: {
-    code,
-    message,
-    ...(data === undefined ? {} : { data }),
-  },
-});
-
-const getJsonRpcId = (request: unknown): JsonRpcId => {
-  if (!request || typeof request !== "object" || !("id" in request)) {
-    return null;
-  }
-
-  const id = (request as { id?: unknown }).id;
-  return typeof id === "string" || typeof id === "number" || id === null ? id : null;
-};
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-
-const getOptionalString = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : null);
-
-const getRequiredString = (value: unknown, name: string) => {
-  const parsed = getOptionalString(value);
-
-  if (!parsed) {
-    throw new AppError("invalid_params", `${name} is required`, 400);
-  }
-
-  return parsed;
-};
-
-const getOptionalStringArray = (value: unknown) =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-
-const getRequiredStringArray = (value: unknown, name: string) => {
-  const items = getOptionalStringArray(value);
-
-  if (items.length === 0) {
-    throw new AppError("invalid_params", `${name} must include at least one item`, 400);
-  }
-
-  return items;
-};
-
-const decodeBase64Data = async (value: string) => {
-  const [, dataUrlPayload] = value.match(/^data:[^;]+;base64,(.+)$/i) ?? [];
-  const base64 = (dataUrlPayload ?? value).replace(/\s/g, "");
-
-  if (!base64) {
-    throw new AppError("invalid_params", "dataBase64 is required", 400);
-  }
-
-  try {
-    const response = await fetch("data:application/octet-stream;base64," + base64);
-    if (!response.ok) {
-      throw new Error("failed to decode base64");
-    }
-    return new Uint8Array(await response.arrayBuffer());
-  } catch (error) {
-    throw new AppError("invalid_params", "dataBase64 must be valid base64 data: " + (error as Error).message, 400);
-  }
-};
-
-const escapeMarkdownImageAlt = (value: string) => value.replace(/[\\[\]]/g, "\\$&");
-const escapeMarkdownLinkLabel = (value: string) => value.replace(/[\\[\]]/g, "\\$&");
-
 const getInstanceAuthMode = async (env: Bindings): Promise<InstanceAuthMode> => {
   if (!env.storage.db || typeof env.storage.db.prepare !== "function") {
     throw new AppError(
@@ -4481,210 +3669,10 @@ const getBearerToken = (c: AppContext) => {
   return scheme.toLowerCase() === "bearer" && token ? token : null;
 };
 
-const getAuditActor = (c: AppContext) => {
-  const auth = c.get("auth");
-
-  return {
-    actorType: auth?.actorType ?? "user",
-    actorId: auth?.actorId ?? null,
-  };
-};
-
-const getActorLabel = (c: AppContext) => {
-  const auth = c.get("auth");
-  return auth?.actorId ? `${auth.actorType}:${auth.actorId}` : auth?.username ?? "user";
-};
-
-const getWorkspaceId = (c: AppContext) => c.get("auth").workspaceId;
-
-const requireOwner = (c: AppContext) => {
-  const auth = c.get("auth");
-  return auth?.kind === "user" && auth.role === "owner"
-    ? null
-    : forbidden(c, "Only the instance owner can manage users.");
-};
-
-const requireUser = (c: AppContext) => {
-  const auth = c.get("auth");
-
-  if (auth?.kind === "user") {
-    return null;
-  }
-
-  return forbidden(c, "Only an interactive user session can manage this resource.");
-};
-
-const requireScopes = (c: AppContext, ...scopes: TokenScope[]) => {
-  const auth = c.get("auth");
-
-  if (!auth) {
-    return unauthorized(c, "Authentication required.");
-  }
-
-  if (hasScopes(auth, scopes)) {
-    return null;
-  }
-
-  return forbidden(c, `Missing required scope: ${scopes.join(", ")}`);
-};
-
-const assertScope = (auth: AuthContext, scope: TokenScope) => {
-  if (!hasScopes(auth, [scope])) {
-    throw new AppError("forbidden", `Missing required scope: ${scope}`, 403);
-  }
-};
-
-const hasScopes = (auth: AuthContext, scopes: TokenScope[]) => {
-  if (auth.kind === "user") {
-    return true;
-  }
-
-  return scopes.every((scope) => auth.scopes.includes(scope));
-};
-
-const normalizeTokenScopes = (scopes: string[]) => {
-  const normalized = Array.from(new Set(scopes.map((scope) => scope.trim()).filter(Boolean)));
-
-  if (normalized.some((scope) => !isTokenScope(scope))) {
-    return null;
-  }
-
-  return normalized as TokenScope[];
-};
-
-const isTokenScope = (scope: string): scope is TokenScope =>
-  (ALL_TOKEN_SCOPES as readonly string[]).includes(scope);
-
 const getSessionMaxAge = (env: Bindings) => {
   const days = clampNumber(Number(env.EDGE_EVER_SESSION_TTL_DAYS ?? DEFAULT_SESSION_TTL_DAYS), 1, MAX_SESSION_TTL_DAYS);
   return days * 24 * 60 * 60;
 };
-
-const hashPassword = async (password: string) => {
-  const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
-  const hash = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
-
-  return [
-    PASSWORD_HASH_ALGORITHM,
-    PASSWORD_HASH_ITERATIONS,
-    base64UrlEncode(salt),
-    base64UrlEncode(hash),
-  ].join("$");
-};
-
-const verifyPassword = async (password: string, passwordHash: string) => {
-  const [algorithm, iterationsRaw, saltRaw, hashRaw] = passwordHash.split("$");
-  const iterations = Number(iterationsRaw);
-
-  if (
-    algorithm !== PASSWORD_HASH_ALGORITHM ||
-    !Number.isInteger(iterations) ||
-    iterations < 100_000 ||
-    !saltRaw ||
-    !hashRaw
-  ) {
-    return false;
-  }
-
-  try {
-    const expected = base64UrlDecode(hashRaw);
-    const salt = base64UrlDecode(saltRaw);
-    const actual = await derivePasswordHash(password, salt, iterations);
-
-    return timingSafeEqual(actual, expected);
-  } catch {
-    return false;
-  }
-};
-
-const derivePasswordHash = async (password: string, salt: Uint8Array, iterations: number) => {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, [
-    "deriveBits",
-  ]);
-  const saltBuffer = salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength) as ArrayBuffer;
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      hash: "SHA-256",
-      salt: saltBuffer,
-      iterations,
-    },
-    key,
-    PASSWORD_HASH_BYTES * 8
-  );
-
-  return new Uint8Array(bits);
-};
-
-const randomToken = (bytes: number) => {
-  const token = crypto.getRandomValues(new Uint8Array(bytes));
-  return base64UrlEncode(token);
-};
-
-const base64UrlEncode = (bytes: Uint8Array) => {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-};
-
-const base64UrlDecode = (value: string) => {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-};
-
-const timingSafeEqual = (left: Uint8Array, right: Uint8Array) => {
-  const length = Math.max(left.length, right.length);
-  let diff = left.length ^ right.length;
-
-  for (let index = 0; index < length; index += 1) {
-    diff |= (left[index % left.length] ?? 0) ^ (right[index % right.length] ?? 0);
-  }
-
-  return diff === 0;
-};
-
-const mapNotebook = (row: NotebookRow): Notebook => ({
-  id: row.id,
-  parentId: row.parent_id,
-  name: row.name,
-  slug: row.slug,
-  icon: row.icon,
-  color: row.color,
-  sortOrder: row.sort_order,
-  memoCount: row.memo_count ?? 0,
-  lastMemoUpdatedAt: row.last_memo_updated_at,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
-
-const notebookSelectSql = (tail: string) => `
-  SELECT n.id,
-         n.parent_id,
-         n.name,
-         n.slug,
-         n.icon,
-         n.color,
-         n.sort_order,
-         COUNT(m.id) AS memo_count,
-         MAX(m.updated_at) AS last_memo_updated_at,
-         n.created_at,
-         n.updated_at
-  FROM notebooks n
-  LEFT JOIN memos m ON m.notebook_id = n.id AND m.is_deleted = 0
-  ${tail}
-`;
 
 const mapMemoSummary = (row: MemoSummaryRow): MemoSummary => ({
   id: row.id,
@@ -4982,11 +3970,6 @@ const mapApiToken = (row: ApiTokenRow): ApiToken => ({
   createdAt: row.created_at,
 });
 
-const mapTagSummary = (row: TagSummaryRow): TagSummary => ({
-  name: row.name,
-  memoCount: row.memo_count,
-  updatedAt: row.updated_at,
-});
 
 const getApiTokenRow = async (db: D1Database, id: string, workspaceId: string): Promise<ApiTokenRow | null> =>
   db
@@ -5036,326 +4019,6 @@ const getCurrentWorkspaceIdentity = async (db: D1Database, auth: AuthContext) =>
         "Every notebook and memo returned by this MCP server belongs to this workspace; data from other users is excluded.",
     },
   };
-};
-
-const listNotebooks = async (db: D1Database, workspaceId: string): Promise<Notebook[]> => {
-  const rows = await db
-    .prepare(
-      notebookSelectSql(
-        `WHERE n.workspace_id = ? AND n.is_deleted = 0
-         GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at
-         ORDER BY n.parent_id IS NOT NULL, n.sort_order ASC, n.name ASC`
-      )
-    )
-    .bind(workspaceId).all<NotebookRow>();
-
-  return rows.results.map(mapNotebook);
-};
-
-const normalizeNotebookLookupName = (value: string) => value.trim().toLocaleLowerCase("en-US");
-
-const findNotebooks = async (
-  db: D1Database,
-  workspaceId: string,
-  options: { name: string; parentId?: string | null; exact: boolean; limit: number },
-) => {
-  const query = normalizeNotebookLookupName(options.name);
-  const notebooks = await listNotebooks(db, workspaceId);
-  return notebooks
-    .filter((notebook) => {
-      if (options.parentId !== undefined && notebook.parentId !== options.parentId) {
-        return false;
-      }
-      const name = normalizeNotebookLookupName(notebook.name);
-      return options.exact ? name === query : name.includes(query);
-    })
-    .slice(0, options.limit);
-};
-
-const resolveNotebookPath = async (db: D1Database, workspaceId: string, path: string) => {
-  const segments = path.split("/").map((segment) => segment.trim()).filter(Boolean);
-  if (segments.length === 0) {
-    throw new AppError("invalid_params", "path must contain at least one notebook name", 400);
-  }
-
-  const notebooks = await listNotebooks(db, workspaceId);
-  const matched: Notebook[] = [];
-  let parentId: string | null = null;
-
-  for (const [index, segment] of segments.entries()) {
-    const normalizedSegment = normalizeNotebookLookupName(segment);
-    const candidates = notebooks.filter(
-      (notebook) => notebook.parentId === parentId && normalizeNotebookLookupName(notebook.name) === normalizedSegment,
-    );
-
-    if (candidates.length !== 1) {
-      return {
-        resolved: false,
-        path,
-        segments,
-        matched,
-        failedAt: index,
-        failedSegment: segment,
-        reason: candidates.length === 0 ? "not_found" : "ambiguous",
-        candidates,
-      };
-    }
-
-    matched.push(candidates[0]);
-    parentId = candidates[0].id;
-  }
-
-  return {
-    resolved: true,
-    path,
-    segments,
-    notebook: matched.at(-1),
-    matched,
-  };
-};
-
-const listTagSummaries = async (db: D1Database, workspaceId: string): Promise<TagSummary[]> => {
-  const rows = await db
-    .prepare(
-      `SELECT json_each.value AS name,
-              COUNT(DISTINCT m.id) AS memo_count,
-              MAX(m.updated_at) AS updated_at
-       FROM memos m, json_each(m.tags_json)
-       WHERE m.workspace_id = ? AND m.is_deleted = 0
-         AND trim(json_each.value) <> ''
-       GROUP BY json_each.value
-       ORDER BY lower(json_each.value) ASC`
-    )
-    .bind(workspaceId).all<TagSummaryRow>();
-
-  return rows.results
-    .filter((row) => typeof row.name === "string" && row.name.trim())
-    .map(mapTagSummary);
-};
-
-const updateTagAcrossMemos = async (
-  db: D1Database,
-  workspaceId: string,
-  oldTag: string,
-  nextTag: string | null,
-  actor: { actorType: "user" | "agent"; actorId: string | null },
-  actorLabel: string
-) => {
-  const normalizedOld = normalizeTags([oldTag])[0];
-  const normalizedNext = nextTag === null ? null : normalizeTags([nextTag])[0];
-
-  if (!normalizedOld || normalizedOld === normalizedNext) {
-    return 0;
-  }
-
-  const rows = await db
-    .prepare(
-      `SELECT m.id, m.title, m.tags_json, c.content_text
-       FROM memos m
-       INNER JOIN memo_contents c ON c.memo_id = m.id
-       WHERE m.workspace_id = ? AND m.is_deleted = 0
-         AND EXISTS (
-           SELECT 1
-           FROM json_each(m.tags_json)
-           WHERE json_each.value = ?
-         )`
-    )
-    .bind(workspaceId, normalizedOld)
-    .all<MemoTagUpdateRow>();
-
-  const now = isoNow();
-  const statements: D1PreparedStatement[] = [];
-  let updated = 0;
-
-  for (const row of rows.results) {
-    const currentTags = parseJsonArray(row.tags_json);
-
-    if (!currentTags.includes(normalizedOld)) {
-      continue;
-    }
-
-    const nextTags = normalizeTags(
-      currentTags.flatMap((tag) => {
-        if (tag !== normalizedOld) {
-          return [tag];
-        }
-
-        return normalizedNext ? [normalizedNext] : [];
-      })
-    );
-
-    statements.push(
-      db
-        .prepare(
-          `UPDATE memos
-           SET tags_json = ?, updated_by = ?, updated_at = ?
-           WHERE id = ? AND workspace_id = ? AND is_deleted = 0`
-        )
-        .bind(JSON.stringify(nextTags), actorLabel, now, row.id, workspaceId),
-      db.prepare(`DELETE FROM memos_fts WHERE memo_id = ?`).bind(row.id),
-      db
-        .prepare(
-          `INSERT INTO memos_fts (memo_id, title, content_text, tags)
-           VALUES (?, ?, ?, ?)`
-        )
-        .bind(row.id, row.title, row.content_text, nextTags.join(" ")),
-      auditStatement(db, actor.actorType, actor.actorId, normalizedNext ? "tag.rename" : "tag.delete", "memo", row.id, {
-        from: normalizedOld,
-        to: normalizedNext,
-      })
-    );
-    updated += 1;
-  }
-
-  if (statements.length > 0) {
-    await db.batch(statements);
-  }
-
-  return updated;
-};
-
-const previewTagRename = async (db: D1Database, workspaceId: string, oldTag: string, nextTag: string | null) => {
-  const normalizedOld = normalizeTags([oldTag])[0];
-  const normalizedNext = nextTag === null ? null : normalizeTags([nextTag])[0];
-
-  if (!normalizedOld || normalizedOld === normalizedNext) {
-    return { dryRun: true, updated: 0, changes: [] };
-  }
-
-  const rows = await getMemoRowsByTag(db, workspaceId, normalizedOld);
-  const changes = rows.map((row) => {
-    const currentTags = parseJsonArray(row.tags_json);
-    const nextTags = normalizeTags(
-      currentTags.flatMap((tag) => {
-        if (tag !== normalizedOld) {
-          return [tag];
-        }
-
-        return normalizedNext ? [normalizedNext] : [];
-      })
-    );
-
-    return {
-      memoId: row.id,
-      title: row.title,
-      currentTags,
-      nextTags,
-    };
-  });
-
-  return { dryRun: true, updated: changes.length, changes };
-};
-
-const getMemoRowsByTag = async (db: D1Database, workspaceId: string, tag: string) => {
-  const rows = await db
-    .prepare(
-      `SELECT m.id, m.title, m.tags_json, c.content_text
-       FROM memos m
-       INNER JOIN memo_contents c ON c.memo_id = m.id
-       WHERE m.workspace_id = ? AND m.is_deleted = 0
-         AND EXISTS (
-           SELECT 1
-           FROM json_each(m.tags_json)
-           WHERE json_each.value = ?
-         )`
-    )
-    .bind(workspaceId, tag)
-    .all<MemoTagUpdateRow>();
-
-  return rows.results;
-};
-
-const updateTagsForMemos = async (
-  db: D1Database,
-  input: {
-    workspaceId: string;
-    memoIds: string[];
-    tags: string[];
-    mode: "add" | "remove";
-    dryRun: boolean;
-    actor: { actorType: "user" | "agent"; actorId: string | null };
-    actorLabel: string;
-  }
-) => {
-  const memoIds = Array.from(new Set(input.memoIds));
-  const tags = normalizeTags(input.tags);
-
-  if (memoIds.length === 0 || tags.length === 0) {
-    throw new AppError("invalid_params", "memoIds and tags must include at least one item", 400);
-  }
-
-  const placeholders = memoIds.map(() => "?").join(", ");
-  const rows = await db
-    .prepare(
-      `SELECT m.id, m.title, m.tags_json, c.content_text
-       FROM memos m
-       INNER JOIN memo_contents c ON c.memo_id = m.id
-       WHERE m.workspace_id = ? AND m.is_deleted = 0 AND m.id IN (${placeholders})`
-    )
-    .bind(input.workspaceId, ...memoIds)
-    .all<MemoTagUpdateRow>();
-
-  if (rows.results.length !== memoIds.length) {
-    throw new AppError("missing_memos", "One or more memos cannot be updated.", 400);
-  }
-
-  const changes = rows.results
-    .map((row) => {
-      const currentTags = parseJsonArray(row.tags_json);
-      const nextTags =
-        input.mode === "add"
-          ? normalizeTags([...currentTags, ...tags])
-          : currentTags.filter((tag) => !tags.includes(tag));
-
-      return {
-        memoId: row.id,
-        title: row.title,
-        currentTags,
-        nextTags,
-        contentText: row.content_text,
-      };
-    })
-    .filter((change) => JSON.stringify(change.currentTags) !== JSON.stringify(change.nextTags));
-
-  if (input.dryRun) {
-    return {
-      dryRun: true,
-      updated: changes.length,
-      changes: changes.map(({ contentText: _contentText, ...change }) => change),
-    };
-  }
-
-  if (changes.length === 0) {
-    return { ok: true, updated: 0 };
-  }
-
-  const now = isoNow();
-  const statements: D1PreparedStatement[] = [];
-
-  for (const change of changes) {
-    statements.push(
-      db
-        .prepare(
-          `UPDATE memos
-           SET tags_json = ?, updated_by = ?, updated_at = ?
-           WHERE id = ? AND workspace_id = ? AND is_deleted = 0`
-        )
-        .bind(JSON.stringify(change.nextTags), input.actorLabel, now, change.memoId, input.workspaceId),
-      db.prepare(`DELETE FROM memos_fts WHERE memo_id = ?`).bind(change.memoId),
-      db
-        .prepare(
-          `INSERT INTO memos_fts (memo_id, title, content_text, tags)
-           VALUES (?, ?, ?, ?)`
-        )
-        .bind(change.memoId, change.title, change.contentText, change.nextTags.join(" ")),
-      auditStatement(db, input.actor.actorType, input.actor.actorId, input.mode === "add" ? "tag.add" : "tag.remove", "memo", change.memoId, {
-        tags,
-      })
-    );
-  }
-
-  await db.batch(statements);
-  return { ok: true, updated: changes.length };
 };
 
 const searchMemoSummaries = async (
@@ -5544,139 +4207,6 @@ const listMemosForMcp = async (
     nextOffset: rows.results.length > limit ? offset + limit : null,
     hasMore: rows.results.length > limit,
   };
-};
-
-const getNotebook = async (db: D1Database, workspaceId: string, id: string): Promise<Notebook | null> => {
-  const row = await db
-    .prepare(
-      notebookSelectSql(
-        `WHERE n.id = ? AND n.workspace_id = ? AND n.is_deleted = 0
-         GROUP BY n.id, n.parent_id, n.name, n.slug, n.icon, n.color, n.sort_order, n.created_at, n.updated_at`
-      )
-    )
-    .bind(id, workspaceId)
-    .first<NotebookRow>();
-
-  return row ? mapNotebook(row) : null;
-};
-
-const createNotebookRecord = async (
-  db: D1Database,
-  workspaceId: string,
-  input: NotebookCreateInput & { sortOrder?: number },
-  actor: { actorType: "user" | "agent"; actorId: string | null }
-) => {
-  const parentId = input.parentId ?? null;
-
-  if (parentId && !(await getNotebook(db, workspaceId, parentId))) {
-    throw new AppError("not_found", "Parent notebook not found", 404);
-  }
-
-  const id = createId("nb");
-  const now = isoNow();
-  const sortOrder = input.sortOrder ?? Date.now();
-
-  await db.batch([
-    db
-      .prepare(
-        `INSERT INTO notebooks (id, workspace_id, parent_id, name, slug, sort_order, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(id, workspaceId, parentId, input.name, slugify(input.name), sortOrder, now, now),
-    auditStatement(db, actor.actorType, actor.actorId, "notebook.create", "notebook", id, {
-      name: input.name,
-      parentId,
-      sortOrder,
-    }),
-  ]);
-
-  const notebook = await getNotebook(db, workspaceId, id);
-
-  if (!notebook) {
-    throw new AppError("not_found", "Notebook not found after create", 404);
-  }
-
-  return notebook;
-};
-
-const updateNotebookRecord = async (
-  db: D1Database,
-  workspaceId: string,
-  id: string,
-  input: { name?: string; parentId?: string | null; sortOrder?: number },
-  actor: { actorType: "user" | "agent"; actorId: string | null }
-) => {
-  const current = await getNotebook(db, workspaceId, id);
-
-  if (!current) {
-    throw new AppError("not_found", "Notebook not found", 404);
-  }
-
-  const nextName = input.name ?? current.name;
-  const nextParentId = input.parentId === undefined ? current.parentId : input.parentId;
-  const nextSortOrder = input.sortOrder ?? current.sortOrder;
-  const now = isoNow();
-
-  if (nextParentId === id) {
-    throw new AppError("bad_request", "Notebook cannot be its own parent", 400);
-  }
-
-  if (nextParentId) {
-    const parent = await getNotebook(db, workspaceId, nextParentId);
-
-    if (!parent) {
-      throw new AppError("not_found", "Parent notebook not found", 404);
-    }
-
-    if (await isNotebookDescendant(db, workspaceId, nextParentId, id)) {
-      throw new AppError("notebook_cycle", "Notebook cannot be moved into its own descendant.", 409);
-    }
-  }
-
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE notebooks
-         SET name = ?, slug = ?, parent_id = ?, sort_order = ?, updated_at = ?
-         WHERE id = ? AND workspace_id = ? AND is_deleted = 0`
-      )
-      .bind(nextName, slugify(nextName), nextParentId ?? null, nextSortOrder, now, id, workspaceId),
-    auditStatement(db, actor.actorType, actor.actorId, "notebook.update", "notebook", id, input),
-  ]);
-
-  const notebook = await getNotebook(db, workspaceId, id);
-
-  if (!notebook) {
-    throw new AppError("not_found", "Notebook not found after update", 404);
-  }
-
-  return notebook;
-};
-
-const isNotebookDescendant = async (db: D1Database, workspaceId: string, candidateId: string, ancestorId: string) => {
-  const row = await db
-    .prepare(
-      `WITH RECURSIVE descendants(id) AS (
-         SELECT id
-         FROM notebooks
-         WHERE workspace_id = ? AND parent_id = ? AND is_deleted = 0
-
-         UNION ALL
-
-         SELECT n.id
-         FROM notebooks n
-         INNER JOIN descendants d ON n.parent_id = d.id
-         WHERE n.workspace_id = ? AND n.is_deleted = 0
-       )
-       SELECT id
-       FROM descendants
-       WHERE id = ?
-       LIMIT 1`
-    )
-    .bind(workspaceId, ancestorId, workspaceId, candidateId)
-    .first<{ id: string }>();
-
-  return Boolean(row);
 };
 
 const getMemoDetailRow = async (
@@ -6407,7 +4937,14 @@ const mergeMemosRecord = async (
     .filter((row): row is MemoDetailRow => Boolean(row));
   const notebookId = input.notebookId ?? ordered[0].notebook_id;
   const title = resolveMergedMemoTitle(input.title, ordered);
-  const mergedMarkdown = ordered.map((memo) => memo.content_markdown).join("\n\n---\n\n");
+  const sourceMarkdown = ordered.map((memo) => {
+    const markdown = resolveMemoContentMarkdown(parseDoc(memo.content_json), memo.content_markdown);
+    if (!markdown.trim() && memo.content_text.trim()) {
+      throw new AppError("merge_content_unavailable", "One or more memo bodies could not be recovered safely.", 409);
+    }
+    return markdown;
+  });
+  const mergedMarkdown = sourceMarkdown.join("\n\n---\n\n");
   const contentJson = markdownToDoc(mergedMarkdown);
   const contentText = docToText(contentJson);
   const tags = Array.from(new Set(ordered.flatMap((memo) => parseJsonArray(memo.tags_json))));
@@ -7177,15 +5714,6 @@ const getWorkspaceStats = async (db: D1Database, workspaceId: string) => {
   };
 };
 
-const parseJsonArray = (json: string): string[] => {
-  try {
-    const value = JSON.parse(json);
-    return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
 const parseDoc = (json: string): TiptapDoc => {
   try {
     const value = JSON.parse(json);
@@ -7195,63 +5723,9 @@ const parseDoc = (json: string): TiptapDoc => {
   }
 };
 
-const audit = async (
-  db: D1Database,
-  actorType: "user" | "agent" | "system",
-  actorId: string | null,
-  action: string,
-  entityType: string,
-  entityId: string,
-  metadata: unknown
-) => auditStatement(db, actorType, actorId, action, entityType, entityId, metadata).run();
-
-const auditStatement = (
-  db: D1Database,
-  actorType: "user" | "agent" | "system",
-  actorId: string | null,
-  action: string,
-  entityType: string,
-  entityId: string,
-  metadata: unknown
-) =>
-  db
-    .prepare(
-      `INSERT INTO audit_events (
-        id, actor_type, actor_id, action, entity_type, entity_id, metadata_json, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .bind(createId("audit"), actorType, actorId, action, entityType, entityId, JSON.stringify(metadata ?? {}), isoNow());
-
-const createId = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
-
-const isoNow = () => new Date().toISOString();
-
-const slugify = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
 const normalizeMemoTitle = (value: string | null | undefined) => {
   const title = value?.trim();
   return title || DEFAULT_MEMO_TITLE;
-};
-
-const isCustomMemoTitle = (value: string | null | undefined) => {
-  const title = value?.trim();
-  return Boolean(title && title !== DEFAULT_MEMO_TITLE);
-};
-
-const resolveMergedMemoTitle = (inputTitle: string | undefined, sourceMemos: Array<{ title: string | null }>) => {
-  const title = inputTitle?.trim();
-  if (title) {
-    return title;
-  }
-
-  return sourceMemos.find((memo) => isCustomMemoTitle(memo.title))?.title?.trim() ?? `合并笔记 ${new Date().toLocaleDateString("zh-CN")}`;
 };
 
 const normalizeMemoListSort = (value: string | undefined): MemoListSortMode =>
@@ -7394,93 +5868,3 @@ const contentDispositionAttachment = (filename: string | null) => {
   const fallback = normalizeFilename(filename).replace(/"/g, "'");
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 };
-
-const decodeTagParam = (value: string) => {
-  try {
-    return decodeURIComponent(value).trim();
-  } catch {
-    return value.trim();
-  }
-};
-
-const notFound = (c: Context, message: string) =>
-  c.json(
-    {
-      error: {
-        code: "not_found",
-        message,
-      },
-    },
-    404
-  );
-
-const badRequest = (c: Context, message: string) =>
-  c.json(
-    {
-      error: {
-        code: "bad_request",
-        message,
-      },
-    },
-    400
-  );
-
-const apiError = (c: Context, code: string, message: string, status: number) =>
-  c.json(
-    {
-      error: {
-        code,
-        message,
-      },
-    },
-    status as 400
-  );
-
-const authNotConfigured = (c: Context) =>
-  apiError(
-    c,
-    "auth_not_configured",
-    "Authentication is not configured. Set EDGE_EVER_AUTH_PASSWORD as a Worker Secret and redeploy.",
-    503,
-  );
-
-const databaseNotReady = (c: Context) =>
-  apiError(
-    c,
-    "database_not_ready",
-    "Database is not ready. Bind the D1 database as DB and apply the remote migrations.",
-    503,
-  );
-
-const conflict = (c: Context, code: string, message: string) =>
-  c.json(
-    {
-      error: {
-        code,
-        message,
-      },
-    },
-    409
-  );
-
-const unauthorized = (c: Context, message: string) =>
-  c.json(
-    {
-      error: {
-        code: "unauthorized",
-        message,
-      },
-    },
-    401
-  );
-
-const forbidden = (c: Context, message: string) =>
-  c.json(
-    {
-      error: {
-        code: "forbidden",
-        message,
-      },
-    },
-    403
-  );

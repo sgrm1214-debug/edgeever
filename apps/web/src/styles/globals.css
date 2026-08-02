@@ -159,6 +159,12 @@ body {
   overscroll-behavior-y: auto;
 }
 
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Keep the three-pane desktop workspace usable on compact laptop screens.
  * The notebook and memo columns may shrink, while the editor always keeps
  * the remaining width instead of being clipped by fixed tracks.
@@ -1227,8 +1233,17 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .edgeever-mermaid-viewer * {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
     animation-duration: 0.01ms !important;
   }
 }

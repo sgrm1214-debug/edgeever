@@ -1,0 +1,101 @@
+const PASSWORD_HASH_ALGORITHM = "pbkdf2-sha256";
+const PASSWORD_HASH_ITERATIONS = 100_000;
+const PASSWORD_HASH_BYTES = 32;
+const PASSWORD_SALT_BYTES = 16;
+
+export const SESSION_TOKEN_BYTES = 32;
+
+export const hashPassword = async (password: string) => {
+  const salt = crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
+  const hash = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
+
+  return [
+    PASSWORD_HASH_ALGORITHM,
+    PASSWORD_HASH_ITERATIONS,
+    base64UrlEncode(salt),
+    base64UrlEncode(hash),
+  ].join("$");
+};
+
+export const verifyPassword = async (password: string, passwordHash: string) => {
+  const [algorithm, iterationsRaw, saltRaw, hashRaw] = passwordHash.split("$");
+  const iterations = Number(iterationsRaw);
+
+  if (
+    algorithm !== PASSWORD_HASH_ALGORITHM ||
+    !Number.isInteger(iterations) ||
+    iterations < PASSWORD_HASH_ITERATIONS ||
+    !saltRaw ||
+    !hashRaw
+  ) {
+    return false;
+  }
+
+  try {
+    const expected = base64UrlDecode(hashRaw);
+    const salt = base64UrlDecode(saltRaw);
+    const actual = await derivePasswordHash(password, salt, iterations);
+
+    return timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
+};
+
+const derivePasswordHash = async (password: string, salt: Uint8Array, iterations: number) => {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
+  const saltBuffer = salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength) as ArrayBuffer;
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: saltBuffer,
+      iterations,
+    },
+    key,
+    PASSWORD_HASH_BYTES * 8
+  );
+
+  return new Uint8Array(bits);
+};
+
+export const randomToken = (bytes: number) => {
+  const token = crypto.getRandomValues(new Uint8Array(bytes));
+  return base64UrlEncode(token);
+};
+
+const base64UrlEncode = (bytes: Uint8Array) => {
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+};
+
+const base64UrlDecode = (value: string) => {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+};
+
+const timingSafeEqual = (left: Uint8Array, right: Uint8Array) => {
+  const length = Math.max(left.length, right.length);
+  let diff = left.length ^ right.length;
+
+  for (let index = 0; index < length; index += 1) {
+    diff |= (left[index % left.length] ?? 0) ^ (right[index % right.length] ?? 0);
+  }
+
+  return diff === 0;
+};

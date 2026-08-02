@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import * as m from "motion/react-m";
 import {
   ChevronLeft,
   Plus,
@@ -47,6 +48,7 @@ import {
 } from "@/lib/app-helpers";
 import { usePwaInstall } from "./PwaInstallContext";
 import type { EdgeEverRepository } from "@/lib/repository";
+import { statusSettleMotion } from "@/lib/motion";
 
 const NOTEBOOK_DRAG_SCROLL_EDGE_PX = 56;
 const NOTEBOOK_DRAG_SCROLL_MAX_STEP_PX = 18;
@@ -207,16 +209,27 @@ const SyncStatusBar = ({
         : "border-slate-200 bg-white text-slate-500";
 
   return (
-    <div className={cn("mb-3 flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 transition-all duration-200", statusClassName)}>
-      {!isOnline ? (
-        <CloudOff className="h-4 w-4 shrink-0" />
-      ) : summary.conflict > 0 ? (
-        <AlertTriangle className="h-4 w-4 shrink-0" />
-      ) : hasQueuedWork || isSyncing ? (
-        <RefreshCw className={cn("h-4 w-4 shrink-0", isSyncing && "animate-spin")} />
-      ) : (
-        <CheckCircle2 className="h-4 w-4 shrink-0" />
-      )}
+    <div
+      className={cn("mb-3 flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 transition-all duration-200", statusClassName)}
+      role="status"
+      aria-live="polite"
+    >
+      <m.span
+        key={label}
+        className="flex h-4 w-4 shrink-0 items-center justify-center"
+        aria-hidden="true"
+        {...statusSettleMotion}
+      >
+        {!isOnline ? (
+          <CloudOff className="h-4 w-4" />
+        ) : summary.conflict > 0 ? (
+          <AlertTriangle className="h-4 w-4" />
+        ) : hasQueuedWork || isSyncing ? (
+          <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+        ) : (
+          <CheckCircle2 className="h-4 w-4" />
+        )}
+      </m.span>
       <span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
       {summary.conflict > 0 && (
         <button

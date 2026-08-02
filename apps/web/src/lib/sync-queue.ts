@@ -1,4 +1,16 @@
-import type { MemoDetail, MemoTemplate, Notebook, Resource, TiptapDoc } from "@edgeever/shared";
+import {
+  createEmptySyncQueueSummary,
+  createEmptySyncRunResult,
+  getSyncRetryAt,
+  summarizeSyncQueue,
+  type MemoDetail,
+  type MemoTemplate,
+  type Notebook,
+  type Resource,
+  type SyncQueueSummary,
+  type SyncRunResult,
+  type TiptapDoc,
+} from "@edgeever/shared";
 import { liveQuery } from "dexie";
 import { ApiRequestError, api } from "@/lib/api";
 import {
@@ -14,29 +26,10 @@ import {
 import { getCachedLocalResourceBytes, removeCachedLocalResourceBytes } from "@/lib/local-resource-cache";
 import { isBrowserOffline } from "@/lib/network-status";
 
-export type SyncQueueSummary = {
-  total: number;
-  pending: number;
-  syncing: number;
-  conflict: number;
-  error: number;
-};
-
-export type SyncRunResult = {
-  attempted: number;
-  synced: number;
-  failed: number;
-  conflicted: number;
-};
+export type { SyncQueueSummary, SyncRunResult } from "@edgeever/shared";
 export type SyncQueueResult = MemoDetail | Notebook | MemoTemplate | Resource | null;
 
-export const emptySyncQueueSummary = (): SyncQueueSummary => ({
-  total: 0,
-  pending: 0,
-  syncing: 0,
-  conflict: 0,
-  error: 0,
-});
+export const emptySyncQueueSummary = createEmptySyncQueueSummary;
 
 export const getMemoUpdateQueueId = (memoId: string) => `memo.update:${memoId}`;
 export const getMemoCreateQueueId = (temporaryId: string) => `memo.create:${temporaryId}`;
@@ -247,12 +240,7 @@ const runQueuedChanges = async (options: {
   onSynced?: (memo: MemoDetail, item: SyncQueueItem) => void | Promise<void>;
   onActionSynced?: (result: SyncQueueResult, item: SyncQueueItem) => void | Promise<void>;
 }): Promise<SyncRunResult> => {
-  const result: SyncRunResult = {
-    attempted: 0,
-    synced: 0,
-    failed: 0,
-    conflicted: 0,
-  };
+  const result = createEmptySyncRunResult();
 
   if (isBrowserOffline()) {
     return result;
@@ -313,7 +301,7 @@ const runQueuedChanges = async (options: {
         status,
         attemptCount,
         lastError: getErrorMessage(error),
-        nextAttemptAt: status === "error" ? nextRetryAt(attemptCount) : null,
+        nextAttemptAt: status === "error" ? getSyncRetryAt(attemptCount) : null,
         claimId: null,
         updatedAt: new Date().toISOString(),
       });
@@ -595,16 +583,6 @@ const syncQueueItem = async (item: SyncQueueItem): Promise<SyncQueueResult> => {
   return data.memo;
 };
 
-const summarizeSyncQueue = (items: SyncQueueItem[]): SyncQueueSummary =>
-  items.reduce(
-    (summary, item) => {
-      summary.total += 1;
-      summary[item.status] += 1;
-      return summary;
-    },
-    emptySyncQueueSummary()
-  );
-
 const isRevisionConflict = (error: unknown) =>
   error instanceof ApiRequestError && error.code === "revision_conflict";
 
@@ -614,9 +592,4 @@ const getErrorMessage = (error: unknown) => {
   }
 
   return "Sync failed";
-};
-
-const nextRetryAt = (attemptCount: number) => {
-  const delayMs = Math.min(5 * 60_000, 2 ** Math.min(attemptCount, 6) * 1000);
-  return new Date(Date.now() + delayMs).toISOString();
 };

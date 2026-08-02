@@ -86,6 +86,22 @@ const mobileOnlyTranslations = new Map<string, string>([
   ["最近一次本地编辑器启动", "Latest local editor startup"],
   ["暂不可用", "Unavailable"],
   ["尚未记录", "Not recorded"],
+  ["正在搜索", "Searching"],
+  ["退出搜索", "Exit search"],
+  ["重置", "Reset"],
+  ["置顶", "Pinned"],
+  ["有标签", "Tagged"],
+  ["无标签", "Untagged"],
+  ["正在同步笔记", "Syncing your notes"],
+  ["正在准备首次同步…", "Preparing your notes for the first sync…"],
+  ["正在加载笔记", "Loading notes"],
+  ["正在加载笔记本和笔记…", "Loading notebooks and notes…"],
+  ["同步已暂停", "Sync paused"],
+  ["已加载的笔记仍可使用，请检查网络后重试。", "Loaded notes remain available. Check your connection and retry."],
+  ["已选择 {{count}} 条", "{{count}} selected"],
+  ["{{count}} 条结果", "Results: {{count}}"],
+  ["筛选：{{filter}} · {{count}} 条", "Filter: {{filter}} · {{count}} notes"],
+  ["已加载 {{loaded}} / {{total}} 条笔记", "Loaded {{loaded}} of {{total}} notes"],
 ]);
 
 const flattenStrings = (value: unknown, prefix = "", output = new Map<string, string>()) => {
@@ -121,6 +137,16 @@ const translationPairs: TranslationPair[] = Array.from(zhStrings.entries())
   .sort((left, right) => right.source.length - left.source.length);
 const exactTranslations = new Map(translationPairs.filter((pair) => !pair.pattern).map((pair) => [pair.source, pair.target]));
 const templateTranslations = translationPairs.filter((pair) => pair.pattern);
+const mobileTemplateTranslations: TranslationPair[] = Array.from(mobileOnlyTranslations.entries())
+  .filter(([source]) => source.includes("{{"))
+  .map(([source, target]) => {
+    const placeholders: string[] = [];
+    const patternSource = escapeRegExp(source).replace(/\\\{\\\{(\w+)\\\}\\\}/g, (_match, placeholder: string) => {
+      placeholders.push(placeholder);
+      return "(.+?)";
+    });
+    return { source, target, pattern: new RegExp(`^${patternSource}$`), placeholders };
+  });
 
 const resolveSystemLocale = (): SupportedMobileLocale =>
   (Intl.DateTimeFormat().resolvedOptions().locale || "zh-CN").toLowerCase().startsWith("en") ? "en-US" : "zh-CN";
@@ -133,7 +159,7 @@ export const translateMobileText = (value: string, locale: SupportedMobileLocale
   if (exact) {
     return exact;
   }
-  for (const pair of templateTranslations) {
+  for (const pair of [...mobileTemplateTranslations, ...templateTranslations]) {
     const match = pair.pattern?.exec(value);
     if (!match) {
       continue;

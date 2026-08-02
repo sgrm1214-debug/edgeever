@@ -1,0 +1,96 @@
+import { NotebookCreateSchema, NotebookUpdateSchema } from "@edgeever/shared";
+import { zValidator } from "@hono/zod-validator";
+import type { Hono } from "hono";
+import type { AppEnv, Bindings } from "./api-context";
+import { AppError } from "./app-error";
+import { apiError } from "./http-errors";
+import {
+  createNotebookRecord,
+  deleteNotebookRecord,
+  listNotebooks,
+  restoreNotebookRecord,
+  updateNotebookRecord,
+} from "./notebook-service";
+import { getAuditActor, getWorkspaceId, requireScopes } from "./request-auth";
+
+const respondWithAppError = (c: Parameters<typeof apiError>[0], error: unknown) => {
+  if (error instanceof AppError) return apiError(c, error.code, error.message, error.status);
+  throw error;
+};
+
+export const registerNotebookRoutes = (
+  app: Hono<AppEnv>,
+  prepareDemoData: (env: Bindings) => Promise<void>
+) => {
+  app.get("/api/v1/notebooks", async (c) => {
+    const denied = requireScopes(c, "read:notebooks");
+    if (denied) return denied;
+
+    await prepareDemoData(c.env);
+    return c.json({ notebooks: await listNotebooks(c.env.storage.db, getWorkspaceId(c)) });
+  });
+
+  app.post("/api/v1/notebooks", zValidator("json", NotebookCreateSchema), async (c) => {
+    const denied = requireScopes(c, "write:notebooks");
+    if (denied) return denied;
+
+    try {
+      const notebook = await createNotebookRecord(
+        c.env.storage.db,
+        getWorkspaceId(c),
+        c.req.valid("json"),
+        getAuditActor(c)
+      );
+      return c.json({ notebook }, 201);
+    } catch (error) {
+      return respondWithAppError(c, error);
+    }
+  });
+
+  app.patch("/api/v1/notebooks/:id", zValidator("json", NotebookUpdateSchema), async (c) => {
+    const denied = requireScopes(c, "write:notebooks");
+    if (denied) return denied;
+
+    try {
+      const notebook = await updateNotebookRecord(
+        c.env.storage.db,
+        getWorkspaceId(c),
+        c.req.param("id"),
+        c.req.valid("json"),
+        getAuditActor(c)
+      );
+      return c.json({ notebook });
+    } catch (error) {
+      return respondWithAppError(c, error);
+    }
+  });
+
+  app.delete("/api/v1/notebooks/:id", async (c) => {
+    const denied = requireScopes(c, "write:notebooks");
+    if (denied) return denied;
+
+    try {
+      await deleteNotebookRecord(c.env.storage.db, getWorkspaceId(c), c.req.param("id"), getAuditActor(c));
+      return c.json({ ok: true });
+    } catch (error) {
+      return respondWithAppError(c, error);
+    }
+  });
+
+  app.post("/api/v1/notebooks/:id/restore", async (c) => {
+    const denied = requireScopes(c, "write:notebooks");
+    if (denied) return denied;
+
+    try {
+      const notebook = await restoreNotebookRecord(
+        c.env.storage.db,
+        getWorkspaceId(c),
+        c.req.param("id"),
+        getAuditActor(c)
+      );
+      return c.json({ notebook });
+    } catch (error) {
+      return respondWithAppError(c, error);
+    }
+  });
+};

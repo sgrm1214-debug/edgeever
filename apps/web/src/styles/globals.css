@@ -42,6 +42,8 @@
     --editor-body-font-size: 0.9375rem;
     --editor-body-line-height: 1.6;
     --editor-paragraph-spacing: 0.45rem;
+    --memo-content-divider-color: rgb(var(--brand-green-300-rgb));
+    --memo-content-divider-spacing: 1.5rem;
     --editor-outline-width: 300px;
     --editor-content-max-width: 880px;
 
@@ -565,9 +567,9 @@ textarea {
 }
 
 .ProseMirror hr {
-  margin: 1.5rem 0;
+  margin: var(--memo-content-divider-spacing) 0;
   border: 0;
-  border-top: 1px solid rgb(var(--brand-green-300-rgb));
+  border-top: 1px solid var(--memo-content-divider-color);
 }
 
 .ProseMirror img {

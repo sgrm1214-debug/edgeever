@@ -76,6 +76,7 @@ import { EDITOR_CONTENT_MAX_WIDTH, EDITOR_CONTENT_MAX_WIDTH_COLLAPSED } from "@/
 import {
   countMemoCharacters,
   docToMarkdown,
+  MEMO_CONTENT_STYLE,
   markdownToDoc,
   resolveMemoContentDoc,
   type Notebook,
@@ -2718,8 +2719,12 @@ const RichEditorPane = ({
             ? editorTheme
             : "custom"
         }
-        style={
-          editorTheme !== "default" && editorTheme !== "minimal-emerald" && editorTheme !== "outline-emerald"
+        style={{
+          "--editor-body-font-size": `${MEMO_CONTENT_STYLE.body.fontSize}px`,
+          "--editor-body-line-height": String(MEMO_CONTENT_STYLE.body.lineHeight / MEMO_CONTENT_STYLE.body.fontSize),
+          "--memo-content-divider-color": MEMO_CONTENT_STYLE.divider.color[resolvedTheme],
+          "--memo-content-divider-spacing": `${MEMO_CONTENT_STYLE.divider.marginVertical}px`,
+          ...(editorTheme !== "default" && editorTheme !== "minimal-emerald" && editorTheme !== "outline-emerald"
             ? {
                 "--editor-theme-bg": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).background,
                 "--editor-theme-text": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).text,
@@ -2727,9 +2732,9 @@ const RichEditorPane = ({
                 "--editor-theme-accent": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).accent,
                 "--editor-theme-soft": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).soft,
                 "--editor-theme-border": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).border,
-              } as CSSProperties
-            : undefined
-        }
+              }
+            : {}),
+        } as CSSProperties}
         className={cn(
           "edgeever-editor relative min-h-0 flex-1 bg-white",
           useMobilePlainTextEditor ? "overflow-visible" : "overflow-y-auto"

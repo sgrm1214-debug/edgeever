@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { resolveMemoContentMarkdown, type MemoDetail } from "@edgeever/shared";
+import { MEMO_CONTENT_STYLE, resolveMemoContentMarkdown, type MemoDetail } from "@edgeever/shared";
 import { ActivityIndicator, Image as RNImage, Platform, ScrollView, StyleSheet, Text as RNText, useWindowDimensions, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Modal } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -231,7 +231,13 @@ export const MemoDetailModal = ({
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const localePreference = useMobileLocalePreference();
   const themedDetailMarkdownStyles = useMemo(
-    () => resolveMobileThemeStyles(detailMarkdownStyles, resolvedTheme),
+    () => ({
+      ...resolveMobileThemeStyles(detailMarkdownStyles, resolvedTheme),
+      hr: {
+        ...detailMarkdownStyles.hr,
+        backgroundColor: MEMO_CONTENT_STYLE.divider.color[resolvedTheme],
+      },
+    }),
     [resolvedTheme]
   );
   const detailMarkdownRules = useMemo<RenderRules>(() => {
@@ -559,8 +565,8 @@ const HighlightedDetailText = ({
 const detailMarkdownStyles = StyleSheet.create({
   body: {
     color: "#0f172a",
-    fontSize: 17,
-    lineHeight: 27,
+    fontSize: MEMO_CONTENT_STYLE.body.fontSize,
+    lineHeight: MEMO_CONTENT_STYLE.body.lineHeight,
   },
   blockquote: {
     backgroundColor: "#f8fafc",
@@ -613,9 +619,9 @@ const detailMarkdownStyles = StyleSheet.create({
     marginTop: 14,
   },
   hr: {
-    backgroundColor: "#66ca80",
-    height: 1,
-    marginVertical: 24,
+    backgroundColor: MEMO_CONTENT_STYLE.divider.color.light,
+    height: MEMO_CONTENT_STYLE.divider.thickness,
+    marginVertical: MEMO_CONTENT_STYLE.divider.marginVertical,
   },
   link: {
     color: "#059669",

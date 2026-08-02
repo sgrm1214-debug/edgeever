@@ -43,6 +43,7 @@ The public demo resets every Monday at 1:00 AM (China Standard Time) and restore
 - **Seamless Dual-View Editor**: Switch effortlessly between intuitive rich text editing and Markdown source code on desktop.
 - **Native Mermaid Diagram Rendering**: Render clear flowcharts, sequence diagrams, and mind maps directly in notes, preserving clean, editable source code across Markdown and rich text views.
 - **Revision History**: Inspect and restore previous iterations of your notes with built-in version tracking.
+- **Revocable Read-Only Sharing**: Create an unguessable public link for any note so others can view its latest saved content and attachments without signing in, then revoke access at any time.
 - **Smart Local Image Compression**: Client-side WebP compression reduces file sizes by 50%-90% before uploading, saving storage and speeding up page loads without extra server costs.
 - **Universal File Attachments**: Attach and preview PDFs, Office documents, zip files, audio, and video directly within notes.
 - **Batch Operations & Flexible Sorting**: Easily merge or relocate multiple notes, with drag-and-drop notebook reordering.

@@ -5,7 +5,7 @@ import { Modal } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Markdown, { type ASTNode, type RenderRules } from "react-native-markdown-display";
 import { SvgXml } from "react-native-svg";
-import { ChevronDown, ChevronLeft, ChevronRight, History, MoreHorizontal, Pencil, RotateCcw, Search, Tag, Trash2, X } from "../components/icons";
+import { ChevronDown, ChevronLeft, ChevronRight, History, MoreHorizontal, Pencil, RotateCcw, Search, Share2, Tag, Trash2, X } from "../components/icons";
 import { Pressable, Text, TextInput } from "../components/LocalizedText";
 import { MobileMermaidDiagram, MobileMermaidProvider } from "../components/MobileMermaid";
 import { getMobileMarkdownFenceLanguage, trimMobileMarkdownFenceContent } from "../lib/mobile-mermaid";
@@ -194,6 +194,7 @@ export const MemoDetailModal = ({
   isLoading,
   isRestoring,
   isSaving,
+  isSharing,
   memo,
   notebookName,
   onClose,
@@ -202,6 +203,7 @@ export const MemoDetailModal = ({
   onOpenRevisions,
   onResolveSyncConflict,
   onRestore,
+  onShare,
   syncStatus,
   visible,
 }: {
@@ -209,6 +211,7 @@ export const MemoDetailModal = ({
   isLoading: boolean;
   isRestoring: boolean;
   isSaving: boolean;
+  isSharing: boolean;
   memo: MemoDetail | null;
   notebookName: string;
   onClose: () => void;
@@ -217,6 +220,7 @@ export const MemoDetailModal = ({
   onOpenRevisions: (memo: MemoDetail) => void;
   onResolveSyncConflict: (memo: MemoDetail) => void;
   onRestore: (memo: MemoDetail) => void;
+  onShare: (memo: MemoDetail) => void;
   syncStatus: MobileSyncQueueItem["status"] | null;
   visible: boolean;
 }) => {
@@ -403,6 +407,17 @@ export const MemoDetailModal = ({
                 {syncStatusLabel}
               </Text>
             </Pressable>
+            {memo && !memo.isDeleted ? (
+              <Pressable
+                accessibilityLabel="分享笔记"
+                accessibilityRole="button"
+                disabled={isSharing}
+                onPress={() => onShare(memo)}
+                style={[styles.detailHeaderIconButton, isSharing && styles.buttonDisabled]}
+              >
+                {isSharing ? <ActivityIndicator color="#475569" size="small" /> : <Share2 color="#475569" size={20} />}
+              </Pressable>
+            ) : null}
             {memo && !memo.isDeleted ? (
               <Pressable
                 accessibilityLabel="版本历史"

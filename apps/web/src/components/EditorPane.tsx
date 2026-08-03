@@ -2746,7 +2746,11 @@ const RichEditorPane = ({
       <div
         ref={setEditorScrollContainerRef}
         data-editor-theme={
-          editorTheme === "default" || editorTheme === "minimal-emerald" || editorTheme === "outline-emerald"
+          editorTheme === "default" ||
+          editorTheme === "minimal-emerald" ||
+          editorTheme === "outline-emerald" ||
+          editorTheme === "wechat-green" ||
+          editorTheme === "modern-mint"
             ? editorTheme
             : "custom"
         }
@@ -2755,7 +2759,11 @@ const RichEditorPane = ({
           "--editor-body-line-height": String(MEMO_CONTENT_STYLE.body.lineHeight / MEMO_CONTENT_STYLE.body.fontSize),
           "--memo-content-divider-color": MEMO_CONTENT_STYLE.divider.color[resolvedTheme],
           "--memo-content-divider-spacing": `${MEMO_CONTENT_STYLE.divider.marginVertical}px`,
-          ...(editorTheme !== "default" && editorTheme !== "minimal-emerald" && editorTheme !== "outline-emerald"
+          ...(editorTheme !== "default" &&
+          editorTheme !== "minimal-emerald" &&
+          editorTheme !== "outline-emerald" &&
+          editorTheme !== "wechat-green" &&
+          editorTheme !== "modern-mint"
             ? {
                 "--editor-theme-bg": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).background,
                 "--editor-theme-text": (resolvedTheme === "dark" ? customEditorTheme.dark : customEditorTheme.light).text,
@@ -2774,6 +2782,8 @@ const RichEditorPane = ({
         {editorTheme !== "default" &&
           editorTheme !== "minimal-emerald" &&
           editorTheme !== "outline-emerald" &&
+          editorTheme !== "wechat-green" &&
+          editorTheme !== "modern-mint" &&
           customEditorTheme.customCss && (
             <style
               data-theme-custom-css

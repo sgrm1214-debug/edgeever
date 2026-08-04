@@ -6,14 +6,6 @@ import { resolveMobileThemeStyles, type MobileResolvedTheme } from "../lib/mobil
 const DETAIL_CONTENT_HORIZONTAL_PADDING = 16;
 
 const baseWorkspaceStyles = StyleSheet.create({
-  editorRuntimePrewarm: {
-    position: "absolute",
-    left: -2,
-    top: -2,
-    width: 1,
-    height: 1,
-    opacity: 0.01,
-  },
   safeArea: {
     backgroundColor: "#f8fafc",
     flex: 1,

@@ -119,6 +119,10 @@ export const TagRenameSchema = z.object({
   name: z.string().trim().min(1).max(80),
 });
 
+export const ResourceUpdateSchema = z.object({
+  filename: z.string().trim().min(1).max(160),
+});
+
 export type NotebookCreateInput = z.infer<typeof NotebookCreateSchema>;
 export type NotebookUpdateInput = z.infer<typeof NotebookUpdateSchema>;
 export type MemoCreateInput = z.infer<typeof MemoCreateSchema>;
@@ -135,3 +139,4 @@ export type UserCreateInput = z.infer<typeof UserCreateSchema>;
 export type UserUpdateInput = z.infer<typeof UserUpdateSchema>;
 export type ApiTokenCreateInput = z.infer<typeof ApiTokenCreateSchema>;
 export type TagRenameInput = z.infer<typeof TagRenameSchema>;
+export type ResourceUpdateInput = z.infer<typeof ResourceUpdateSchema>;

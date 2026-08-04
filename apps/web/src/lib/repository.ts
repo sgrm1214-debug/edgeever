@@ -28,6 +28,8 @@ import {
   listLocalResources,
   replaceLocalResources,
   putLocalResource,
+  renameLocalResource,
+  deleteLocalResource,
   createLocalResource,
   putLocalMemo,
   putLocalNotebook,
@@ -56,6 +58,8 @@ export type EdgeEverRepository = {
   useTemplate(templateId: string, notebookId: string): Promise<{ memo: MemoDetail }>;
   uploadMemoResource(memoId: string, file: File): Promise<{ resource: Resource }>;
   listResources(): Promise<{ resources: ResourceListItem[]; summary: ResourceStorageSummary }>;
+  renameResource(resourceId: string, filename: string): Promise<{ resource: Resource }>;
+  deleteResource(resourceId: string): Promise<{ ok: true }>;
   listTags(): Promise<{ tags: TagSummary[] }>;
   renameTag(tag: string, name: string): Promise<{ ok: true; updated: number }>;
   deleteTag(tag: string): Promise<{ ok: true; updated: number }>;
@@ -228,6 +232,22 @@ export const createWebRepository = (scope: string): EdgeEverRepository => {
     const remote = await api.listResources();
     await replaceLocalResources(scope, remote.resources);
     return remote;
+  },
+  async renameResource(resourceId, filename) {
+    if (isOffline() || resourceId.startsWith("local_resource_")) {
+      throw new Error("Attachments can only be renamed after they are synced.");
+    }
+    const result = await api.renameResource(resourceId, filename);
+    await renameLocalResource(scope, resourceId, result.resource.filename || filename);
+    return result;
+  },
+  async deleteResource(resourceId) {
+    if (isOffline() || resourceId.startsWith("local_resource_")) {
+      throw new Error("Attachments can only be deleted after they are synced.");
+    }
+    const result = await api.deleteResource(resourceId);
+    await deleteLocalResource(scope, resourceId);
+    return result;
   },
   async listTags() {
     const local = await listLocalTags(scope);

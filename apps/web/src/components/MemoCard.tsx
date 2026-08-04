@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import * as m from "motion/react-m";
-import { Star, Check, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { Star, Check, MoreHorizontal, RotateCcw } from "lucide-react";
 import type { MemoSummary } from "@edgeever/shared";
 import { cn } from "@/lib/utils";
 import { selectionSettleMotion } from "@/lib/motion";
@@ -49,7 +49,6 @@ export const MemoCard = ({
   listDensity,
   multiSelectKeyDown,
   onOpen,
-  onDelete,
   onRestore,
   onOpenContextMenu,
   onOpenSelectionContextMenu,
@@ -66,7 +65,6 @@ export const MemoCard = ({
   listDensity: MemoListDensity;
   multiSelectKeyDown: boolean;
   onOpen: () => void;
-  onDelete: () => void;
   onRestore: () => void;
   onOpenContextMenu: (event: MouseEvent<HTMLElement>) => void;
   onOpenSelectionContextMenu: (event: MouseEvent<HTMLElement>) => void;
@@ -420,26 +418,20 @@ export const MemoCard = ({
             >
               <MoreHorizontal className="h-4 w-4" />
             </button>
-            <button
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2",
-                isTrashView ? "hover:bg-slate-100 hover:text-slate-800" : "hover:bg-rose-50 hover:text-rose-700"
-              )}
-              type="button"
-              title={isTrashView ? t("memoCard.restoreMemo") : t("memoCard.deleteMemo")}
-              aria-label={isTrashView ? t("memoCard.restoreMemo") : t("memoCard.deleteMemo")}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isTrashView) {
+            {isTrashView && (
+              <button
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/70 focus-visible:ring-offset-2"
+                type="button"
+                title={t("memoCard.restoreMemo")}
+                aria-label={t("memoCard.restoreMemo")}
+                onClick={(event) => {
+                  event.stopPropagation();
                   onRestore();
-                  return;
-                }
-
-                onDelete();
-              }}
-            >
-              {isTrashView ? <RotateCcw className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-            </button>
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
       </div>

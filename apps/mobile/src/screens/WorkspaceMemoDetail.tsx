@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MEMO_CONTENT_STYLE, resolveMemoContentMarkdown, type MemoDetail } from "@edgeever/shared";
 import { ActivityIndicator, Image as RNImage, Platform, ScrollView, StyleSheet, Text as RNText, useWindowDimensions, View, type ImageStyle, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { Modal } from "react-native";
@@ -6,8 +6,14 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Markdown, { type ASTNode, type RenderRules } from "react-native-markdown-display";
 import { SvgXml } from "react-native-svg";
 import { ChevronDown, ChevronLeft, ChevronRight, History, MoreHorizontal, Pencil, RotateCcw, Search, Share2, Tag, Trash2, X } from "../components/icons";
-import { Pressable, Text, TextInput } from "../components/LocalizedText";
+import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import { MobileMermaidDiagram, MobileMermaidProvider } from "../components/MobileMermaid";
+import { MobileAttachmentActions, MobileAttachmentCard } from "../components/MobileAttachmentActions";
+import {
+  getParagraphAttachmentTarget,
+  openMobileAttachment,
+  type MobileAttachmentTarget,
+} from "../lib/mobile-attachments";
 import { getMobileMarkdownFenceLanguage, trimMobileMarkdownFenceContent } from "../lib/mobile-mermaid";
 import { useMobileLocale } from "../lib/mobile-locale";
 import { resolveMobileThemeStyles, useMobileTheme } from "../lib/mobile-theme";
@@ -199,8 +205,10 @@ export const MemoDetailModal = ({
   notebookName,
   onClose,
   onDelete,
+  onDeleteAttachment,
   onRichEdit,
   onOpenRevisions,
+  onRenameAttachment,
   onResolveSyncConflict,
   onRestore,
   onShare,
@@ -216,15 +224,17 @@ export const MemoDetailModal = ({
   notebookName: string;
   onClose: () => void;
   onDelete: (memo: MemoDetail) => void;
+  onDeleteAttachment: (memo: MemoDetail, target: MobileAttachmentTarget) => Promise<void>;
   onRichEdit: (memo: MemoDetail) => void;
   onOpenRevisions: (memo: MemoDetail) => void;
+  onRenameAttachment: (memo: MemoDetail, target: MobileAttachmentTarget, filename: string) => Promise<void>;
   onResolveSyncConflict: (memo: MemoDetail) => void;
   onRestore: (memo: MemoDetail) => void;
   onShare: (memo: MemoDetail) => void;
   syncStatus: MobileSyncQueueItem["status"] | null;
   visible: boolean;
 }) => {
-  const { session } = useSession();
+  const { client, session } = useSession();
   const { resolvedTheme } = useMobileTheme();
   const { resolvedLocale } = useMobileLocale();
   const { width: viewportWidth } = useWindowDimensions();
@@ -233,7 +243,26 @@ export const MemoDetailModal = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [attachmentTarget, setAttachmentTarget] = useState<MobileAttachmentTarget | null>(null);
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
   const localePreference = useMobileLocalePreference();
+  const openAttachment = useCallback(async (target: MobileAttachmentTarget) => {
+    if (!client) throw new Error(resolvedLocale === "en-US" ? "The attachment client is unavailable." : "当前无法读取附件。");
+    setDownloadingAttachmentId(target.resourceId);
+    try {
+      await openMobileAttachment(client, target);
+    } finally {
+      setDownloadingAttachmentId(null);
+    }
+  }, [client, resolvedLocale]);
+  const openAttachmentFromCard = useCallback((target: MobileAttachmentTarget) => {
+    void openAttachment(target).catch((error) => {
+      Alert.alert(
+        resolvedLocale === "en-US" ? "Unable to open attachment" : "无法打开附件",
+        error instanceof Error ? error.message : (resolvedLocale === "en-US" ? "Try again later." : "请稍后重试。")
+      );
+    });
+  }, [openAttachment, resolvedLocale]);
   const themedDetailMarkdownStyles = useMemo(
     () => ({
       ...resolveMobileThemeStyles(detailMarkdownStyles, resolvedTheme),
@@ -325,7 +354,21 @@ export const MemoDetailModal = ({
       heading4: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
       heading5: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
       heading6: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
-      paragraph: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
+      paragraph: (node, children, _parents, markdownStyles) => {
+        const target = getParagraphAttachmentTarget(node);
+        if (target) {
+          return (
+            <MobileAttachmentCard
+              busy={downloadingAttachmentId === target.resourceId}
+              key={node.key}
+              onActions={() => setAttachmentTarget(target)}
+              onOpen={() => openAttachmentFromCard(target)}
+              target={target}
+            />
+          );
+        }
+        return renderSelectableTextBlock(node, children, markdownStyles);
+      },
       table: (node, children, parents, markdownStyles) => {
         const columnCount = getTableColumnCount(node, parents);
         const tableWidth = columnCount > DETAIL_TABLE_FIT_COLUMN_COUNT
@@ -348,7 +391,7 @@ export const MemoDetailModal = ({
       td: (node, children, parents, markdownStyles) => renderTableCell(node, children, parents, markdownStyles, false),
       th: (node, children, parents, markdownStyles) => renderTableCell(node, children, parents, markdownStyles, true),
     };
-  }, [resolvedLocale, resolvedTheme, session, viewportWidth]);
+  }, [downloadingAttachmentId, openAttachmentFromCard, resolvedLocale, resolvedTheme, session, viewportWidth]);
   const detailText = memo
     ? resolveMemoContentMarkdown(memo.contentJson, memo.contentMarkdown) || memo.contentText || "没有正文内容"
     : "没有正文内容";
@@ -535,6 +578,20 @@ export const MemoDetailModal = ({
             </Pressable>
           </Modal>
         ) : null}
+        <MobileAttachmentActions
+          canMutate={Boolean(memo && !memo.isDeleted && !memo.id.startsWith("local:"))}
+          onClose={() => setAttachmentTarget(null)}
+          onDelete={async (target) => {
+            if (!memo) return;
+            await onDeleteAttachment(memo, target);
+          }}
+          onOpen={openAttachment}
+          onRename={async (target, filename) => {
+            if (!memo) return;
+            await onRenameAttachment(memo, target, filename);
+          }}
+          target={attachmentTarget}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -648,7 +705,7 @@ const detailMarkdownStyles = StyleSheet.create({
     marginVertical: 8,
   },
   paragraph: {
-    marginBottom: 10,
+    marginBottom: MEMO_CONTENT_STYLE.body.paragraphSpacing,
     marginTop: 0,
   },
   strong: {

@@ -26,6 +26,7 @@ export const ChevronRight = createIcon("chevron-right");
 export const Code = createIcon("code");
 export const Copy = createIcon("copy");
 export const Database = createIcon("database");
+export const Download = createIcon("download");
 export const ExternalLink = createIcon("external-link");
 export const FileArchive = createIcon("archive");
 export const FileSpreadsheet = createIcon("grid");

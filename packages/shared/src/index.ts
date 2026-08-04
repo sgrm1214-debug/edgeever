@@ -8,6 +8,7 @@ export * from "./memo-content-style";
 export * from "./note-links";
 export * from "./notebooks";
 export * from "./revision-diff";
+export * from "./resource-links";
 export * from "./schemas";
 export * from "./sharing";
 export * from "./sync";

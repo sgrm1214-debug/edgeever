@@ -56,6 +56,8 @@ import type {
   ShortcutSettings,
   MemoFilterMode,
   MemoSortMode,
+  MemoDocumentAction,
+  MemoDocumentActionRequest,
 } from "@/lib/app-helpers";
 import {
   MIN_MEMO_LIST_WIDTH_PX,
@@ -698,6 +700,8 @@ export const WorkspaceApp = ({
   const pendingCreatedMemoIdRef = useRef<string | null>(null);
   const creatingMemoSelectionRef = useRef(false);
   const [selectedMemoIds, setSelectedMemoIds] = useState<Set<string>>(new Set());
+  const memoDocumentActionIdRef = useRef(0);
+  const [memoDocumentActionRequest, setMemoDocumentActionRequest] = useState<MemoDocumentActionRequest | null>(null);
   const [memoSelectionMode, setMemoSelectionMode] = useState(false);
   const [selectionMoveTargetNotebookId, setSelectionMoveTargetNotebookId] = useState("");
   const [memoDeleteConfirmation, setMemoDeleteConfirmation] = useState<MemoDeleteConfirmation | null>(null);
@@ -2927,6 +2931,23 @@ export const WorkspaceApp = ({
               onEmptyTrash={handleEmptyTrash}
               onRestoreMemo={handleRestoreMemoFromList}
               onMoveMemo={handleMoveMemoFromList}
+              onRequestDocumentAction={(memoId: string, action: MemoDocumentAction, printWindow?: Window | null) => {
+                if (shouldNavigateHomeWhenOpeningMemo(memoView)) {
+                  navigateWorkspaceHome();
+                }
+                setRightView("editor");
+                clearPendingCreatedMemo();
+                setCreatedMemoEditId(null);
+                setSelectedMemoId(memoId);
+                setActivePane("editor");
+                memoDocumentActionIdRef.current += 1;
+                setMemoDocumentActionRequest({
+                  id: memoDocumentActionIdRef.current,
+                  memoId,
+                  action,
+                  printWindow,
+                });
+              }}
               onTogglePinMemo={handleToggleMemoPinned}
               onPinSelectedMemos={handlePinSelectedMemos}
               onDeleteSelectedMemos={handleDeleteSelectedMemos}
@@ -3016,6 +3037,10 @@ export const WorkspaceApp = ({
                     contentSearchQuery={search}
                     searchFocusToken={noteSearchFocusToken}
                     replaceFocusToken={noteReplaceFocusToken}
+                    documentActionRequest={memoDocumentActionRequest}
+                    onDocumentActionConsumed={(requestId) => {
+                      setMemoDocumentActionRequest((current) => current?.id === requestId ? null : current);
+                    }}
                     onOpenMemo={(memoId) => {
                       clearPendingCreatedMemo();
                       setMemoView("notebook");

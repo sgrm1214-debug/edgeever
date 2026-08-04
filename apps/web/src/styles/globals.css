@@ -41,7 +41,7 @@
     --dark-surface-rgb: 255 255 255;
     --editor-body-font-size: 0.9375rem;
     --editor-body-line-height: 1.6;
-    --editor-paragraph-spacing: 0.45rem;
+    --editor-paragraph-spacing: 0.35rem;
     --memo-content-divider-color: rgb(var(--brand-green-300-rgb));
     --memo-content-divider-spacing: 1.5rem;
     --editor-outline-width: 300px;
@@ -286,6 +286,7 @@ textarea {
 .ProseMirror p {
   line-height: var(--editor-body-line-height);
   margin: 0 0 var(--editor-paragraph-spacing);
+  padding: 0;
 }
 
 .ProseMirror a.edgeever-note-link,
@@ -546,7 +547,8 @@ textarea {
   align-items: center;
   justify-content: center;
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   padding: 3.25rem 1rem 1rem;
   border: 1px solid #d9e2dc;
   border-radius: 8px;
@@ -575,10 +577,10 @@ textarea {
 
 .ProseMirror .edgeever-mermaid-svg svg {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
   height: auto;
-  max-height: none;
+  max-height: 30rem;
 }
 
 .ProseMirror .edgeever-mermaid-source {

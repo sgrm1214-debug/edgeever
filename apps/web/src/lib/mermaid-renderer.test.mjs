@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderMermaidSVG } from "beautiful-mermaid";
 import mermaid from "mermaid";
+import { getStoredMermaidRenderer } from "../components/ThemeProvider";
 import { renderMermaidWithFallback } from "./mermaid-renderer";
 
 const GANTT_SOURCE = `gantt
@@ -9,6 +10,10 @@ const GANTT_SOURCE = `gantt
   Compatibility fallback :fallback, 2026-07-30, 1d`;
 
 describe("Mermaid renderer fallback", () => {
+  test("defaults to the compact renderer when no browser preference exists", () => {
+    expect(getStoredMermaidRenderer()).toBe("beautiful");
+  });
+
   test("uses the official renderer for a valid Gantt diagram unsupported by beautiful-mermaid", async () => {
     expect(await mermaid.parse(GANTT_SOURCE, { suppressErrors: true })).toBeTruthy();
 

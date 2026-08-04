@@ -619,7 +619,15 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("desktop:sidecar-request", async (_event, method, params) => {
     if (!sidecar) throw new Error("EdgeEver sidecar is unavailable");
-    return sidecar.request(method, params);
+    const result = await sidecar.request(method, params);
+    if (method === "resource.delete" && isSafeResourceId(params?.resourceId)) {
+      const directory = resourceCacheDirectory();
+      await Promise.all([
+        unlink(join(directory, `${params.resourceId}.bin`)).catch(() => {}),
+        unlink(join(directory, `${params.resourceId}.json`)).catch(() => {}),
+      ]);
+    }
+    return result;
   });
   ipcMain.handle("desktop:sidecar-status", () => ({ available: Boolean(sidecar), path: sidecarPath, scope: sidecarScopeKey }));
   ipcMain.handle("desktop:set-account-scope", async (_event, accountId) => {

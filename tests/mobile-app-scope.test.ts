@@ -28,6 +28,11 @@ describe("mobile app scope", () => {
     }
   });
 
+  test("does not initialize a hidden WebView during workspace startup", () => {
+    expect(workspaceSource).not.toContain("EditorRuntimePrewarm");
+    expect(workspaceSource).not.toContain("editorRuntimeWarm");
+  });
+
   test("limits account security to the signed-in user", () => {
     for (const removedCapability of ["createUser", "listUsers", "updateUser"]) {
       expect(accountSecuritySource).not.toContain(removedCapability);

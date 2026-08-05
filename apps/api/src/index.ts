@@ -28,6 +28,8 @@ import {
   RestoreJsonMemosSchema,
   RestoreJsonNotebooksSchema,
   ResourceUpdateSchema,
+  ObjectStorageConnectionTestSchema,
+  ObjectStorageSettingsUpdateSchema,
   type ApiToken,
   type CreatedApiToken,
   type MemoDetail,
@@ -87,7 +89,6 @@ import {
 } from "./demo-attachments";
 import { createCloudflareStorageAdapter } from "./cloudflare-storage-adapter";
 import type {
-  BlobStoreAdapter,
   DatabaseAdapter,
   PreparedStatementAdapter,
 } from "./storage-contract";
@@ -156,13 +157,24 @@ import {
 import { registerTagRoutes } from "./tag-routes";
 import { registerNotebookRoutes } from "./notebook-routes";
 import { registerMemoShareRoutes, registerPublicShareRoutes } from "./share-routes";
+import { decryptSecret, encryptSecret } from "./secret-encryption";
+import {
+  BUILTIN_STORAGE_CONFIG_ID,
+  S3_STORAGE_CONFIG_ID,
+  deleteStoredObjects,
+  getActiveObjectStorageConfig,
+  getObjectStorageConfig,
+  mapObjectStorageSettings,
+  resolveObjectStorageEncryptionKey,
+  resolveObjectStorage,
+} from "./object-storage";
+import { testWorkerS3Connection } from "./worker-s3-blob-store";
 
 // Compatibility aliases keep the existing SQL-heavy implementation small
 // while routing its dependency through the platform-neutral contract above.
-// New code should use DatabaseAdapter/BlobStoreAdapter directly.
+// New code should use DatabaseAdapter directly.
 type D1Database = DatabaseAdapter;
 type D1PreparedStatement = PreparedStatementAdapter;
-type R2Bucket = BlobStoreAdapter;
 
 type MemoSummaryRow = {
   id: string;
@@ -305,6 +317,7 @@ type ResourceRow = {
   original_memo_id: string | null;
   bucket_name: string;
   object_key: string;
+  storage_config_id: string;
   kind: "image" | "attachment";
   mime_type: string | null;
   filename: string | null;
@@ -901,6 +914,118 @@ app.use("/api/v1/*", async (c, next) => {
 
   c.set("auth", auth);
   await next();
+});
+
+const getSubmittedObjectStorageSecret = async (
+  c: AppContext,
+  submittedSecret: string | undefined,
+) => {
+  if (submittedSecret) return submittedSecret;
+  const existing = await getObjectStorageConfig(c.env.storage.db, S3_STORAGE_CONFIG_ID);
+  const encryptionKey = resolveObjectStorageEncryptionKey(c.env.EDGE_EVER_STORAGE_ENCRYPTION_KEY);
+  if (!existing?.secret_access_key_encrypted || !encryptionKey) {
+    throw new AppError("object_storage_secret_required", "Secret Access Key is required.", 400);
+  }
+  return decryptSecret(existing.secret_access_key_encrypted, encryptionKey);
+};
+
+app.get("/api/v1/instance/object-storage", async (c) => {
+  const denied = requireOwner(c);
+  if (denied) return denied;
+
+  const active = await getActiveObjectStorageConfig(c.env.storage.db);
+  if (!active) return notFound(c, "Object storage configuration not found.");
+  const external = await getObjectStorageConfig(c.env.storage.db, S3_STORAGE_CONFIG_ID);
+  return c.json({
+    settings: mapObjectStorageSettings(active, Boolean(resolveObjectStorageEncryptionKey(c.env.EDGE_EVER_STORAGE_ENCRYPTION_KEY))),
+    externalSettings: external
+      ? mapObjectStorageSettings(external, Boolean(resolveObjectStorageEncryptionKey(c.env.EDGE_EVER_STORAGE_ENCRYPTION_KEY)))
+      : null,
+  });
+});
+
+app.post("/api/v1/instance/object-storage/test", zValidator("json", ObjectStorageConnectionTestSchema), async (c) => {
+  const denied = requireOwner(c);
+  if (denied) return denied;
+  const input = c.req.valid("json");
+
+  try {
+    await testWorkerS3Connection({
+      endpoint: input.endpoint.replace(/\/+$/, ""),
+      region: input.region,
+      bucket: input.bucket,
+      accessKeyId: input.accessKeyId,
+      secretAccessKey: await getSubmittedObjectStorageSecret(c, input.secretAccessKey),
+      forcePathStyle: input.forcePathStyle,
+      objectPrefix: input.objectPrefix,
+    });
+    return c.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AppError) return apiError(c, error.code, error.message, error.status);
+    return apiError(c, "object_storage_connection_failed", error instanceof Error ? error.message : "Object storage connection failed.", 400);
+  }
+});
+
+app.put("/api/v1/instance/object-storage", zValidator("json", ObjectStorageSettingsUpdateSchema), async (c) => {
+  const denied = requireOwner(c);
+  if (denied) return denied;
+  if (isDemoMode(c.env)) return forbidden(c, "Object storage cannot be changed in demo mode.");
+  const input = c.req.valid("json");
+  const now = isoNow();
+
+  if (input.provider === "builtin") {
+    await c.env.storage.db.batch([
+      c.env.storage.db.prepare(`UPDATE object_storage_configs SET is_active = 0, updated_at = ? WHERE is_active = 1`).bind(now),
+      c.env.storage.db.prepare(`UPDATE object_storage_configs SET is_active = 1, updated_at = ? WHERE id = ?`).bind(now, BUILTIN_STORAGE_CONFIG_ID),
+      auditStatement(c.env.storage.db, "user", c.get("auth").actorId, "instance.object_storage.update", "object_storage", BUILTIN_STORAGE_CONFIG_ID, { provider: "builtin" }),
+    ]);
+  } else {
+    const encryptionKey = resolveObjectStorageEncryptionKey(c.env.EDGE_EVER_STORAGE_ENCRYPTION_KEY);
+    if (!encryptionKey) {
+      return apiError(c, "object_storage_encryption_key_missing", "Configure EDGE_EVER_STORAGE_ENCRYPTION_KEY before saving external credentials.", 400);
+    }
+
+    try {
+      const secretAccessKey = await getSubmittedObjectStorageSecret(c, input.secretAccessKey);
+      const endpoint = input.endpoint.replace(/\/+$/, "");
+      await testWorkerS3Connection({ ...input, endpoint, secretAccessKey });
+      const encryptedSecret = await encryptSecret(secretAccessKey, encryptionKey);
+      await c.env.storage.db.batch([
+        c.env.storage.db.prepare(`UPDATE object_storage_configs SET is_active = 0, updated_at = ? WHERE is_active = 1`).bind(now),
+        c.env.storage.db.prepare(
+          `INSERT INTO object_storage_configs (
+             id, provider, display_name, endpoint, region, bucket, access_key_id,
+             secret_access_key_encrypted, force_path_style, object_prefix, is_active, created_at, updated_at
+           ) VALUES (?, 's3', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             display_name = excluded.display_name, endpoint = excluded.endpoint, region = excluded.region,
+             bucket = excluded.bucket, access_key_id = excluded.access_key_id,
+             secret_access_key_encrypted = excluded.secret_access_key_encrypted,
+             force_path_style = excluded.force_path_style, object_prefix = excluded.object_prefix,
+             is_active = 1, updated_at = excluded.updated_at`
+        ).bind(
+          S3_STORAGE_CONFIG_ID,
+          input.displayName,
+          endpoint,
+          input.region,
+          input.bucket,
+          input.accessKeyId,
+          encryptedSecret,
+          input.forcePathStyle ? 1 : 0,
+          input.objectPrefix.replace(/^\/+|\/+$/g, ""),
+          now,
+          now,
+        ),
+        auditStatement(c.env.storage.db, "user", c.get("auth").actorId, "instance.object_storage.update", "object_storage", S3_STORAGE_CONFIG_ID, { provider: "s3", endpoint, bucket: input.bucket }),
+      ]);
+    } catch (error) {
+      if (error instanceof AppError) return apiError(c, error.code, error.message, error.status);
+      return apiError(c, "object_storage_connection_failed", error instanceof Error ? error.message : "Object storage connection failed.", 400);
+    }
+  }
+
+  const active = await getActiveObjectStorageConfig(c.env.storage.db);
+  return c.json({ settings: mapObjectStorageSettings(active!, Boolean(resolveObjectStorageEncryptionKey(c.env.EDGE_EVER_STORAGE_ENCRYPTION_KEY))) });
 });
 
 app.get("/api/v1/api-tokens", async (c) => {
@@ -1551,7 +1676,7 @@ app.post("/api/v1/memos/batch/delete", zValidator("json", DeleteMemosSchema), as
   const actor = getAuditActor(c);
 
   try {
-    const deleted = await deleteMemosRecord(c.env.storage.db, c.env.storage.resources, getWorkspaceId(c), input.memoIds, Boolean(input.permanent), actor);
+    const deleted = await deleteMemosRecord(c.env, getWorkspaceId(c), input.memoIds, Boolean(input.permanent), actor);
     return c.json({ ok: true, deleted });
   } catch (error) {
     if (error instanceof AppError) {
@@ -1570,7 +1695,7 @@ app.delete("/api/v1/memos/trash/empty", async (c) => {
   }
 
   const actor = getAuditActor(c);
-  const deleted = await emptyTrashMemosRecord(c.env.storage.db, c.env.storage.resources, getWorkspaceId(c), actor);
+  const deleted = await emptyTrashMemosRecord(c.env, getWorkspaceId(c), actor);
 
   return c.json({ ok: true, deleted });
 });
@@ -1761,7 +1886,7 @@ app.get("/api/v1/exports/markdown", async (c) => {
   if (memoIds.length > 0) {
     const placeholders = memoIds.map(() => "?").join(", ");
     const resourceRows = await c.env.storage.db.prepare(
-      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind, r.mime_type,
+      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind, r.mime_type,
               r.filename, r.byte_size, r.sha256, r.width, r.height, r.created_at, r.updated_at
        FROM resources
        WHERE is_deleted = 0 AND memo_id IN (${placeholders})
@@ -1816,7 +1941,7 @@ app.get("/api/v1/backups/json", async (c) => {
     const placeholders = memoIds.map(() => "?").join(", ");
     const [resourceRows, revisionRows] = await Promise.all([
       c.env.storage.db.prepare(
-        `SELECT id, memo_id, original_memo_id, bucket_name, object_key, kind, mime_type,
+        `SELECT id, memo_id, original_memo_id, bucket_name, object_key, storage_config_id, kind, mime_type,
                 filename, byte_size, sha256, width, height, created_at, updated_at
          FROM resources
          WHERE is_deleted = 0 AND memo_id IN (${placeholders})
@@ -1917,13 +2042,14 @@ app.put("/api/v1/restores/json/resources/:id", async (c) => {
     return conflict(c, "cross_workspace_id_conflict", "Backup resource ID is already used by another user.");
   }
   const previous = await c.env.storage.db.prepare(
-    `SELECT r.object_key FROM resources r INNER JOIN memos m ON m.id = r.memo_id WHERE r.id = ? AND m.workspace_id = ?`
-  ).bind(metadata.id, getWorkspaceId(c)).first<{ object_key: string }>();
+    `SELECT r.object_key, r.storage_config_id FROM resources r INNER JOIN memos m ON m.id = r.memo_id WHERE r.id = ? AND m.workspace_id = ?`
+  ).bind(metadata.id, getWorkspaceId(c)).first<{ object_key: string; storage_config_id: string }>();
   const originalMemo = metadata.originalMemoId
     ? await c.env.storage.db.prepare(`SELECT id FROM memos WHERE id = ? AND workspace_id = ?`).bind(metadata.originalMemoId, getWorkspaceId(c)).first<{ id: string }>()
     : null;
 
-  await c.env.storage.resources.put(objectKey, bytes, {
+  const destination = await resolveObjectStorage(c.env);
+  await destination.store.put(objectKey, bytes, {
     httpMetadata: { contentType: metadata.mimeType ?? file.type ?? "application/octet-stream" },
     customMetadata: { memoId: metadata.memoId, resourceId: metadata.id, restored: "true" },
   });
@@ -1932,14 +2058,15 @@ app.put("/api/v1/restores/json/resources/:id", async (c) => {
     const now = isoNow();
     await c.env.storage.db.prepare(
       `INSERT INTO resources (
-        id, memo_id, original_memo_id, bucket_name, object_key, kind, mime_type, filename,
+        id, memo_id, original_memo_id, bucket_name, object_key, storage_config_id, kind, mime_type, filename,
         byte_size, sha256, width, height, metadata_json, is_deleted, created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL)
       ON CONFLICT(id) DO UPDATE SET
         memo_id = excluded.memo_id,
         original_memo_id = excluded.original_memo_id,
         bucket_name = excluded.bucket_name,
         object_key = excluded.object_key,
+        storage_config_id = excluded.storage_config_id,
         kind = excluded.kind,
         mime_type = excluded.mime_type,
         filename = excluded.filename,
@@ -1955,8 +2082,9 @@ app.put("/api/v1/restores/json/resources/:id", async (c) => {
       metadata.id,
       metadata.memoId,
       originalMemo?.id ?? null,
-      c.env.EDGE_EVER_R2_BUCKET_NAME?.trim() || DEFAULT_R2_BUCKET_NAME,
+      destination.bucketName,
       objectKey,
+      destination.configId,
       metadata.kind,
       metadata.mimeType ?? file.type ?? null,
       filename,
@@ -1969,12 +2097,13 @@ app.put("/api/v1/restores/json/resources/:id", async (c) => {
       now
     ).run();
   } catch (error) {
-    await c.env.storage.resources.delete(objectKey);
+    await destination.store.delete(objectKey);
     throw error;
   }
 
   if (previous?.object_key && previous.object_key !== objectKey) {
-    await c.env.storage.resources.delete(previous.object_key);
+    const previousStorage = await resolveObjectStorage(c.env, previous.storage_config_id);
+    await previousStorage.store.delete(previous.object_key);
   }
 
   return c.json({ ok: true });
@@ -1990,7 +2119,7 @@ app.get("/api/v1/resources", async (c) => {
   const limit = clampNumber(Number(c.req.query("limit") ?? 500), 1, 500);
   const [rows, stats] = await Promise.all([
     c.env.storage.db.prepare(
-      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind,
+      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind,
               r.mime_type, r.filename, r.byte_size, r.sha256, r.width, r.height,
               r.created_at, r.updated_at, m.title AS memo_title, m.excerpt AS memo_excerpt,
               m.is_deleted AS memo_is_deleted
@@ -2095,11 +2224,11 @@ const createImageResource = async (
     source: input.source,
   });
   const objectKey = `workspaces/${getWorkspaceId(c)}/memos/${input.memoId}/${resourceId}${inferImageExtension(processed.filename, processed.mimeType)}`;
-  const bucketName = c.env.EDGE_EVER_R2_BUCKET_NAME?.trim() || DEFAULT_R2_BUCKET_NAME;
+  const destination = await resolveObjectStorage(c.env);
   const filename = normalizeFilename(processed.filename) || `${resourceId}${inferImageExtension(processed.filename, processed.mimeType)}`;
   const checksum = await sha256Bytes(processed.bytes);
 
-  await c.env.storage.resources.put(objectKey, processed.bytes, {
+  await destination.store.put(objectKey, processed.bytes, {
     httpMetadata: {
       contentType: processed.mimeType,
       cacheControl: "private, max-age=3600",
@@ -2115,14 +2244,15 @@ const createImageResource = async (
     await c.env.storage.db.batch([
       c.env.storage.db.prepare(
         `INSERT INTO resources (
-          id, memo_id, bucket_name, object_key, kind, mime_type, filename,
+          id, memo_id, bucket_name, object_key, storage_config_id, kind, mime_type, filename,
           byte_size, sha256, width, height, metadata_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         resourceId,
         input.memoId,
-        bucketName,
+        destination.bucketName,
         objectKey,
+        destination.configId,
         processed.mimeType,
         filename,
         processed.bytes.byteLength,
@@ -2141,7 +2271,7 @@ const createImageResource = async (
       }),
     ]);
   } catch (error) {
-    await c.env.storage.resources.delete(objectKey);
+    await destination.store.delete(objectKey);
     throw error;
   }
 
@@ -2170,10 +2300,10 @@ const createAttachmentResource = async (
   const now = isoNow();
   const filename = normalizeFilename(input.filename) || resourceId;
   const objectKey = `workspaces/${getWorkspaceId(c)}/memos/${input.memoId}/${resourceId}`;
-  const bucketName = c.env.EDGE_EVER_R2_BUCKET_NAME?.trim() || DEFAULT_R2_BUCKET_NAME;
+  const destination = await resolveObjectStorage(c.env);
   const checksum = await sha256Bytes(input.bytes);
 
-  await c.env.storage.resources.put(objectKey, input.bytes, {
+  await destination.store.put(objectKey, input.bytes, {
     httpMetadata: {
       contentType: input.mimeType,
       cacheControl: "private, max-age=3600",
@@ -2189,14 +2319,15 @@ const createAttachmentResource = async (
     await c.env.storage.db.batch([
       c.env.storage.db.prepare(
         `INSERT INTO resources (
-          id, memo_id, bucket_name, object_key, kind, mime_type, filename,
+          id, memo_id, bucket_name, object_key, storage_config_id, kind, mime_type, filename,
           byte_size, sha256, width, height, metadata_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'attachment', ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, 'attachment', ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
       ).bind(
         resourceId,
         input.memoId,
-        bucketName,
+        destination.bucketName,
         objectKey,
+        destination.configId,
         input.mimeType,
         filename,
         input.bytes.byteLength,
@@ -2212,7 +2343,7 @@ const createAttachmentResource = async (
       }),
     ]);
   } catch (error) {
-    await c.env.storage.resources.delete(objectKey);
+    await destination.store.delete(objectKey);
     throw error;
   }
 
@@ -2285,7 +2416,8 @@ app.get("/api/v1/resources/:id/blob", async (c) => {
     return notFound(c, "Resource not found");
   }
 
-  const object = await c.env.storage.resources.get(resource.object_key);
+  const source = await resolveObjectStorage(c.env, resource.storage_config_id);
+  const object = await source.store.get(resource.object_key);
 
   if (!object) {
     return notFound(c, "Resource object not found");
@@ -2373,7 +2505,8 @@ app.delete("/api/v1/resources/:id", async (c) => {
       byteSize: resource.byte_size,
     }),
   ]);
-  await c.env.storage.resources.delete(resource.object_key);
+  const source = await resolveObjectStorage(c.env, resource.storage_config_id);
+  await source.store.delete(resource.object_key);
 
   return c.json({ ok: true });
 });
@@ -2635,7 +2768,7 @@ app.delete("/api/v1/memos/:id", async (c) => {
     const resources = await getResourceRowsForMemo(c.env.storage.db, workspaceId, id);
 
     if (resources.length > 0) {
-      await c.env.storage.resources.delete(resources.map((resource) => resource.object_key));
+      await deleteStoredObjects(c.env, resources);
     }
 
     await c.env.storage.db.batch([
@@ -3093,7 +3226,7 @@ const callMcpTool = async (
         return { dryRun: true, memos: await getMemosForBulkAction(c.env.storage.db, auth.workspaceId, memoIds, 0) };
       }
 
-      const deleted = await deleteMemosRecord(c.env.storage.db, c.env.storage.resources, auth.workspaceId, memoIds, false, getAuditActor(c));
+      const deleted = await deleteMemosRecord(c.env, auth.workspaceId, memoIds, false, getAuditActor(c));
       return { ok: true, deleted };
     }
     case "restore_memos": {
@@ -4323,13 +4456,13 @@ const getMemoTemplate = async (db: D1Database, workspaceId: string, id: string):
 };
 
 const deleteMemosRecord = async (
-  db: D1Database,
-  resourcesBucket: R2Bucket,
+  env: Bindings,
   workspaceId: string,
   memoIds: string[],
   permanent: boolean,
   actor: { actorType: "user" | "agent"; actorId: string | null }
 ) => {
+  const db = env.storage.db;
   const uniqueMemoIds = Array.from(new Set(memoIds));
 
   if (uniqueMemoIds.length === 0) {
@@ -4361,16 +4494,15 @@ const deleteMemosRecord = async (
   if (permanent) {
     const resourceRows = await db
       .prepare(
-        `SELECT object_key
+        `SELECT object_key, storage_config_id
          FROM resources
          WHERE memo_id IN (${placeholders})`
       )
       .bind(...uniqueMemoIds)
-      .all<{ object_key: string }>();
-    const objectKeys = resourceRows.results.map((resource) => resource.object_key);
+      .all<{ object_key: string; storage_config_id: string }>();
 
-    if (objectKeys.length > 0) {
-      await resourcesBucket.delete(objectKeys);
+    if (resourceRows.results.length > 0) {
+      await deleteStoredObjects(env, resourceRows.results);
     }
 
     statements.push(
@@ -4527,11 +4659,11 @@ const restoreMemosRecord = async (
 };
 
 const emptyTrashMemosRecord = async (
-  db: D1Database,
-  resourcesBucket: R2Bucket,
+  env: Bindings,
   workspaceId: string,
   actor: { actorType: "user" | "agent"; actorId: string | null }
 ) => {
+  const db = env.storage.db;
   const countRow = await db
     .prepare(
       `SELECT COUNT(*) AS count
@@ -4547,16 +4679,15 @@ const emptyTrashMemosRecord = async (
 
   const resourceRows = await db
     .prepare(
-      `SELECT r.object_key
+      `SELECT r.object_key, r.storage_config_id
        FROM resources r
        INNER JOIN memos m ON m.id = r.memo_id
        WHERE m.workspace_id = ? AND m.is_deleted = 1`
     )
-    .bind(workspaceId).all<{ object_key: string }>();
-  const objectKeys = resourceRows.results.map((resource) => resource.object_key);
+    .bind(workspaceId).all<{ object_key: string; storage_config_id: string }>();
 
-  if (objectKeys.length > 0) {
-    await resourcesBucket.delete(objectKeys);
+  if (resourceRows.results.length > 0) {
+    await deleteStoredObjects(env, resourceRows.results);
   }
 
   await db.batch([
@@ -4826,13 +4957,14 @@ const ensureDemoSeed = async (
       db
         .prepare(
           `INSERT INTO resources (
-            id, memo_id, bucket_name, object_key, kind, mime_type, filename,
+            id, memo_id, bucket_name, object_key, storage_config_id, kind, mime_type, filename,
             byte_size, sha256, width, height, metadata_json, is_deleted, created_at, updated_at, deleted_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL)
+          ) VALUES (?, ?, ?, ?, 'builtin', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL)
           ON CONFLICT(id) DO UPDATE SET
             memo_id = excluded.memo_id,
             bucket_name = excluded.bucket_name,
             object_key = excluded.object_key,
+            storage_config_id = excluded.storage_config_id,
             kind = excluded.kind,
             mime_type = excluded.mime_type,
             filename = excluded.filename,
@@ -4882,12 +5014,8 @@ const resetDemoData = async (
     env.EDGE_EVER_AUTH_PASSWORD_HASH,
     hashPassword,
   );
-  const resourceRows = await db.prepare(`SELECT object_key FROM resources`).all<{ object_key: string }>();
-  const objectKeys = resourceRows.results.map((resource) => resource.object_key);
-
-  for (let index = 0; index < objectKeys.length; index += 1000) {
-    await env.storage.resources.delete(objectKeys.slice(index, index + 1000));
-  }
+  const resourceRows = await db.prepare(`SELECT object_key, storage_config_id FROM resources`).all<{ object_key: string; storage_config_id: string }>();
+  await deleteStoredObjects(env, resourceRows.results);
 
   const resetStatements: D1PreparedStatement[] = [
     db.prepare(`DELETE FROM mobile_sync_changes`),
@@ -5666,7 +5794,7 @@ const shouldSnapshotMemoRevision = async (
 const getResourceRow = async (db: D1Database, workspaceId: string, id: string): Promise<ResourceRow | null> =>
   db
     .prepare(
-      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind, r.mime_type,
+      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind, r.mime_type,
               r.filename, r.byte_size, r.sha256, r.width, r.height, r.created_at, r.updated_at
        FROM resources r
        INNER JOIN memos m ON m.id = r.memo_id
@@ -5678,7 +5806,7 @@ const getResourceRow = async (db: D1Database, workspaceId: string, id: string): 
 const getResourceRowsForMemo = async (db: D1Database, workspaceId: string, memoId: string): Promise<ResourceRow[]> => {
   const rows = await db
     .prepare(
-      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind, r.mime_type,
+      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind, r.mime_type,
               r.filename, r.byte_size, r.sha256, r.width, r.height, r.created_at, r.updated_at
        FROM resources r
        INNER JOIN memos m ON m.id = r.memo_id
@@ -5693,7 +5821,7 @@ const getResourceRowsForMemo = async (db: D1Database, workspaceId: string, memoI
 const listResourcesForMemo = async (db: D1Database, workspaceId: string, memoId: string): Promise<Resource[]> => {
   const rows = await db
     .prepare(
-      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind, r.mime_type,
+      `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind, r.mime_type,
               r.filename, r.byte_size, r.sha256, r.width, r.height, r.created_at, r.updated_at
        FROM resources r
        INNER JOIN memos m ON m.id = r.memo_id
@@ -5710,7 +5838,7 @@ const listResourcesForMcp = async (db: D1Database, workspaceId: string, limit: n
   const [rows, stats] = await Promise.all([
     db
       .prepare(
-        `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.kind,
+        `SELECT r.id, r.memo_id, r.original_memo_id, r.bucket_name, r.object_key, r.storage_config_id, r.kind,
                 r.mime_type, r.filename, r.byte_size, r.sha256, r.width, r.height,
                 r.created_at, r.updated_at, m.title AS memo_title, m.excerpt AS memo_excerpt,
                 m.is_deleted AS memo_is_deleted

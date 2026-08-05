@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.10.2",
+  "version": "1.11.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -85,6 +85,9 @@
       },
       "EDGE_EVER_AUTH_USERNAME": {
         "description": "管理员登录用户名，默认值为 admin；高级用户可以改成自定义用户名。"
+      },
+      "EDGE_EVER_STORAGE_ENCRYPTION_KEY": {
+        "description": "可选。启用高级设置中的第三方 OSS 时必填，用于加密保存在 D1 中的对象存储访问密钥。"
       }
     }
   },
@@ -109,6 +112,7 @@
     "@tiptap/extension-table": "3.27.1",
     "@tiptap/react": "latest",
     "@tiptap/starter-kit": "latest",
+    "aws4fetch": "^1.0.20",
     "class-variance-authority": "latest",
     "clsx": "latest",
     "cmdk": "^1.1.1",

@@ -95,15 +95,6 @@ EdgeEver 采用纯 Serverless 架构，完全运行在 Cloudflare 免费配额�
 
 实例管理员可以在 **个人中心** -> **账号管理** 中创建、停用成员账号或重置密码。每个成员拥有完全隔离的个人空间，包括笔记本、笔记、附件、回收站、导入导出和 MCP Token 等。
 
-
-## PWA 安装说明
-
-PWA 可以把 EdgeEver 像普通应用一样安装到桌面或手机主屏幕，打开更方便，也能配合浏览器能力提供更接近原生 App 的使用体验。
-
-PC 端请使用 Chrome/Edge 打开站点，点击地址栏右侧的“安装”图标并确认。Android 建议用 Chrome 打开站点，点右上角三点菜单，选择“添加到主屏幕”，再点“安装”。Edge 可尝试菜单中的“添加到手机 / 添加到主屏幕 / 安装应用”，不同版本可能只创建快捷方式。请不要从微信等 App 内置浏览器安装。
-
-> 常见踩坑：移动端安装 PWA 时，建议优先使用 Chrome 或 Edge。其他移动浏览器在安装过程中可能出现兼容性问题或异常报错。
-
 ## 浏览器网页裁剪插件
 
 网页裁剪插件已在 Chrome、Microsoft Edge 与 Firefox 正式上架。请从对应的浏览器商店安装（Edge 浏览器亦可直接安装 Chrome Web Store 版本）：
@@ -115,9 +106,27 @@ PC 端请使用 Chrome/Edge 打开站点，点击地址栏右侧的“安装”�
 
 ## 关于客户端
 
+原生客户端提供更流畅、稳定的使用体验，以及更完善的系统级集成，并支持本地存储与离线编辑。恢复联网后，内容会自动增量同步，适合高频使用和弱网场景。
+
 Android App 现已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载签名 APK。iOS App 已提交，目前仍在 App Store 审核中。
 
-macOS App 可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载，同时支持 Apple Silicon 和 Intel Mac。Windows 版本正在处理代码签名证书问题，解决后即可发布。
+macOS App 可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载。Windows 版本正在处理代码签名证书问题，解决后即可发布。
+
+暂无原生客户端的平台，可通过 Chrome 或 Edge 将 EdgeEver 安装为 PWA 使用。
+
+## 社区与反馈
+
+- Bug、功能建议和部署问题请优先提交 [GitHub Issues](https://github.com/tianma-if/edgeever/issues)，方便后续用户检索和复用解决方案。
+
+### 微信交流群
+
+欢迎加入 EdgeEver AI 交流群，讨论 EdgeEver 使用、AI 工具、智能体、工作流和其他 AI 话题。
+
+> 群二维码 7 天内有效。如果二维码过期，请添加微信 `m1245207870`，并备注“EdgeEver 进群”。
+
+<p align="center">
+  <img src="assets/wechat-group-qr.jpg" alt="EdgeEver AI 交流群二维码" width="260" />
+</p>
 
 ## 技术栈
 
@@ -218,6 +227,12 @@ https://你的域名/api/openapi.json
 
 Cloudflare Worker 侧执行图片处理会消耗计算/图片处理额度，因此 EdgeEver 将图片压缩放在 Web 客户端完成；REST API 或 MCP 上传入口会按客户端提供的文件内容直接入库，不再由服务端自动压缩。
 
+## 高级对象存储
+
+实例 Owner 可以进入**设置 → 高级设置 → OSS 对象存储**，让后续上传的图片和附件写入兼容 S3 API 的阿里云 OSS、腾讯云 COS、AWS S3、MinIO 或 R2。已有资源继续保留在原存储中，因此切换默认存储不会迁移历史附件，也不会让历史附件失效。
+
+在 Cloudflare 部署中保存第三方凭据前，需要先配置一个至少 32 个字符的随机 `EDGE_EVER_STORAGE_ENCRYPTION_KEY` Worker Secret。EdgeEver 会用这个实例级密钥加密保存在 D1 中的访问密钥。请保持该密钥稳定并妥善备份；读取外部存储中的资源时仍需要它。
+
 ## 导入与迁移 (Migration)
 
 如果你想从其他笔记软件迁移到 EdgeEver，请参考以下极简迁移指引：
@@ -225,21 +240,6 @@ Cloudflare Worker 侧执行图片处理会消耗计算/图片处理额度，因�
 - **印象笔记（Evernote）的迁入**：请参考 [docs/evernote-migration-guide.md](docs/evernote-migration-guide.md)
 - **Memos 笔记的迁入**：请参考 [docs/memos-migration-guide.md](docs/memos-migration-guide.md)
 - **Notion 笔记的迁入**：请参考 [docs/notion-migration-guide.md](docs/notion-migration-guide.md)
-
-## 社区与反馈
-
-- Bug、功能建议和部署问题请优先提交 [GitHub Issues](https://github.com/tianma-if/edgeever/issues)，方便后续用户检索和复用解决方案。
-- 微信：`m1245207870`（请备注 EdgeEver）
-
-### 微信交流群
-
-欢迎加入 EdgeEver AI 交流群，讨论 EdgeEver 使用、AI 工具、智能体、工作流和其他 AI 话题。
-
-> 群二维码 7 天内有效。如果二维码过期，请添加微信 `m1245207870`，并备注“EdgeEver 进群”。
-
-<p align="center">
-  <img src="assets/wechat-group-qr.jpg" alt="EdgeEver AI 交流群二维码" width="360" />
-</p>
 
 ## Docker 部署规划
 

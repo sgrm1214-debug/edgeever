@@ -1,48 +1,59 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Modal, StyleSheet, View } from "react-native";
-import { Download, FileText, MoreHorizontal, Pencil, Trash2, X } from "./icons";
+import { Download, FileText, HardDrive, MoreHorizontal, Pencil, Trash2, X } from "./icons";
 import { Pressable, Text, TextInput } from "./LocalizedText";
-import type { MobileAttachmentTarget } from "../lib/mobile-attachments";
+import type { MobileAttachmentTarget, MobileResourceTarget } from "../lib/mobile-attachments";
 import { useMobileLocale } from "../lib/mobile-locale";
 import { useMobileTheme } from "../lib/mobile-theme";
 
-type MobileAttachmentActionsProps = {
+type MobileResourceActionsProps = {
   canMutate: boolean;
   onClose: () => void;
-  onDelete: (target: MobileAttachmentTarget) => Promise<void>;
-  onOpen: (target: MobileAttachmentTarget) => Promise<void>;
-  onRename: (target: MobileAttachmentTarget, filename: string) => Promise<void>;
-  target: MobileAttachmentTarget | null;
+  onDelete: (target: MobileResourceTarget) => Promise<void>;
+  onDownload: (target: MobileResourceTarget) => Promise<void>;
+  onRename: (target: MobileResourceTarget, filename: string) => Promise<void>;
+  onSaveAs: (target: MobileResourceTarget) => Promise<void>;
+  target: MobileResourceTarget | null;
 };
 
 const copy = {
   "zh-CN": {
-    actions: "附件操作",
+    attachmentActions: "附件操作",
+    imageActions: "图片操作",
     cancel: "取消",
     delete: "删除",
-    deleteConfirm: "附件会从存储空间和当前笔记中永久删除，此操作无法撤销。",
-    deleteTitle: "删除附件",
-    download: "下载 / 打开",
-    failed: "附件操作失败，请重试。",
+    attachmentDeleteConfirm: "附件会从存储空间和当前笔记中永久删除，此操作无法撤销。",
+    attachmentDeleteTitle: "删除附件",
+    download: "下载",
+    failed: "资源操作失败，请重试。",
     filename: "文件名",
     rename: "重命名",
-    renameTitle: "重命名附件",
+    attachmentRenameTitle: "重命名附件",
+    imageDeleteConfirm: "图片会从存储空间和当前笔记中永久删除，此操作无法撤销。",
+    imageDeleteTitle: "删除图片",
+    imageRenameTitle: "重命名图片",
+    saveAs: "导出",
     save: "保存",
-    syncedOnly: "附件同步完成后才能重命名或删除。",
+    syncedOnly: "资源同步完成后才能重命名或删除。",
   },
   "en-US": {
-    actions: "Attachment actions",
+    attachmentActions: "Attachment actions",
+    imageActions: "Image actions",
     cancel: "Cancel",
     delete: "Delete",
-    deleteConfirm: "The attachment will be permanently removed from storage and this note. This cannot be undone.",
-    deleteTitle: "Delete attachment",
-    download: "Download / open",
-    failed: "The attachment action failed. Try again.",
+    attachmentDeleteConfirm: "The attachment will be permanently removed from storage and this note. This cannot be undone.",
+    attachmentDeleteTitle: "Delete attachment",
+    download: "Download",
+    failed: "The resource action failed. Try again.",
     filename: "Filename",
     rename: "Rename",
-    renameTitle: "Rename attachment",
+    attachmentRenameTitle: "Rename attachment",
+    imageDeleteConfirm: "The image will be permanently removed from storage and this note. This cannot be undone.",
+    imageDeleteTitle: "Delete image",
+    imageRenameTitle: "Rename image",
+    saveAs: "Export",
     save: "Save",
-    syncedOnly: "Rename and delete are available after the attachment has synced.",
+    syncedOnly: "Rename and delete are available after the resource has synced.",
   },
 } as const;
 
@@ -101,14 +112,15 @@ export const MobileAttachmentCard = ({
   );
 };
 
-export const MobileAttachmentActions = ({
+export const MobileResourceActions = ({
   canMutate,
   onClose,
   onDelete,
-  onOpen,
+  onDownload,
   onRename,
+  onSaveAs,
   target,
-}: MobileAttachmentActionsProps) => {
+}: MobileResourceActionsProps) => {
   const { resolvedLocale } = useMobileLocale();
   const labels = copy[resolvedLocale];
   const [mode, setMode] = useState<"actions" | "rename">("actions");
@@ -125,6 +137,12 @@ export const MobileAttachmentActions = ({
 
   if (!target) return null;
 
+  const isImage = target.kind === "image";
+  const actionsTitle = isImage ? labels.imageActions : labels.attachmentActions;
+  const deleteTitle = isImage ? labels.imageDeleteTitle : labels.attachmentDeleteTitle;
+  const deleteConfirm = isImage ? labels.imageDeleteConfirm : labels.attachmentDeleteConfirm;
+  const renameTitle = isImage ? labels.imageRenameTitle : labels.attachmentRenameTitle;
+
   const run = async (action: () => Promise<void>, closeAfter = true) => {
     setPending(true);
     setError(null);
@@ -139,7 +157,7 @@ export const MobileAttachmentActions = ({
   };
 
   const confirmDelete = () => {
-    Alert.alert(labels.deleteTitle, labels.deleteConfirm, [
+    Alert.alert(deleteTitle, deleteConfirm, [
       { text: labels.cancel, style: "cancel" },
       { text: labels.delete, style: "destructive", onPress: () => void run(() => onDelete(target)) },
     ]);
@@ -152,7 +170,7 @@ export const MobileAttachmentActions = ({
           <View style={styles.handle} />
           <View style={styles.sheetHeader}>
             <View style={styles.sheetHeaderText}>
-              <Text style={styles.sheetTitle}>{mode === "rename" ? labels.renameTitle : labels.actions}</Text>
+              <Text style={styles.sheetTitle}>{mode === "rename" ? renameTitle : actionsTitle}</Text>
               <Text numberOfLines={1} style={styles.sheetSubtitle}>{target.filename}</Text>
             </View>
             <Pressable accessibilityLabel={labels.cancel} accessibilityRole="button" disabled={pending} onPress={onClose} style={styles.closeButton}>
@@ -162,10 +180,11 @@ export const MobileAttachmentActions = ({
 
           {mode === "actions" ? (
             <View style={styles.actions}>
-              <AttachmentActionRow icon={<Download color="#0f172a" size={19} />} label={labels.download} onPress={() => void run(() => onOpen(target))} pending={pending} />
-              <AttachmentActionRow disabled={!canMutate} icon={<Pencil color={canMutate ? "#0f172a" : "#94a3b8"} size={19} />} label={labels.rename} onPress={() => setMode("rename")} pending={pending} />
+              <ResourceActionRow icon={<Download color="#0f172a" size={19} />} label={labels.download} onPress={() => void run(() => onDownload(target))} pending={pending} />
+              <ResourceActionRow icon={<HardDrive color="#0f172a" size={19} />} label={labels.saveAs} onPress={() => void run(() => onSaveAs(target))} pending={pending} />
+              <ResourceActionRow disabled={!canMutate} icon={<Pencil color={canMutate ? "#0f172a" : "#94a3b8"} size={19} />} label={labels.rename} onPress={() => setMode("rename")} pending={pending} />
               <View style={styles.divider} />
-              <AttachmentActionRow danger disabled={!canMutate} icon={<Trash2 color={canMutate ? "#be123c" : "#94a3b8"} size={19} />} label={labels.delete} onPress={confirmDelete} pending={pending} />
+              <ResourceActionRow danger disabled={!canMutate} icon={<Trash2 color={canMutate ? "#be123c" : "#94a3b8"} size={19} />} label={labels.delete} onPress={confirmDelete} pending={pending} />
               {!canMutate ? <Text style={styles.hint}>{labels.syncedOnly}</Text> : null}
             </View>
           ) : (
@@ -201,7 +220,7 @@ export const MobileAttachmentActions = ({
   );
 };
 
-const AttachmentActionRow = ({
+const ResourceActionRow = ({
   danger = false,
   disabled = false,
   icon,

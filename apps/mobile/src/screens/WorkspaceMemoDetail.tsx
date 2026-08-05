@@ -8,11 +8,14 @@ import { SvgXml } from "react-native-svg";
 import { ChevronDown, ChevronLeft, ChevronRight, History, MoreHorizontal, Pencil, RotateCcw, Search, Share2, Tag, Trash2, X } from "../components/icons";
 import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import { MobileMermaidDiagram, MobileMermaidProvider } from "../components/MobileMermaid";
-import { MobileAttachmentActions, MobileAttachmentCard } from "../components/MobileAttachmentActions";
+import { MobileAttachmentCard, MobileResourceActions } from "../components/MobileResourceActions";
 import {
+  getMobileImageTarget,
   getParagraphAttachmentTarget,
-  openMobileAttachment,
+  openMobileResource,
+  saveMobileResourceAs,
   type MobileAttachmentTarget,
+  type MobileResourceTarget,
 } from "../lib/mobile-attachments";
 import { getMobileMarkdownFenceLanguage, trimMobileMarkdownFenceContent } from "../lib/mobile-mermaid";
 import { useMobileLocale } from "../lib/mobile-locale";
@@ -205,10 +208,10 @@ export const MemoDetailModal = ({
   notebookName,
   onClose,
   onDelete,
-  onDeleteAttachment,
+  onDeleteResource,
   onRichEdit,
   onOpenRevisions,
-  onRenameAttachment,
+  onRenameResource,
   onResolveSyncConflict,
   onRestore,
   onShare,
@@ -224,10 +227,10 @@ export const MemoDetailModal = ({
   notebookName: string;
   onClose: () => void;
   onDelete: (memo: MemoDetail) => void;
-  onDeleteAttachment: (memo: MemoDetail, target: MobileAttachmentTarget) => Promise<void>;
+  onDeleteResource: (memo: MemoDetail, target: MobileResourceTarget) => Promise<void>;
   onRichEdit: (memo: MemoDetail) => void;
   onOpenRevisions: (memo: MemoDetail) => void;
-  onRenameAttachment: (memo: MemoDetail, target: MobileAttachmentTarget, filename: string) => Promise<void>;
+  onRenameResource: (memo: MemoDetail, target: MobileResourceTarget, filename: string) => Promise<void>;
   onResolveSyncConflict: (memo: MemoDetail) => void;
   onRestore: (memo: MemoDetail) => void;
   onShare: (memo: MemoDetail) => void;
@@ -243,26 +246,32 @@ export const MemoDetailModal = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
-  const [attachmentTarget, setAttachmentTarget] = useState<MobileAttachmentTarget | null>(null);
+  const [imagePreview, setImagePreview] = useState<{ alt: string; source: string } | null>(null);
+  const [resourceTarget, setResourceTarget] = useState<MobileResourceTarget | null>(null);
   const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<string | null>(null);
+  const imageLongPressAtRef = useRef(0);
   const localePreference = useMobileLocalePreference();
-  const openAttachment = useCallback(async (target: MobileAttachmentTarget) => {
-    if (!client) throw new Error(resolvedLocale === "en-US" ? "The attachment client is unavailable." : "当前无法读取附件。");
+  const downloadResource = useCallback(async (target: MobileResourceTarget) => {
+    if (!client) throw new Error(resolvedLocale === "en-US" ? "The resource client is unavailable." : "当前无法读取资源。");
     setDownloadingAttachmentId(target.resourceId);
     try {
-      await openMobileAttachment(client, target);
+      await openMobileResource(client, target);
     } finally {
       setDownloadingAttachmentId(null);
     }
   }, [client, resolvedLocale]);
+  const saveResourceAs = useCallback(async (target: MobileResourceTarget) => {
+    if (!client) throw new Error(resolvedLocale === "en-US" ? "The resource client is unavailable." : "当前无法读取资源。");
+    await saveMobileResourceAs(client, target);
+  }, [client, resolvedLocale]);
   const openAttachmentFromCard = useCallback((target: MobileAttachmentTarget) => {
-    void openAttachment(target).catch((error) => {
+    void downloadResource(target).catch((error) => {
       Alert.alert(
         resolvedLocale === "en-US" ? "Unable to open attachment" : "无法打开附件",
         error instanceof Error ? error.message : (resolvedLocale === "en-US" ? "Try again later." : "请稍后重试。")
       );
     });
-  }, [openAttachment, resolvedLocale]);
+  }, [downloadResource, resolvedLocale]);
   const themedDetailMarkdownStyles = useMemo(
     () => ({
       ...resolveMobileThemeStyles(detailMarkdownStyles, resolvedTheme),
@@ -338,16 +347,47 @@ export const MemoDetailModal = ({
         }
         return <RNText key={node.key} selectable style={[inheritedStyles, markdownStyles.fence]}>{content}</RNText>;
       },
-      image: (node, _children, _parents, markdownStyles) => (
-        <AuthenticatedResourceImage
-          alt={String(node.attributes.alt ?? "")}
-          fitAspect
-          key={node.key}
-          resizeMode="contain"
-          source={getAuthenticatedResourceSource(String(node.attributes.src ?? ""), session)}
-          style={markdownStyles._VIEW_SAFE_image}
-        />
-      ),
+      image: (node, _children, _parents, markdownStyles) => {
+        const source = String(node.attributes.src ?? "");
+        const alt = String(node.attributes.alt ?? "");
+        const target = getMobileImageTarget(source, alt);
+        const image = (
+          <AuthenticatedResourceImage
+            alt={alt}
+            fitAspect
+            resizeMode="contain"
+            source={getAuthenticatedResourceSource(source, session)}
+            style={markdownStyles._VIEW_SAFE_image}
+          />
+        );
+        if (!target) return <View key={node.key}>{image}</View>;
+        return (
+          <View key={node.key} style={resourceImageStyles.container}>
+            <Pressable
+              accessibilityLabel={alt || target.filename}
+              accessibilityRole="imagebutton"
+              onLongPress={() => {
+                imageLongPressAtRef.current = Date.now();
+                setResourceTarget(target);
+              }}
+              onPress={() => {
+                if (Date.now() - imageLongPressAtRef.current < 800) return;
+                setImagePreview({ alt, source });
+              }}
+            >
+              {image}
+            </Pressable>
+            <Pressable
+              accessibilityLabel={resolvedLocale === "en-US" ? "Image actions" : "图片操作"}
+              accessibilityRole="button"
+              onPress={() => setResourceTarget(target)}
+              style={resourceImageStyles.actions}
+            >
+              <MoreHorizontal color="#334155" size={22} />
+            </Pressable>
+          </View>
+        );
+      },
       heading1: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
       heading2: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
       heading3: (node, children, _parents, markdownStyles) => renderSelectableTextBlock(node, children, markdownStyles),
@@ -361,7 +401,7 @@ export const MemoDetailModal = ({
             <MobileAttachmentCard
               busy={downloadingAttachmentId === target.resourceId}
               key={node.key}
-              onActions={() => setAttachmentTarget(target)}
+              onActions={() => setResourceTarget(target)}
               onOpen={() => openAttachmentFromCard(target)}
               target={target}
             />
@@ -578,19 +618,40 @@ export const MemoDetailModal = ({
             </Pressable>
           </Modal>
         ) : null}
-        <MobileAttachmentActions
+        <Modal animationType="fade" onRequestClose={() => setImagePreview(null)} transparent visible={Boolean(imagePreview)}>
+          <View style={resourceImageStyles.previewBackdrop}>
+            {imagePreview ? (
+              <AuthenticatedResourceImage
+                alt={imagePreview.alt}
+                resizeMode="contain"
+                source={getAuthenticatedResourceSource(imagePreview.source, session)}
+                style={resourceImageStyles.previewImage}
+              />
+            ) : null}
+            <Pressable
+              accessibilityLabel={resolvedLocale === "en-US" ? "Close image preview" : "关闭图片预览"}
+              accessibilityRole="button"
+              onPress={() => setImagePreview(null)}
+              style={resourceImageStyles.previewClose}
+            >
+              <X color="#ffffff" size={24} />
+            </Pressable>
+          </View>
+        </Modal>
+        <MobileResourceActions
           canMutate={Boolean(memo && !memo.isDeleted && !memo.id.startsWith("local:"))}
-          onClose={() => setAttachmentTarget(null)}
+          onClose={() => setResourceTarget(null)}
           onDelete={async (target) => {
             if (!memo) return;
-            await onDeleteAttachment(memo, target);
+            await onDeleteResource(memo, target);
           }}
-          onOpen={openAttachment}
+          onDownload={downloadResource}
           onRename={async (target, filename) => {
             if (!memo) return;
-            await onRenameAttachment(memo, target, filename);
+            await onRenameResource(memo, target, filename);
           }}
-          target={attachmentTarget}
+          onSaveAs={saveResourceAs}
+          target={resourceTarget}
         />
       </SafeAreaView>
     </Modal>
@@ -747,5 +808,46 @@ const detailMarkdownStyles = StyleSheet.create({
     borderBottomColor: "#dedede",
     borderBottomWidth: 1,
     flexDirection: "row",
+  },
+});
+
+const resourceImageStyles = StyleSheet.create({
+  actions: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderColor: "#cbd5e1",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    top: 8,
+    width: 42,
+  },
+  container: {
+    position: "relative",
+  },
+  previewBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(2,6,23,0.96)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 16,
+  },
+  previewClose: {
+    alignItems: "center",
+    backgroundColor: "rgba(15,23,42,0.78)",
+    borderRadius: 999,
+    height: 46,
+    justifyContent: "center",
+    position: "absolute",
+    right: 18,
+    top: 54,
+    width: 46,
+  },
+  previewImage: {
+    height: "100%",
+    width: "100%",
   },
 });

@@ -17,6 +17,7 @@ import type {
   Resource,
   ResourceListItem,
   ResourceStorageSummary,
+  ObjectStorageSettings,
   PublicMemoShare,
   TagSummary,
   TiptapDoc,
@@ -58,6 +59,10 @@ type ListApiTokensResponse = {
 type ListUsersResponse = { users: InstanceUser[] };
 type UserResponse = { user: InstanceUser };
 type ListLoginDeviceSessionsResponse = { sessions: LoginDeviceSession[] };
+type ObjectStorageSettingsResponse = {
+  settings: ObjectStorageSettings;
+  externalSettings?: ObjectStorageSettings | null;
+};
 
 const WEB_DEVICE_ID_STORAGE_KEY = "edgeever.web.device-id";
 export const DESKTOP_API_BASE_URL_STORAGE_KEY = "edgeever.desktop.api-base-url";
@@ -358,6 +363,39 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+
+  getObjectStorageSettings: () =>
+    request<ObjectStorageSettingsResponse>("/api/v1/instance/object-storage"),
+
+  testObjectStorageConnection: (payload: {
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKeyId: string;
+    secretAccessKey?: string;
+    forcePathStyle: boolean;
+    objectPrefix: string;
+  }) => request<{ ok: true }>("/api/v1/instance/object-storage/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+
+  updateObjectStorageSettings: (payload:
+    | { provider: "builtin" }
+    | {
+        provider: "s3";
+        displayName: string;
+        endpoint: string;
+        region: string;
+        bucket: string;
+        accessKeyId: string;
+        secretAccessKey?: string;
+        forcePathStyle: boolean;
+        objectPrefix: string;
+      }) => request<ObjectStorageSettingsResponse>("/api/v1/instance/object-storage", {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
 
   logout: () =>
     request<{ ok: true }>("/api/v1/auth/logout", {

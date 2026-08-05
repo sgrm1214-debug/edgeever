@@ -163,7 +163,7 @@ const IconTooltip = ({ label, children }: { label: string; children: ReactNode }
 type NoteLinkHintPosition = {
   left: number;
   top: number;
-  placement: "above" | "below";
+  placement: "above" | "below" | "inside-bottom-right";
 };
 
 type AttachmentMenuTarget = {
@@ -273,7 +273,11 @@ const ResourceActionMenu = ({
     style={{
       left: target.position.left,
       top: target.position.top,
-      transform: target.position.placement === "above" ? "translate(-50%, -100%)" : "translateX(-50%)",
+      transform: target.position.placement === "inside-bottom-right"
+        ? "translate(-100%, -100%)"
+        : target.position.placement === "above"
+          ? "translate(-50%, -100%)"
+          : "translateX(-50%)",
     }}
     onMouseEnter={onMouseEnter}
     onMouseLeave={onMouseLeave}
@@ -603,12 +607,11 @@ const ResizableImageNodeView = ({ editor, node, selected, updateAttributes, dele
                 key={preset.width}
                 type="button"
                 className={cn("edgeever-image-preset", width === preset.width && "is-active")}
-                title={t("editor.scaleTo", { percent: preset.width })}
-                aria-label={`${t(preset.labelKey)}，${t("editor.scaleTo", { percent: preset.width })}`}
+                title={t(preset.labelKey)}
+                aria-label={t(preset.labelKey)}
                 onClick={() => updateWidth(preset.width)}
               >
                 <span>{t(preset.labelKey)}</span>
-                <span className="edgeever-image-preset-percent">{preset.width}%</span>
               </button>
             ))}
           </div>
@@ -1307,14 +1310,13 @@ const RichEditorPane = ({
       if (!detail?.element) return;
       cancelResourceMenuHide();
       const rect = detail.element.getBoundingClientRect();
-      const placement = rect.top < 56 ? "below" : "above";
       setResourceMenuTarget({
         ...detail,
         kind: "image",
         position: {
-          left: Math.min(Math.max(rect.left + rect.width / 2, 12), window.innerWidth - 12),
-          top: placement === "above" ? rect.top - 8 : rect.bottom + 8,
-          placement,
+          left: Math.min(Math.max(rect.right - 8, 12), window.innerWidth - 12),
+          top: Math.min(Math.max(rect.bottom - 8, 12), window.innerHeight - 12),
+          placement: "inside-bottom-right",
         },
       });
     };

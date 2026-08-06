@@ -52,22 +52,39 @@ export interface LocalTiptapEditorRef extends DOMImperativeFactory {
   search: (query: DOMValue, index: DOMValue) => void;
 }
 
-type LocalTiptapEditorProps = {
-  mode?: "editor";
-  autoFocus?: boolean;
+type LocalTiptapEditorSharedProps = {
   baseUrl: string;
   content: EditorDoc;
   dom?: DOMProps;
-  onChange: (content: EditorDoc) => Promise<void>;
   onLoadResource: (source: string) => Promise<string | null>;
   onResourcePress?: (targetJson: string) => Promise<void>;
-  onPickImage: () => Promise<void>;
-  onReady: (startupMs: number) => Promise<void>;
+  onReady?: (startupMs: number) => Promise<void>;
   onSearchResult?: (count: number, index: number) => Promise<void>;
   ref: Ref<LocalTiptapEditorRef>;
   locale: "zh-CN" | "en-US";
   theme: "light" | "dark";
 };
+
+/** Editable note body with toolbar (create / rich edit). */
+type LocalTiptapEditorModeProps = LocalTiptapEditorSharedProps & {
+  mode?: "editor";
+  autoFocus?: boolean;
+  onChange: (content: EditorDoc) => Promise<void>;
+  onPickImage: () => Promise<void>;
+  onReady: (startupMs: number) => Promise<void>;
+};
+
+/**
+ * Read-only note body that reuses the same TipTap schema / image loading as the
+ * editor. Used by the native memo detail chrome (scheme C).
+ */
+type LocalTiptapViewerModeProps = LocalTiptapEditorSharedProps & {
+  mode: "viewer";
+  /** JSON: `{ alt: string; source: string }` for fullscreen image preview. */
+  onImagePreview?: (payloadJson: string) => Promise<void>;
+};
+
+type LocalTiptapEditorProps = LocalTiptapEditorModeProps | LocalTiptapViewerModeProps;
 
 type MermaidRendererProps = {
   diagramsJson: string;
@@ -104,20 +121,54 @@ const parseMobileResourceTarget = (value: string): EditorResourceTarget | null =
 const normalizeEditorAttachmentFilename = (label: string, resourceId: string) =>
   label.replace(/^\s*(?:附件[：:]|Attachment:)\s*/i, "").trim() || resourceId;
 
+/** Accept both `/api/v1/resources/:id/blob` and bare `/api/v1/resources/:id` image srcs. */
+const getMobileImageResourceId = (href: string): string | null => {
+  const fromBlob = getResourceIdFromUrl(href);
+  if (fromBlob) return fromBlob;
+  try {
+    const parsed = new URL(href, "http://edgeever.local");
+    const match = parsed.pathname.match(/^\/api\/v1\/resources\/([^/]+)\/?$/);
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+};
+
+const normalizeMobileResourceHref = (href: string, resourceId: string) => {
+  if (getResourceIdFromUrl(href)) return href;
+  if (href.startsWith("/api/v1/resources/")) {
+    return `/api/v1/resources/${encodeURIComponent(resourceId)}/blob`;
+  }
+  return href;
+};
+
+const buildImageResourceTargetJson = (figure: HTMLElement): string | null => {
+  const href = figure.dataset.resourceHref ?? "";
+  const resourceId = getMobileImageResourceId(href);
+  if (!resourceId) return null;
+  return JSON.stringify({
+    filename: figure.dataset.resourceFilename || `image-${resourceId}`,
+    href: normalizeMobileResourceHref(href, resourceId),
+    kind: "image",
+    resourceId,
+  } satisfies EditorResourceTarget);
+};
+
 const handleMobileResourceEvent = (
   event: Event,
-  onResourcePress?: (targetJson: string) => Promise<void>
+  onResourcePress?: (targetJson: string) => Promise<void>,
+  options?: { allowImagePreview?: boolean; onImagePreview?: (payloadJson: string) => Promise<void> }
 ) => {
   const element = event.target instanceof Element ? event.target : null;
   const link = element?.closest<HTMLAnchorElement>('a.edgeever-attachment-link, a[href*="/api/v1/resources/"]');
   const href = link?.getAttribute("href") ?? "";
-  const resourceId = getResourceIdFromUrl(href);
+  const resourceId = getResourceIdFromUrl(href) ?? getMobileImageResourceId(href);
   if (link && resourceId && onResourcePress) {
     event.preventDefault();
     event.stopPropagation();
     void onResourcePress(JSON.stringify({
       filename: normalizeEditorAttachmentFilename(link.textContent ?? "", resourceId),
-      href,
+      href: normalizeMobileResourceHref(href, resourceId),
       kind: "attachment",
       resourceId,
     } satisfies EditorResourceTarget));
@@ -126,19 +177,30 @@ const handleMobileResourceEvent = (
 
   const imageFigure = element?.closest<HTMLElement>("figure.edgeever-image-node");
   const imageHref = imageFigure?.dataset.resourceHref ?? "";
-  const imageResourceId = getResourceIdFromUrl(imageHref);
-  const imageActionRequested = event.type === "contextmenu" || Boolean(element?.closest(".edgeever-image-actions"));
-  if (!imageFigure || !imageResourceId || !imageActionRequested || !onResourcePress) return false;
+  if (!imageFigure || !imageHref) return false;
 
-  event.preventDefault();
-  event.stopPropagation();
-  void onResourcePress(JSON.stringify({
-    filename: imageFigure.dataset.resourceFilename || `image-${imageResourceId}`,
-    href: imageHref,
-    kind: "image",
-    resourceId: imageResourceId,
-  } satisfies EditorResourceTarget));
-  return true;
+  const imageActionRequested = event.type === "contextmenu" || Boolean(element?.closest(".edgeever-image-actions"));
+  if (imageActionRequested && onResourcePress) {
+    const targetJson = buildImageResourceTargetJson(imageFigure);
+    if (!targetJson) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    void onResourcePress(targetJson);
+    return true;
+  }
+
+  // Viewer: plain image tap opens native fullscreen preview.
+  if (options?.allowImagePreview && options.onImagePreview && !imageActionRequested) {
+    event.preventDefault();
+    event.stopPropagation();
+    void options.onImagePreview(JSON.stringify({
+      alt: imageFigure.dataset.resourceFilename || "",
+      source: imageHref,
+    }));
+    return true;
+  }
+
+  return false;
 };
 
 const getMobileMermaidTheme = (theme: "light" | "dark") => THEMES[theme === "dark" ? "zinc-dark" : "zinc-light"];
@@ -292,26 +354,41 @@ const inlineMermaidSvgStyles = (svg: string) => {
 };
 
 function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
+  const isViewer = props.mode === "viewer";
+  const autoFocus = props.mode === "viewer" ? false : Boolean(props.autoFocus);
   const startedAtRef = useRef(performance.now());
   const changeTimerRef = useRef<number | null>(null);
   const imageUploadInFlightRef = useRef(false);
   const pendingImageSelectionRef = useRef<{ from: number; to: number } | null>(null);
-  const onChangeRef = useRef(props.onChange);
+  const onChangeRef = useRef(props.mode === "viewer" ? undefined : props.onChange);
   const onLoadResourceRef = useRef(props.onLoadResource);
   const onResourcePressRef = useRef(props.onResourcePress);
-  const onPickImageRef = useRef(props.onPickImage);
-  const onReadyRef = useRef(props.onReady);
+  const onImagePreviewRef = useRef(props.mode === "viewer" ? props.onImagePreview : undefined);
+  const onPickImageRef = useRef(props.mode === "viewer" ? undefined : props.onPickImage);
+  const onReadyRef = useRef(props.onReady ?? (async () => undefined));
   const onSearchResultRef = useRef(props.onSearchResult ?? ignoreSearchResult);
 
-  onChangeRef.current = props.onChange;
+  onChangeRef.current = props.mode === "viewer" ? undefined : props.onChange;
   onLoadResourceRef.current = props.onLoadResource;
   onResourcePressRef.current = props.onResourcePress;
-  onPickImageRef.current = props.onPickImage;
-  onReadyRef.current = props.onReady;
+  onImagePreviewRef.current = props.mode === "viewer" ? props.onImagePreview : undefined;
+  onPickImageRef.current = props.mode === "viewer" ? undefined : props.onPickImage;
+  onReadyRef.current = props.onReady ?? (async () => undefined);
   onSearchResultRef.current = props.onSearchResult ?? ignoreSearchResult;
   const protectedImageExtension = useMemo(
-    () => createProtectedImageExtension(props.baseUrl, props.locale, (source) => onLoadResourceRef.current(source)),
-    [props.baseUrl, props.locale]
+    () => createProtectedImageExtension(
+      props.baseUrl,
+      props.locale,
+      (source) => onLoadResourceRef.current(source),
+      {
+        readOnly: isViewer,
+        // NodeView binds ⋯ / image taps directly — Android WebView often drops
+        // click after pointerdown preventDefault, so PM handleClick is not enough.
+        onResourcePress: (targetJson) => onResourcePressRef.current?.(targetJson),
+        onImagePreview: (payloadJson) => onImagePreviewRef.current?.(payloadJson),
+      }
+    ),
+    [isViewer, props.baseUrl, props.locale]
   );
   const mermaidCodeBlockExtension = useMemo(
     () => createMobileCodeBlockExtension(props.locale, props.theme),
@@ -319,7 +396,8 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   );
 
   const editor = useEditor({
-    autofocus: props.autoFocus ? "end" : false,
+    editable: !isViewer,
+    autofocus: autoFocus ? "end" : false,
     extensions: [
       StarterKit.configure({ codeBlock: false, link: { openOnClick: false } }),
       mermaidCodeBlockExtension,
@@ -327,19 +405,32 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       TableKit.configure({
         table: { renderWrapper: true },
       }),
-      Placeholder.configure({
-        placeholder: getMobileEditorPlaceholder(props.locale),
-      }),
+      ...(isViewer
+        ? []
+        : [Placeholder.configure({
+            placeholder: getMobileEditorPlaceholder(props.locale),
+          })]),
     ],
     content: resolveImageSources(props.content, props.baseUrl),
     editorProps: {
-      attributes: getMobileEditorInputAttributes("edgeever-editor-content"),
-      handleClick: (_view, _pos, event) => handleMobileResourceEvent(event, onResourcePressRef.current),
+      attributes: getMobileEditorInputAttributes(
+        isViewer ? "edgeever-editor-content edgeever-viewer-content" : "edgeever-editor-content"
+      ),
+      handleClick: (_view, _pos, event) => handleMobileResourceEvent(event, onResourcePressRef.current, {
+        allowImagePreview: isViewer,
+        onImagePreview: onImagePreviewRef.current,
+      }),
       handleDOMEvents: {
-        contextmenu: (_view, event) => handleMobileResourceEvent(event, onResourcePressRef.current),
+        contextmenu: (_view, event) => handleMobileResourceEvent(event, onResourcePressRef.current, {
+          allowImagePreview: false,
+          onImagePreview: onImagePreviewRef.current,
+        }),
       },
     },
     onUpdate: ({ editor: activeEditor, transaction }) => {
+      if (isViewer || !onChangeRef.current) {
+        return;
+      }
       if (transaction.getMeta(TRANSIENT_IMAGE_UPLOAD_META)) {
         return;
       }
@@ -348,13 +439,13 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       }
       changeTimerRef.current = window.setTimeout(() => {
         changeTimerRef.current = null;
-        void onChangeRef.current(getPersistableEditorDoc(activeEditor.getJSON() as EditorDoc, props.baseUrl));
+        void onChangeRef.current?.(getPersistableEditorDoc(activeEditor.getJSON() as EditorDoc, props.baseUrl));
       }, CHANGE_IDLE_MS);
     },
   });
 
   const flush = useCallback(() => {
-    if (!editor || editor.isDestroyed) {
+    if (isViewer || !editor || editor.isDestroyed || !onChangeRef.current) {
       return;
     }
     if (changeTimerRef.current !== null) {
@@ -362,7 +453,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       changeTimerRef.current = null;
     }
     void onChangeRef.current(getPersistableEditorDoc(editor.getJSON() as EditorDoc, props.baseUrl));
-  }, [editor, props.baseUrl]);
+  }, [editor, isViewer, props.baseUrl]);
 
   const search = useCallback((query: DOMValue, requestedIndex: DOMValue) => {
     const matches = getEditorSearchMatches(editor, typeof query === "string" ? query : "");
@@ -400,7 +491,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   }, [editor, search]);
 
   const beginImageUpload = useCallback((uploadIdValue: DOMValue, previewDataUrlValue: DOMValue) => {
-    if (!editor || typeof uploadIdValue !== "string" || typeof previewDataUrlValue !== "string") {
+    if (isViewer || !editor || typeof uploadIdValue !== "string" || typeof previewDataUrlValue !== "string") {
       return;
     }
     insertImageUploadPlaceholder(
@@ -410,7 +501,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       previewDataUrlValue,
       pendingImageSelectionRef.current
     );
-  }, [editor, props.locale]);
+  }, [editor, isViewer, props.locale]);
 
   const cancelImageUpload = useCallback((uploadIdValue: DOMValue) => {
     if (!editor || typeof uploadIdValue !== "string") {
@@ -515,13 +606,15 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       completeImageUpload,
       appendAttachment,
       flush,
-      focusEnd: () => editor?.commands.focus("end"),
+      focusEnd: () => {
+        if (!isViewer) editor?.commands.focus("end");
+      },
       removeResource,
       renameResource,
       replaceAll,
       search,
     }),
-    [appendAttachment, beginImageUpload, cancelImageUpload, completeImageUpload, editor, flush, removeResource, renameResource, replaceAll, search]
+    [appendAttachment, beginImageUpload, cancelImageUpload, completeImageUpload, editor, flush, isViewer, removeResource, renameResource, replaceAll, search]
   );
 
   useEffect(() => {
@@ -532,7 +625,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     void onReadyRef.current(Math.round(performance.now() - startedAtRef.current));
     let focusFrame = 0;
     let focusRetry: number | null = null;
-    if (props.autoFocus) {
+    if (autoFocus) {
       const focusAtEnd = () => {
         if (!editor.isDestroyed) {
           editor.commands.focus("end");
@@ -550,21 +643,38 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
         flush();
       }
     };
-    window.addEventListener("pagehide", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (!isViewer) {
+      window.addEventListener("pagehide", handlePageHide);
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
 
     return () => {
       window.cancelAnimationFrame(focusFrame);
       if (focusRetry !== null) {
         window.clearTimeout(focusRetry);
       }
-      window.removeEventListener("pagehide", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (!isViewer) {
+        window.removeEventListener("pagehide", handlePageHide);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
       if (changeTimerRef.current !== null) {
         window.clearTimeout(changeTimerRef.current);
       }
     };
-  }, [editor, flush, props.autoFocus]);
+  }, [autoFocus, editor, flush, isViewer]);
+
+  // Keep the viewer in sync when the parent swaps memo content.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !isViewer) {
+      return;
+    }
+    const next = resolveImageSources(props.content, props.baseUrl);
+    const current = JSON.stringify(editor.getJSON());
+    const incoming = JSON.stringify(next);
+    if (current !== incoming) {
+      editor.commands.setContent(next, { emitUpdate: false });
+    }
+  }, [editor, isViewer, props.baseUrl, props.content]);
 
   const toolbarState = useEditorState({
     editor,
@@ -575,7 +685,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   });
 
   const insertImage = async () => {
-    if (!editor || imageUploadInFlightRef.current) {
+    if (isViewer || !editor || imageUploadInFlightRef.current || !onPickImageRef.current) {
       return;
     }
 
@@ -613,23 +723,25 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   };
 
   return (
-    <div className="edgeever-editor-shell">
-      <style>{getEditorStyles(props.theme)}</style>
-      <div aria-label={getMobileEditorToolbarLabel(props.locale)} className="edgeever-editor-toolbar" role="toolbar">
-        {MOBILE_EDITOR_TOOLBAR_ACTIONS.map((action) => (
-            <ToolbarButton
-              key={action.id}
-              active={action.activeFlag > 0 && Boolean(toolbarState & action.activeFlag)}
-              disabled={(action.id === "increaseListIndent"
-                  && !Boolean(editor?.can().chain().focus().sinkListItem("listItem").run()))
-                || (action.id === "decreaseListIndent"
-                  && !Boolean(editor?.can().chain().focus().liftListItem("listItem").run()))}
-              icon={toolbarIcons[action.id]}
-              label={getMobileEditorToolbarActionLabel(action.id, props.locale)}
-              onRun={toolbarHandlers[action.id]}
-            />
-          ))}
-      </div>
+    <div className={isViewer ? "edgeever-editor-shell edgeever-viewer-shell" : "edgeever-editor-shell"}>
+      <style>{getEditorStyles(props.theme, { viewer: isViewer })}</style>
+      {!isViewer ? (
+        <div aria-label={getMobileEditorToolbarLabel(props.locale)} className="edgeever-editor-toolbar" role="toolbar">
+          {MOBILE_EDITOR_TOOLBAR_ACTIONS.map((action) => (
+              <ToolbarButton
+                key={action.id}
+                active={action.activeFlag > 0 && Boolean(toolbarState & action.activeFlag)}
+                disabled={(action.id === "increaseListIndent"
+                    && !Boolean(editor?.can().chain().focus().sinkListItem("listItem").run()))
+                  || (action.id === "decreaseListIndent"
+                    && !Boolean(editor?.can().chain().focus().liftListItem("listItem").run()))}
+                icon={toolbarIcons[action.id]}
+                label={getMobileEditorToolbarActionLabel(action.id, props.locale)}
+                onRun={toolbarHandlers[action.id]}
+              />
+            ))}
+        </div>
+      ) : null}
       <EditorContent editor={editor} />
     </div>
   );
@@ -1052,7 +1164,12 @@ const createMobileImageSizeControls = (
 const createProtectedImageExtension = (
   baseUrl: string,
   locale: "zh-CN" | "en-US",
-  loadResource: (source: string) => Promise<string | null>
+  loadResource: (source: string) => Promise<string | null>,
+  options?: {
+    readOnly?: boolean;
+    onResourcePress?: (targetJson: string) => void | Promise<void>;
+    onImagePreview?: (payloadJson: string) => void | Promise<void>;
+  }
 ) => Image.extend({
   addAttributes() {
     return {
@@ -1070,7 +1187,11 @@ const createProtectedImageExtension = (
   },
   addNodeView() {
     return ({ editor, getPos, node }) => {
+      const readOnly = Boolean(options?.readOnly) || !editor.isEditable;
       const updateWidth = (width: number) => {
+        if (readOnly) {
+          return;
+        }
         const position = getPos();
         if (typeof position !== "number") {
           return;
@@ -1083,6 +1204,40 @@ const createProtectedImageExtension = (
           .run();
       };
       const sizeControls = createMobileImageSizeControls(locale, updateWidth);
+      if (readOnly) {
+        sizeControls.setVisible(false);
+      }
+
+      const emitImageResourcePress = (figure: HTMLElement) => {
+        const targetJson = buildImageResourceTargetJson(figure);
+        if (!targetJson || !options?.onResourcePress) return false;
+        void options.onResourcePress(targetJson);
+        return true;
+      };
+
+      const emitImagePreview = (figure: HTMLElement) => {
+        if (!options?.onImagePreview) return false;
+        const source = figure.dataset.resourceHref ?? "";
+        if (!source) return false;
+        void options.onImagePreview(JSON.stringify({
+          alt: figure.dataset.resourceFilename || "",
+          source,
+        }));
+        return true;
+      };
+
+      const bindImageActionButton = (figure: HTMLElement, button: HTMLButtonElement) => {
+        // Only stop bubbling so the editor doesn't steal focus/selection.
+        // preventDefault on pointerdown suppresses click on Android WebView.
+        button.addEventListener("pointerdown", (event) => {
+          event.stopPropagation();
+        });
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          emitImageResourcePress(figure);
+        });
+      };
 
       if (isMobileImageUploadPlaceholderSource(node.attrs.src)) {
         const placeholder = document.createElement("div");
@@ -1230,10 +1385,19 @@ const createProtectedImageExtension = (
       actionButton.contentEditable = "false";
       actionButton.setAttribute("aria-label", locale === "en-US" ? "Image actions" : "图片操作");
       actionButton.textContent = "⋯";
-      actionButton.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      });
+      bindImageActionButton(wrapper, actionButton);
+      if (readOnly) {
+        image.style.cursor = "zoom-in";
+        image.addEventListener("click", (event) => {
+          // Ignore taps that originated on the ⋯ control (event target would be button).
+          if (event.target instanceof Element && event.target.closest(".edgeever-image-actions")) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          emitImagePreview(wrapper);
+        });
+      }
       wrapper.append(image, actionButton, sizeControls.dom);
       const imageType = node.type;
       let requestId = 0;
@@ -1297,7 +1461,7 @@ const createProtectedImageExtension = (
         },
         selectNode: () => {
           wrapper.classList.add("is-selected");
-          sizeControls.setVisible(true);
+          sizeControls.setVisible(!readOnly);
         },
         deselectNode: () => {
           wrapper.classList.remove("is-selected");
@@ -1417,31 +1581,137 @@ const removeImageUploadPlaceholder = (editor: TiptapEditor, source: string) => {
   }).run();
 };
 
-const getEditorStyles = (theme: "light" | "dark") => `
-  :root { color-scheme: ${theme}; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }) => {
+  const bodyFontSize = MEMO_CONTENT_STYLE.body.fontSize;
+  const bodyLineHeight = MEMO_CONTENT_STYLE.body.lineHeight / MEMO_CONTENT_STYLE.body.fontSize;
+  const paragraphSpacing = MEMO_CONTENT_STYLE.body.paragraphSpacing;
+  return `
+  :root {
+    color-scheme: ${theme};
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    /* Match PC/Web memo body (MEMO_CONTENT_STYLE) so notes don't feel oversized on phone. */
+    --editor-body-font-size: ${bodyFontSize}px;
+    --editor-body-line-height: ${bodyLineHeight};
+    --editor-paragraph-spacing: ${paragraphSpacing}px;
+  }
   * { box-sizing: border-box; }
-  html, body, #root { width: 100%; height: 100%; margin: 0; background: ${theme === "dark" ? "#0f172a" : "#fff"}; }
-  body { overflow: hidden; color: ${theme === "dark" ? "#f8fafc" : "#0f172a"}; }
-  .edgeever-editor-shell { display: flex; height: 100%; min-height: 100%; flex-direction: column; background: ${theme === "dark" ? "#0f172a" : "#fff"}; }
+  /* Cap layout to the WebView viewport. Wide tables/attachments must scroll
+     inside their own wrappers — never expand the page and clip on the right. */
+  html, body, #root {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    background: ${theme === "dark" ? "#0f172a" : "#fff"};
+  }
+  html { font-size: var(--editor-body-font-size); }
+  body { overflow: hidden; color: ${theme === "dark" ? "#f8fafc" : "#0f172a"}; font-size: 1rem; }
+  .edgeever-editor-shell {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 100%;
+    flex-direction: column;
+    background: ${theme === "dark" ? "#0f172a" : "#fff"};
+    overflow: hidden;
+  }
+  .edgeever-viewer-shell { -webkit-user-select: text; user-select: text; }
   .edgeever-editor-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; min-height: 38px; overflow-x: auto; padding: 6px 12px; border-block: 1px solid ${theme === "dark" ? "#334155" : "#f1f5f9"}; background: ${theme === "dark" ? "#0f172a" : "#fff"}; scrollbar-width: none; }
   .edgeever-editor-toolbar::-webkit-scrollbar { display: none; }
   .edgeever-editor-toolbar button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 36px; min-height: 32px; padding: 0; border: 1px solid transparent; border-radius: 999px; background: transparent; color: ${theme === "dark" ? "#cbd5e1" : "#64748b"}; }
   .edgeever-editor-toolbar button:active, .edgeever-editor-toolbar button.is-active { border-color: ${theme === "dark" ? "#166534" : "#bbf7d0"}; background: ${theme === "dark" ? "#14532d" : "#ecfdf5"}; color: ${theme === "dark" ? "#86efac" : "#047857"}; }
   .edgeever-editor-toolbar button:disabled { opacity: 0.38; }
-  .tiptap { min-height: 100%; outline: none; }
-  .edgeever-editor-shell > div:last-child { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-  .edgeever-editor-content { min-height: 100%; padding: 18px 12px 32px; font-size: 17px; line-height: ${MEMO_CONTENT_STYLE.body.lineHeight / MEMO_CONTENT_STYLE.body.fontSize}; word-break: break-word; caret-color: #0f766e; }
+  .tiptap { min-height: 100%; max-width: 100%; min-width: 0; outline: none; }
+  .edgeever-editor-shell > div:last-child {
+    min-height: 0;
+    min-width: 0;
+    flex: 1;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .edgeever-editor-content {
+    min-height: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 18px 12px 32px;
+    font-size: 1rem;
+    line-height: var(--editor-body-line-height);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    caret-color: ${options?.viewer ? "transparent" : "#0f766e"};
+  }
+  .edgeever-viewer-content { -webkit-user-select: text; user-select: text; cursor: text; }
   .edgeever-editor-content > :first-child { margin-top: 0; }
-  .edgeever-editor-content p { margin: 0 0 ${MEMO_CONTENT_STYLE.body.paragraphSpacing}px; padding: 0; line-height: ${MEMO_CONTENT_STYLE.body.lineHeight / MEMO_CONTENT_STYLE.body.fontSize}; }
+  .edgeever-editor-content p {
+    margin: 0 0 var(--editor-paragraph-spacing) 0;
+    padding: 0;
+    max-width: 100%;
+    font-size: 1rem;
+    line-height: var(--editor-body-line-height);
+  }
   .edgeever-editor-content p.is-editor-empty:first-child::before { float: left; height: 0; color: #94a3b8; content: attr(data-placeholder); pointer-events: none; }
-  .edgeever-editor-content h1, .edgeever-editor-content h2, .edgeever-editor-content h3 { line-height: 1.3; }
-  .edgeever-editor-content blockquote { margin-left: 0; padding-left: 14px; border-left: 3px solid #5eead4; color: ${theme === "dark" ? "#cbd5e1" : "#475569"}; }
-  .edgeever-editor-content pre { overflow-x: auto; border-radius: 10px; padding: 14px 90px 14px 14px; background: #0f172a; color: #e2e8f0; }
-  .edgeever-editor-content code { border-radius: 4px; padding: 2px 4px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; }
-  .edgeever-editor-content pre code { padding: 0; background: transparent; }
-  .edgeever-editor-content a.edgeever-attachment-link, .edgeever-editor-content a[href*="/api/v1/resources/"] { display: flex; min-height: 58px; align-items: center; gap: 10px; margin: 8px 0; border: 1px solid ${theme === "dark" ? "#334155" : "#cbd5e1"}; border-radius: 12px; padding: 10px 12px; background: ${theme === "dark" ? "#172033" : "#f8fafc"}; color: ${theme === "dark" ? "#f1f5f9" : "#1e293b"}; font-size: 15px; font-weight: 700; line-height: 1.35; text-decoration: none; }
-  .edgeever-editor-content a.edgeever-attachment-link::before, .edgeever-editor-content a[href*="/api/v1/resources/"]::before { display: inline-flex; width: 38px; height: 38px; flex: 0 0 38px; align-items: center; justify-content: center; border-radius: 9px; background: ${theme === "dark" ? "#134e4a" : "#ecfdf5"}; content: "📎"; font-size: 18px; }
-  .edgeever-editor-content a.edgeever-attachment-link::after, .edgeever-editor-content a[href*="/api/v1/resources/"]::after { margin-left: auto; color: ${theme === "dark" ? "#94a3b8" : "#64748b"}; content: "⋯"; font-size: 22px; font-weight: 700; }
+  .edgeever-editor-content h1,
+  .edgeever-editor-content h2,
+  .edgeever-editor-content h3 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+    font-weight: 800;
+  }
+  .edgeever-editor-content h1 { margin: 0.7em 0 0.4em; font-size: 1.6rem; }
+  .edgeever-editor-content h2 { margin: 0.85em 0 0.35em; font-size: 1.35rem; }
+  .edgeever-editor-content h3 { margin: 0.75em 0 0.3em; font-size: 1.15rem; }
+  .edgeever-editor-content blockquote { margin-left: 0; max-width: 100%; padding-left: 14px; border-left: 3px solid #5eead4; color: ${theme === "dark" ? "#cbd5e1" : "#475569"}; }
+  .edgeever-editor-content pre { max-width: 100%; overflow-x: auto; border-radius: 10px; padding: 14px 90px 14px 14px; background: #0f172a; color: #e2e8f0; font-size: 0.9rem; }
+  .edgeever-editor-content code { border-radius: 4px; padding: 2px 4px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; font-size: 0.9em; }
+  .edgeever-editor-content pre code { padding: 0; background: transparent; font-size: inherit; }
+  /* Compact attachment chips: still ≥48px touch height, less vertical bulk than 58px. */
+  .edgeever-editor-content a.edgeever-attachment-link, .edgeever-editor-content a[href*="/api/v1/resources/"] {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 48px;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    border: 1px solid ${theme === "dark" ? "#334155" : "#cbd5e1"};
+    border-radius: 10px;
+    padding: 7px 10px;
+    background: ${theme === "dark" ? "#172033" : "#f8fafc"};
+    color: ${theme === "dark" ? "#f1f5f9" : "#1e293b"};
+    font-size: 0.93rem;
+    font-weight: 700;
+    line-height: 1.3;
+    text-decoration: none;
+    overflow: hidden;
+  }
+  .edgeever-editor-content a.edgeever-attachment-link::before, .edgeever-editor-content a[href*="/api/v1/resources/"]::before {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: ${theme === "dark" ? "#134e4a" : "#ecfdf5"};
+    content: "📎";
+    font-size: 15px;
+  }
+  .edgeever-editor-content a.edgeever-attachment-link::after, .edgeever-editor-content a[href*="/api/v1/resources/"]::after {
+    margin-left: auto;
+    flex: 0 0 auto;
+    color: ${theme === "dark" ? "#94a3b8" : "#64748b"};
+    content: "⋯";
+    font-size: 18px;
+    font-weight: 700;
+  }
   .edgeever-code-block, .edgeever-mermaid-code-block { position: relative; margin: 18px 0; overflow: visible; background: transparent; }
   .edgeever-code-copy-button { position: absolute; top: 8px; right: 8px; z-index: 1; border: 1px solid ${theme === "dark" ? "#475569" : "#cbded1"}; border-radius: 6px; padding: 5px 8px; background: ${theme === "dark" ? "rgba(30, 41, 59, 0.94)" : "rgba(247, 251, 248, 0.94)"}; color: ${theme === "dark" ? "#cbd5e1" : "#475569"}; font: inherit; font-size: 12px; line-height: 1.35; }
   .edgeever-code-copy-button:active { border-color: #0f766e; color: ${theme === "dark" ? "#86efac" : "#0f766e"}; }
@@ -1455,11 +1725,70 @@ const getEditorStyles = (theme: "light" | "dark") => `
   .edgeever-mermaid-message { color: ${theme === "dark" ? "#94a3b8" : "#64748b"}; }
   .edgeever-mermaid-error { color: ${theme === "dark" ? "#fda4af" : "#be123c"}; }
   .edgeever-editor-content img { display: block; max-width: 100%; height: auto; margin: 14px auto; border-radius: 10px; }
-  .edgeever-editor-content .tableWrapper { --mobile-table-column-width: clamp(5.5rem, calc((100vw - 3rem) / 3), 14rem); width: 100%; max-width: 100%; overflow-x: auto; margin-top: 20px; margin-right: auto; margin-bottom: 20px; margin-left: 0; border: 1px solid ${theme === "dark" ? "#334155" : "#d8d8d8"}; border-radius: 2px; background: ${theme === "dark" ? "#0f172a" : "#fff"}; overscroll-behavior-inline: contain; scrollbar-color: rgba(100, 116, 139, 0.28) transparent; }
-  .edgeever-editor-content table { width: max-content; min-width: 100% !important; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
-  .edgeever-editor-content table col { width: var(--mobile-table-column-width) !important; }
-  .edgeever-editor-content th, .edgeever-editor-content td { position: relative; width: var(--mobile-table-column-width); min-width: var(--mobile-table-column-width); border: 0; border-right: 1px solid ${theme === "dark" ? "#334155" : "#dedede"}; border-bottom: 1px solid ${theme === "dark" ? "#334155" : "#dedede"}; padding: 7px 12px; text-align: left; vertical-align: top; overflow-wrap: anywhere; line-height: 1.4; transition: background-color 120ms ease; }
-  .edgeever-editor-content th { background: ${theme === "dark" ? "#27303f" : "#f0f0f0"}; color: ${theme === "dark" ? "#f8fafc" : "#111827"}; font-size: 14px; font-weight: 700; }
+  /* Shared by preview + edit (same LocalTiptapEditor styles).
+     Prefer shrinking columns to the content box (≈4 equal cols on a phone) with
+     text wrap; when n * col-width still exceeds the wrapper, scroll inside
+     .tableWrapper only — never widen the page via 100vw / desktop col widths. */
+  .edgeever-editor-content .tableWrapper {
+    /* ~24% of wrapper → 4 cols fit; more cols overflow and scroll */
+    --mobile-table-column-width: clamp(4.25rem, 24cqi, 10rem);
+    container-type: inline-size;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 20px;
+    margin-right: 0;
+    margin-bottom: 20px;
+    margin-left: 0;
+    border: 1px solid ${theme === "dark" ? "#334155" : "#d8d8d8"};
+    border-radius: 2px;
+    background: ${theme === "dark" ? "#0f172a" : "#fff"};
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+  }
+  .edgeever-editor-content .tableWrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+  .edgeever-editor-content .tableWrapper::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(100, 116, 139, 0.4);
+  }
+  .edgeever-editor-content table {
+    width: max-content;
+    max-width: none;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+  /* Override TipTap/desktop col widths with the mobile equal-ish column budget. */
+  .edgeever-editor-content table col {
+    width: var(--mobile-table-column-width) !important;
+    min-width: var(--mobile-table-column-width) !important;
+  }
+  .edgeever-editor-content th, .edgeever-editor-content td {
+    position: relative;
+    width: var(--mobile-table-column-width);
+    min-width: var(--mobile-table-column-width);
+    max-width: var(--mobile-table-column-width);
+    border: 0;
+    border-right: 1px solid ${theme === "dark" ? "#334155" : "#dedede"};
+    border-bottom: 1px solid ${theme === "dark" ? "#334155" : "#dedede"};
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.4;
+    transition: background-color 120ms ease;
+  }
+  .edgeever-editor-content th { background: ${theme === "dark" ? "#27303f" : "#f0f0f0"}; color: ${theme === "dark" ? "#f8fafc" : "#111827"}; font-size: 0.93rem; font-weight: 700; }
   .edgeever-editor-content th:last-child, .edgeever-editor-content td:last-child { border-right: 0; }
   .edgeever-editor-content tr:last-child td { border-bottom: 0; }
   .edgeever-editor-content tbody tr:nth-child(even) td { background: ${theme === "dark" ? "#182235" : "#f8f8f8"}; }
@@ -1481,3 +1810,5 @@ const getEditorStyles = (theme: "light" | "dark") => `
   @keyframes edgeever-image-upload-spin { to { transform: rotate(360deg); } }
   .edgeever-editor-content hr { margin: 24px 0; border: 0; border-top: 1px solid #cbd5e1; }
 `;
+};
+

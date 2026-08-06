@@ -243,6 +243,12 @@ export const createDesktopRepository = (): EdgeEverRepository => ({
     return { memo: toDisplayMemo(result.memo), queued: true as const };
   },
 
+  adoptCloudMemo: async (memoId) => {
+    const { discardDesktopMemoConflict } = await import("@/lib/desktop-sync");
+    const memo = await discardDesktopMemoConflict(memoId);
+    return { memo: toDisplayMemo(memo) };
+  },
+
   deleteMemo: (memoId, permanent = false) => request("memo.delete", { memoId, permanent }).then((result) => {
     window.dispatchEvent(new CustomEvent("edgeever:sync-queue-changed"));
     return result;

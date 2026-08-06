@@ -7,8 +7,11 @@ import {
   getParagraphAttachmentTarget,
   parseMobileAttachmentTargetJson,
   parseMobileResourceTargetJson,
+  readBlobAsUint8Array,
   renameMobileAttachmentInDoc,
   renameMobileResourceInDoc,
+  resolveExportFilename,
+  resolveResourceMimeType,
 } from "./mobile-attachments.ts";
 
 const href = "/api/v1/resources/res_123/blob";
@@ -73,5 +76,44 @@ describe("mobile attachments", () => {
       type: "doc",
       content: [{ type: "paragraph" }],
     });
+  });
+
+  test("resolves export mime types and filenames for SAF", () => {
+    expect(resolveResourceMimeType("photo.webp", "")).toBe("image/webp");
+    expect(resolveResourceMimeType("EdgeEver 极客猫猫", "image/svg+xml")).toBe("image/svg+xml");
+    expect(resolveExportFilename("EdgeEver 极客猫猫", "image/svg+xml")).toBe("EdgeEver 极客猫猫.svg");
+    expect(resolveExportFilename("report.pdf", "application/pdf")).toBe("report.pdf");
+  });
+
+  test("reads blob bytes via FileReader when Blob.arrayBuffer is missing (React Native)", async () => {
+    const payload = new Uint8Array([1, 2, 3, 250]);
+    const standard = new Blob([payload], { type: "image/webp" });
+    expect([...await readBlobAsUint8Array(standard)]).toEqual([1, 2, 3, 250]);
+
+    // RN Blob has no arrayBuffer(); previously openMobileResource threw
+    // "undefined is not a function" at blob.arrayBuffer().
+    const rnLike = { type: "image/webp", size: payload.byteLength };
+    expect(rnLike.arrayBuffer).toBeUndefined();
+
+    const OriginalFileReader = globalThis.FileReader;
+    class FakeFileReader {
+      result = null;
+      error = null;
+      onerror = null;
+      onloadend = null;
+      readAsArrayBuffer(blob) {
+        expect(blob).toBe(rnLike);
+        void Promise.resolve().then(() => {
+          this.result = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength);
+          this.onloadend?.();
+        });
+      }
+    }
+    globalThis.FileReader = FakeFileReader;
+    try {
+      expect([...await readBlobAsUint8Array(/** @type {any} */ (rnLike))]).toEqual([1, 2, 3, 250]);
+    } finally {
+      globalThis.FileReader = OriginalFileReader;
+    }
   });
 });

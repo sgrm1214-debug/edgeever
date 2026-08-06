@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Modal, StyleSheet, View } from "react-native";
-import { Download, FileText, HardDrive, MoreHorizontal, Pencil, Trash2, X } from "./icons";
+import { Download, FileText, MoreHorizontal, Pencil, Share2, Trash2, X } from "./icons";
 import { Pressable, Text, TextInput } from "./LocalizedText";
-import type { MobileAttachmentTarget, MobileResourceTarget } from "../lib/mobile-attachments";
+import {
+  MobileResourceCancelledError,
+  type MobileAttachmentTarget,
+  type MobileResourceTarget,
+} from "../lib/mobile-attachments";
 import { useMobileLocale } from "../lib/mobile-locale";
 import { useMobileTheme } from "../lib/mobile-theme";
 
@@ -24,7 +28,11 @@ const copy = {
     delete: "删除",
     attachmentDeleteConfirm: "附件会从存储空间和当前笔记中永久删除，此操作无法撤销。",
     attachmentDeleteTitle: "删除附件",
+    // Opens the system share sheet (not a silent save-to-folder).
+    share: "分享",
+    // Saves to a user-chosen folder (Android SAF) or share-as-save fallback.
     download: "下载",
+    downloadFailed: "无法下载",
     failed: "资源操作失败，请重试。",
     filename: "文件名",
     rename: "重命名",
@@ -32,7 +40,6 @@ const copy = {
     imageDeleteConfirm: "图片会从存储空间和当前笔记中永久删除，此操作无法撤销。",
     imageDeleteTitle: "删除图片",
     imageRenameTitle: "重命名图片",
-    saveAs: "导出",
     save: "保存",
     syncedOnly: "资源同步完成后才能重命名或删除。",
   },
@@ -43,7 +50,11 @@ const copy = {
     delete: "Delete",
     attachmentDeleteConfirm: "The attachment will be permanently removed from storage and this note. This cannot be undone.",
     attachmentDeleteTitle: "Delete attachment",
+    // Opens the system share sheet (not a silent save-to-folder).
+    share: "Share",
+    // Saves to a user-chosen folder (Android SAF) or share-as-save fallback.
     download: "Download",
+    downloadFailed: "Unable to download",
     failed: "The resource action failed. Try again.",
     filename: "Filename",
     rename: "Rename",
@@ -51,7 +62,6 @@ const copy = {
     imageDeleteConfirm: "The image will be permanently removed from storage and this note. This cannot be undone.",
     imageDeleteTitle: "Delete image",
     imageRenameTitle: "Rename image",
-    saveAs: "Export",
     save: "Save",
     syncedOnly: "Rename and delete are available after the resource has synced.",
   },
@@ -77,7 +87,7 @@ export const MobileAttachmentCard = ({
   return (
     <View style={[styles.card, dark && styles.cardDark]}>
       <Pressable
-        accessibilityHint={resolvedLocale === "en-US" ? "Downloads the attachment and opens the system file menu" : "下载附件并打开系统文件菜单"}
+        accessibilityHint={resolvedLocale === "en-US" ? "Opens the system share sheet for this attachment" : "打开系统分享面板分享此附件"}
         accessibilityLabel={target.filename}
         accessibilityRole="button"
         disabled={busy}
@@ -150,9 +160,38 @@ export const MobileResourceActions = ({
       await action();
       if (closeAfter) onClose();
     } catch (actionError) {
+      if (actionError instanceof MobileResourceCancelledError) {
+        return;
+      }
       setError(actionError instanceof Error ? actionError.message : labels.failed);
     } finally {
       setPending(false);
+    }
+  };
+
+  /**
+   * Share / download open Android system UI (share sheet or SAF folder picker).
+   * Dismiss our Modal first so the activity-result channel is free — otherwise SAF
+   * often never appears and the tap looks like a dead button.
+   */
+  const runSystemUiAction = async (
+    action: (current: MobileResourceTarget) => Promise<void>,
+    failureTitle: string
+  ) => {
+    const current = target;
+    if (!current || pending) return;
+    onClose();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await action(current);
+    } catch (actionError) {
+      if (actionError instanceof MobileResourceCancelledError) {
+        return;
+      }
+      Alert.alert(
+        failureTitle,
+        actionError instanceof Error ? actionError.message : labels.failed
+      );
     }
   };
 
@@ -180,8 +219,18 @@ export const MobileResourceActions = ({
 
           {mode === "actions" ? (
             <View style={styles.actions}>
-              <ResourceActionRow icon={<Download color="#0f172a" size={19} />} label={labels.download} onPress={() => void run(() => onDownload(target))} pending={pending} />
-              <ResourceActionRow icon={<HardDrive color="#0f172a" size={19} />} label={labels.saveAs} onPress={() => void run(() => onSaveAs(target))} pending={pending} />
+              <ResourceActionRow
+                icon={<Share2 color="#0f172a" size={19} />}
+                label={labels.share}
+                onPress={() => void runSystemUiAction((current) => onDownload(current), labels.failed)}
+                pending={pending}
+              />
+              <ResourceActionRow
+                icon={<Download color="#0f172a" size={19} />}
+                label={labels.download}
+                onPress={() => void runSystemUiAction((current) => onSaveAs(current), labels.downloadFailed)}
+                pending={pending}
+              />
               <ResourceActionRow disabled={!canMutate} icon={<Pencil color={canMutate ? "#0f172a" : "#94a3b8"} size={19} />} label={labels.rename} onPress={() => setMode("rename")} pending={pending} />
               <View style={styles.divider} />
               <ResourceActionRow danger disabled={!canMutate} icon={<Trash2 color={canMutate ? "#be123c" : "#94a3b8"} size={19} />} label={labels.delete} onPress={confirmDelete} pending={pending} />

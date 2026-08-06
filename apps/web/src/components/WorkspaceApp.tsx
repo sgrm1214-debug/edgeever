@@ -86,6 +86,7 @@ import {
 } from "@/lib/app-helpers";
 import { useBrowserBackLayer } from "@/lib/app-hooks";
 import { updateMemoSummaryInLists, type MemoListQueryData } from "@/lib/memo-list-cache";
+import { shouldAcceptRemoteMemoDetail } from "@/lib/memo-detail-freshness";
 import { emptySyncQueueSummary, type SyncQueueSummary } from "@/lib/sync-queue";
 import { notifyMemoIdRemapped } from "@/lib/sync-events";
 import {
@@ -1482,9 +1483,21 @@ export const WorkspaceApp = ({
       const memo = (event as CustomEvent<MemoDetail>).detail;
       if (!memo?.id) return;
 
-      queryClient.setQueryData(memoDetailQueryKey(memo.id, "notebook"), { memo });
-      queryClient.setQueryData(memoDetailQueryKey(memo.id, "trash"), { memo });
-      updateMemoSummaryInLists(queryClient, memoToSummary(memo));
+      // Repository already filters stale remotes; still refuse to regress the
+      // in-memory query cache if a newer local snapshot is already present.
+      let accepted = false;
+      for (const view of ["notebook", "trash"] as const) {
+        const key = memoDetailQueryKey(memo.id, view);
+        const current = queryClient.getQueryData<{ memo: MemoDetail }>(key)?.memo;
+        if (current && !shouldAcceptRemoteMemoDetail(current, memo)) {
+          continue;
+        }
+        queryClient.setQueryData(key, { memo });
+        accepted = true;
+      }
+      if (accepted) {
+        updateMemoSummaryInLists(queryClient, memoToSummary(memo));
+      }
     };
 
     window.addEventListener("edgeever:memo-detail-refreshed", handleMemoDetailRefreshed);

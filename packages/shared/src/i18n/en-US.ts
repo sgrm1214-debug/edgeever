@@ -529,6 +529,7 @@ export const enUS = {
     moreActions: "More actions",
     restoreMemo: "Restore note",
     deleteMemo: "Delete note",
+    permanentDelete: "Delete permanently",
   },
   assets: {
     uploadNth: "Uploading file {{current}}/{{total}}...",
@@ -651,6 +652,20 @@ export const enUS = {
       conflict: "Conflict",
       error: "Save failed",
       unsaved: "Unsaved",
+      conflictReason: {
+        revisionWithVersions: "The cloud note was updated (local base revision {{expected}}, cloud is {{current}}). Common causes: another browser tab, another device, or a cloud change while you were offline. Copy your local draft, then use the cloud version before editing again.",
+        revision: "The cloud note was updated elsewhere. Common causes: another browser tab, another device, or a cloud change while you were offline. Copy your local draft, then use the cloud version before editing again.",
+        content: "The cloud content changed after this note was opened. Copy your local draft, then use the cloud version before saving.",
+        editSession: "This edit session is stale or expired. Copy your local draft, then use the cloud version before editing again.",
+        offlineStale: "While offline or queued, the cloud note was updated, so the local draft cannot overwrite it. Copy your local draft, then use the cloud version.",
+        generic: "A version conflict was detected while saving. Copy your local draft, then use the cloud version before editing again.",
+      },
+      conflictAdoptCloud: "Use cloud and reload",
+      conflictAdopting: "Using cloud…",
+      conflictAdoptFailed: "Could not use the cloud version. Check your connection and try again.",
+      conflictCopyDraft: "Copy local draft",
+      conflictCopyDraftDone: "Copied",
+      conflictCopyDraftFailed: "Copy failed. Please try again.",
     },
     uploadState: {
       failed: "Upload failed",

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import * as m from "motion/react-m";
-import { Star, Check, MoreHorizontal, RotateCcw } from "lucide-react";
+import { Star, Check, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import type { MemoSummary } from "@edgeever/shared";
 import { cn } from "@/lib/utils";
 import { selectionSettleMotion } from "@/lib/motion";
@@ -50,6 +50,7 @@ export const MemoCard = ({
   multiSelectKeyDown,
   onOpen,
   onRestore,
+  onDelete,
   onOpenContextMenu,
   onOpenSelectionContextMenu,
   onOpenSelectionKeyboardContextMenu,
@@ -66,6 +67,7 @@ export const MemoCard = ({
   multiSelectKeyDown: boolean;
   onOpen: () => void;
   onRestore: () => void;
+  onDelete: () => void;
   onOpenContextMenu: (event: MouseEvent<HTMLElement>) => void;
   onOpenSelectionContextMenu: (event: MouseEvent<HTMLElement>) => void;
   onOpenSelectionKeyboardContextMenu: (target: HTMLElement) => void;
@@ -432,6 +434,18 @@ export const MemoCard = ({
                 <RotateCcw className="h-4 w-4" />
               </button>
             )}
+            <button
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-rose-50 hover:text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/70 focus-visible:ring-offset-2"
+              type="button"
+              title={isTrashView ? t("memoCard.permanentDelete") : t("memoCard.deleteMemo")}
+              aria-label={isTrashView ? t("memoCard.permanentDelete") : t("memoCard.deleteMemo")}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>

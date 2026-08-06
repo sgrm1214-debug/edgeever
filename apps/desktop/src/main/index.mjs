@@ -30,6 +30,29 @@ if (requestedUserDataDirectory) app.setPath("userData", requestedUserDataDirecto
 
 const currentDirectory = fileURLToPath(new URL(".", import.meta.url));
 const projectRoot = join(currentDirectory, "../../..");
+/**
+ * Force Dock to use our multi-resolution app icon. Bundle Info.plist is still
+ * the primary source; this covers cases where Launch Services/Dock cache a
+ * blank tile after overwrite installs.
+ */
+const applyMacDockIcon = () => {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, "icon.icns"), join(process.resourcesPath, "icon.png")]
+    : [
+        join(projectRoot, "apps/desktop/assets/icon.icns"),
+        join(projectRoot, "apps/desktop/assets/icon.png"),
+        join(projectRoot, "apps/web/public/pwa-512x512.png"),
+      ];
+  for (const iconPath of candidates) {
+    if (!existsSync(iconPath)) continue;
+    const image = nativeImage.createFromPath(iconPath);
+    if (!image.isEmpty()) {
+      app.dock.setIcon(image);
+      return;
+    }
+  }
+};
 const webUrl = process.env.EDGE_EVER_DESKTOP_WEB_URL || "http://127.0.0.1:5173";
 // A packaged desktop app is self-hosted-client software: its instance URL must
 // come from the user-facing first-run setup, never from the build environment.
@@ -564,6 +587,7 @@ const confirmMacInstallation = async () => {
 };
 
 app.whenReady().then(async () => {
+  applyMacDockIcon();
   if (app.isPackaged && isMountedInstallerPath(app.getAppPath())) {
     const isChinese = app.getLocale().toLowerCase().startsWith("zh");
     const result = await dialog.showMessageBox({

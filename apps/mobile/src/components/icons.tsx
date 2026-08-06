@@ -16,6 +16,7 @@ const createIcon = (name: FeatherName) => {
 
 export const Archive = createIcon("archive");
 export const AlertTriangle = createIcon("alert-triangle");
+export const ArrowUpCircle = createIcon("arrow-up-circle");
 export const BookOpen = createIcon("book-open");
 export const Bold = createIcon("bold");
 export const Check = createIcon("check");

@@ -529,6 +529,7 @@ export const zhCN = {
     moreActions: "更多操作",
     restoreMemo: "恢复笔记",
     deleteMemo: "删除笔记",
+    permanentDelete: "永久删除",
   },
   assets: {
     uploadNth: "正在上传第 {{current}}/{{total}} 个文件...",
@@ -651,6 +652,20 @@ export const zhCN = {
       conflict: "有冲突",
       error: "保存失败",
       unsaved: "未保存",
+      conflictReason: {
+        revisionWithVersions: "云端笔记已更新（本地基于版本 {{expected}}，云端已是 {{current}}）。常见原因：其他标签页、其他设备，或离线期间云端被改过。可先复制本地草稿，再采用云端版本后继续编辑。",
+        revision: "云端笔记已在其他位置被更新。常见原因：其他标签页、其他设备，或离线期间云端被改过。可先复制本地草稿，再采用云端版本后继续编辑。",
+        content: "打开笔记后，云端内容已变化。可先复制本地草稿，再采用云端版本后保存。",
+        editSession: "当前编辑会话已失效或过期。可先复制本地草稿，再采用云端版本后继续编辑。",
+        offlineStale: "离线或待同步期间，云端笔记已被更新，本地草稿无法直接覆盖。可先复制本地草稿，再采用云端版本。",
+        generic: "保存时版本不一致。可先复制本地草稿，再采用云端版本后继续编辑。",
+      },
+      conflictAdoptCloud: "采用云端并重新加载",
+      conflictAdopting: "正在采用云端…",
+      conflictAdoptFailed: "采用云端版本失败，请检查网络后重试。",
+      conflictCopyDraft: "复制本地草稿",
+      conflictCopyDraftDone: "已复制",
+      conflictCopyDraftFailed: "复制失败，请重试。",
     },
     uploadState: {
       failed: "上传失败",

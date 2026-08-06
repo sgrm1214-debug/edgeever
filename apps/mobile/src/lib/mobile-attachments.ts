@@ -13,6 +13,29 @@ export type MobileImageTarget = MobileResourceTarget & { kind: "image" };
 
 type AttachmentClient = Pick<ReturnType<typeof createEdgeEverClient>, "getResourceBlob">;
 
+/**
+ * Convert a Blob to bytes. React Native's Blob polyfill has no arrayBuffer(),
+ * so calling blob.arrayBuffer() throws "undefined is not a function".
+ */
+export const readBlobAsUint8Array = async (blob: Blob): Promise<Uint8Array> => {
+  if (typeof blob.arrayBuffer === "function") {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  return await new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("资源读取失败"));
+    reader.onloadend = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(new Uint8Array(reader.result));
+        return;
+      }
+      reject(new Error("资源读取失败"));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+};
+
 type MarkdownNodeLike = {
   attributes?: Record<string, unknown>;
   children?: MarkdownNodeLike[];
@@ -173,63 +196,147 @@ export const getMobileResourceUpdatePayload = getMobileAttachmentUpdatePayload;
 const safeCacheFilename = (filename: string) =>
   filename.trim().replace(/[\\/]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 160) || "attachment";
 
+const EXT_BY_MIME: Record<string, string> = {
+  "application/pdf": ".pdf",
+  "application/zip": ".zip",
+  "image/gif": ".gif",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/svg+xml": ".svg",
+  "image/webp": ".webp",
+  "text/csv": ".csv",
+  "text/plain": ".txt",
+};
+
+const MIME_BY_EXT: Record<string, string> = {
+  csv: "text/csv",
+  gif: "image/gif",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  pdf: "application/pdf",
+  png: "image/png",
+  svg: "image/svg+xml",
+  txt: "text/plain",
+  webp: "image/webp",
+  zip: "application/zip",
+};
+
+/** Infer a usable MIME type — empty blob.type is common for RN fetch results. */
+export const resolveResourceMimeType = (filename: string, blobType?: string | null) => {
+  const normalized = blobType?.trim().toLowerCase() ?? "";
+  if (normalized && normalized !== "application/octet-stream") {
+    return normalized;
+  }
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return MIME_BY_EXT[ext] || "application/octet-stream";
+};
+
+/** SAF createFileAsync is unreliable without a file extension. */
+export const resolveExportFilename = (filename: string, mimeType: string) => {
+  const safe = safeCacheFilename(filename);
+  if (/\.[a-z0-9]{1,8}$/i.test(safe)) {
+    return safe;
+  }
+  return `${safe}${EXT_BY_MIME[mimeType] || ""}`;
+};
+
+export class MobileResourceCancelledError extends Error {
+  readonly code = "cancelled" as const;
+
+  constructor(message = "已取消下载") {
+    super(message);
+    this.name = "MobileResourceCancelledError";
+  }
+}
+
 const cacheMobileResource = async (client: AttachmentClient, target: MobileResourceTarget) => {
-  const [{ Directory, File, Paths }, Sharing] = await Promise.all([
-    import("expo-file-system"),
-    import("expo-sharing"),
-  ]);
+  const { Directory, File, Paths } = await import("expo-file-system");
   // The DOM editor resolves relative links against the instance URL for display.
   // The client itself prefixes the instance base URL, so always give it the
   // canonical relative resource path here.
   const blob = await client.getResourceBlob(`/api/v1/resources/${encodeURIComponent(target.resourceId)}/blob`);
+  const bytes = await readBlobAsUint8Array(blob);
   const directory = new Directory(Paths.cache, "edgeever-attachments");
   if (!directory.exists) directory.create({ idempotent: true, intermediates: true });
   const file = new File(directory, `${target.resourceId}-${safeCacheFilename(target.filename)}`);
   if (file.exists) file.delete();
   file.create({ overwrite: true, intermediates: true });
-  file.write(new Uint8Array(await blob.arrayBuffer()));
+  file.write(bytes);
 
-  return { blob, file, Sharing };
+  return { blob, file };
+};
+
+const shareCachedResource = async (
+  fileUri: string,
+  options: { dialogTitle: string; mimeType: string }
+) => {
+  const Sharing = await import("expo-sharing");
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error("当前设备无法打开系统分享面板");
+  }
+  await Sharing.shareAsync(fileUri, {
+    dialogTitle: options.dialogTitle,
+    mimeType: options.mimeType,
+  });
+  return fileUri;
 };
 
 export const openMobileResource = async (client: AttachmentClient, target: MobileResourceTarget) => {
-  const { blob, file, Sharing } = await cacheMobileResource(client, target);
-
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error("当前设备无法打开系统文件面板");
-  }
-  await Sharing.shareAsync(file.uri, {
+  const { blob, file } = await cacheMobileResource(client, target);
+  const mimeType = resolveResourceMimeType(target.filename, blob.type);
+  return shareCachedResource(file.uri, {
     dialogTitle: target.filename,
-    mimeType: blob.type || "application/octet-stream",
+    mimeType,
   });
-  return file.uri;
 };
 
+/**
+ * Download resource to a user-chosen folder (Android SAF) or the system share sheet.
+ * Android: the action sheet Modal must be closed first — SAF needs a free activity
+ * result channel; otherwise the folder picker never appears and it looks like a no-op.
+ */
 export const saveMobileResourceAs = async (client: AttachmentClient, target: MobileResourceTarget) => {
-  const { blob, file, Sharing } = await cacheMobileResource(client, target);
   const { Platform } = await import("react-native");
+  const { blob, file } = await cacheMobileResource(client, target);
+  const mimeType = resolveResourceMimeType(target.filename, blob.type);
+  const exportName = resolveExportFilename(target.filename, mimeType);
+
   if (Platform.OS === "android") {
-    const FileSystem = await import("expo-file-system/legacy");
-    const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-    if (!permission.granted) return null;
-    const destination = await FileSystem.StorageAccessFramework.createFileAsync(
-      permission.directoryUri,
-      target.filename,
-      blob.type || "application/octet-stream"
-    );
-    await FileSystem.StorageAccessFramework.writeAsStringAsync(destination, await file.base64(), {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    return destination;
+    try {
+      const FileSystem = await import("expo-file-system/legacy");
+      const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permission.granted) {
+        // Do not return null — callers treated that as success and closed the sheet.
+        throw new MobileResourceCancelledError("已取消下载");
+      }
+      const destination = await FileSystem.StorageAccessFramework.createFileAsync(
+        permission.directoryUri,
+        exportName,
+        mimeType
+      );
+      const base64 = await file.base64();
+      await FileSystem.StorageAccessFramework.writeAsStringAsync(destination, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return { kind: "saf" as const, uri: destination, filename: exportName };
+    } catch (error) {
+      if (error instanceof MobileResourceCancelledError) {
+        throw error;
+      }
+      // SAF is flaky on some OEM builds — fall back to the share sheet so download still works.
+      await shareCachedResource(file.uri, {
+        dialogTitle: `下载 ${exportName}`,
+        mimeType,
+      });
+      return { kind: "share" as const, uri: file.uri, filename: exportName };
+    }
   }
-  if (!(await Sharing.isAvailableAsync())) {
-    throw new Error("当前设备无法打开系统导出面板");
-  }
-  await Sharing.shareAsync(file.uri, {
-    dialogTitle: `导出 ${target.filename}`,
-    mimeType: blob.type || "application/octet-stream",
+
+  await shareCachedResource(file.uri, {
+    dialogTitle: `下载 ${exportName}`,
+    mimeType,
   });
-  return file.uri;
+  return { kind: "share" as const, uri: file.uri, filename: exportName };
 };
 
 export const openMobileAttachment = openMobileResource;

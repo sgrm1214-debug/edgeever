@@ -28,7 +28,7 @@ Many long-time **Evernote** users simply want a **reliable, open, and fast** per
 
 - Demo: [https://demo.edgeever.org](https://demo.edgeever.org)
 
-The public demo resets every Monday at 1:00 AM (China Standard Time) and restores sample notes. Do not store private content there.
+The public demo resets every day at 3:00 AM (China Standard Time) and restores sample notes. Do not store private content there.
 
 ## Features
 

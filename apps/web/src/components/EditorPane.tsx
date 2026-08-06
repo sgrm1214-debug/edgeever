@@ -110,7 +110,16 @@ import { codeBlockLowlight, EdgeEverCodeBlock } from "@/lib/code-block";
 import { compressImageForUpload } from "@/lib/image-compression";
 import { localDb, type MemoUpdateSyncPayload } from "@/lib/local-db";
 import { getMemoUpdateQueueId, isMemoUpdateAlreadyApplied, queueMemoUpdate, shouldQueueMemoSaveError } from "@/lib/sync-queue";
+import {
+  formatLocalDraftClipboardText,
+  formatMemoSaveConflictReason,
+  getMemoSaveConflictInfo,
+  getMemoSaveConflictInfoFromQueueItem,
+  type MemoSaveConflictInfo,
+} from "@/lib/memo-save-conflict";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { isLocalMemoId } from "@/lib/local-mirror";
+import { shouldAcceptRemoteMemoDetail } from "@/lib/memo-detail-freshness";
 import type { EdgeEverRepository } from "@/lib/repository";
 import {
   EDITOR_LOCAL_SAVE_DELAY_MS,
@@ -856,6 +865,9 @@ const RichEditorPane = ({
   const [title, setTitle] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "queued" | "error" | "conflict">("idle");
+  const [saveConflictInfo, setSaveConflictInfo] = useState<MemoSaveConflictInfo | null>(null);
+  const [conflictActionPending, setConflictActionPending] = useState<"adopt" | "copy" | null>(null);
+  const [conflictActionMessage, setConflictActionMessage] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [hydratedEditorMemoId, setHydratedEditorMemoId] = useState<string | null>(null);
   const [dirtyVersion, setDirtyVersion] = useState(0);
@@ -956,6 +968,8 @@ const RichEditorPane = ({
   const noteReplaceInputRef = useRef<HTMLInputElement | null>(null);
   const hydratingRef = useRef(false);
   const hydratedMemoIdRef = useRef<string | null>(null);
+  /** Last content source applied to the editor — used to skip redundant setContent. */
+  const appliedEditorSourceKeyRef = useRef<string | null>(null);
   const hasUnsavedChangesRef = useRef(false);
   const editingMemoIdRef = useRef<string | null>(memo?.id ?? null);
   const imageCompressionEnabledRef = useRef(imageCompressionEnabled);
@@ -1821,6 +1835,7 @@ const RichEditorPane = ({
       memoRef.current = null;
       editSessionRef.current = null;
       hydratedMemoIdRef.current = null;
+      appliedEditorSourceKeyRef.current = null;
       setHydratedEditorMemoId(null);
       editingMemoIdRef.current = null;
       hasUnsavedChangesRef.current = false;
@@ -1838,25 +1853,72 @@ const RichEditorPane = ({
       return;
     }
 
+    const previousMemo = memoRef.current;
     const sameMemo = editingMemoIdRef.current === memo.id;
-    memoRef.current = memo;
 
     if (!sameMemo) {
       hydratedMemoIdRef.current = null;
+      appliedEditorSourceKeyRef.current = null;
       setHydratedEditorMemoId(null);
     }
 
+    // While the user still has unsaved keystrokes, ignore memo prop churn entirely
+    // unless the incoming snapshot is strictly fresher (e.g. another device).
     if (sameMemo && hasUnsavedChangesRef.current && !memo.isDeleted) {
+      if (previousMemo && shouldAcceptRemoteMemoDetail(previousMemo, memo)) {
+        memoRef.current = memo;
+      }
       return;
     }
 
+    // After local autosave clears dirty, reject stale remote props that would
+    // call setContent and roll the document back (cursor jump / deleted text returns).
+    if (
+      sameMemo &&
+      !memo.isDeleted &&
+      previousMemo &&
+      previousMemo.id === memo.id &&
+      !shouldAcceptRemoteMemoDetail(previousMemo, memo)
+    ) {
+      return;
+    }
+
+    // Same memo already on screen and the query only re-emitted an equivalent
+    // snapshot (common when switching away/back triggers a detail refetch).
+    // Refresh the edit session quietly — never touch document or selection.
+    if (
+      sameMemo &&
+      !memo.isDeleted &&
+      hydratedMemoIdRef.current === memo.id &&
+      previousMemo &&
+      previousMemo.id === memo.id &&
+      previousMemo.revision === memo.revision &&
+      previousMemo.updatedAt === memo.updatedAt &&
+      previousMemo.contentHash === memo.contentHash &&
+      previousMemo.title === memo.title &&
+      previousMemo.tags.length === memo.tags.length &&
+      previousMemo.tags.every((tag, index) => tag === memo.tags[index])
+    ) {
+      memoRef.current = memo;
+      if (!requiresLocalEditSession(memo)) {
+        void api.createMemoEditSession(memo.id).then((response) => {
+          if (cancelled || editingMemoIdRef.current !== memo.id) return;
+          editSessionRef.current = response.editSession;
+        }).catch(() => {
+          // Keep the previous session; the next save can open a new one.
+        });
+      }
+      return;
+    }
+
+    memoRef.current = memo;
+
     void (async () => {
-      let [draft, queuedUpdate, editSessionResponse] = memo.isDeleted
-        ? [null, null, null]
+      let [draft, queuedUpdate] = memo.isDeleted
+        ? [null, null]
         : await Promise.all([
             localDb.drafts.get(memo.id),
             localDb.syncQueue.get(getMemoUpdateQueueId(memo.id)),
-            requiresLocalEditSession(memo) ? Promise.resolve(null) : api.createMemoEditSession(memo.id),
           ]);
 
       if (cancelled) {
@@ -1875,19 +1937,89 @@ const RichEditorPane = ({
       const draftUpdatedAt = draft ? Date.parse(draft.updatedAt) : 0;
       const remoteUpdatedAt = Date.parse(memo.updatedAt);
       const useDraft = Boolean(draft && (queuedUpdate || draftUpdatedAt >= remoteUpdatedAt));
-      const nextTitle = useDraft && draft ? draft.title : getEditableMemoTitle(memo.title);
-      const nextTagsText = useDraft && draft ? draft.tagsText : memo.tags.join(", ");
+      const queuedPayload =
+        queuedUpdate && queuedUpdate.kind === "memo.update"
+          ? (queuedUpdate.payload as MemoUpdateSyncPayload)
+          : null;
+      // Prefer an unpushed local queue payload over a stale memo prop when the
+      // draft was already cleared by a successful local save.
+      const useQueuedPayload = Boolean(queuedPayload && !useDraft && !isMemoUpdateAlreadyApplied(memo, queuedUpdate!));
+
+      const nextTitle = useDraft && draft
+        ? draft.title
+        : useQueuedPayload && queuedPayload
+          ? getEditableMemoTitle(queuedPayload.title)
+          : getEditableMemoTitle(memo.title);
+      const nextTagsText = useDraft && draft
+        ? draft.tagsText
+        : useQueuedPayload && queuedPayload
+          ? queuedPayload.tags.join(", ")
+          : memo.tags.join(", ");
       const nextContent = useDraft && draft
         ? draft.contentJson
-        : resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown);
+        : useQueuedPayload && queuedPayload
+          ? queuedPayload.contentJson
+          : resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown);
       const nextMarkdown = docToMarkdown(nextContent);
       const nextHasUnsavedChanges = Boolean(useDraft && !queuedUpdate);
+      const sourceKey = useDraft && draft
+        ? `draft:${memo.id}:${draft.updatedAt}:${nextTitle}:${nextTagsText}:${nextMarkdown}`
+        : useQueuedPayload && queuedUpdate
+          ? `queue:${memo.id}:${queuedUpdate.updatedAt}:${nextTitle}:${nextTagsText}:${nextMarkdown}`
+          : `memo:${memo.id}:${memo.revision}:${memo.updatedAt}:${memo.contentHash}:${nextTitle}:${nextTagsText}:${nextMarkdown}`;
+
+      const alreadyHydratedSameMemo = sameMemo && hydratedMemoIdRef.current === memo.id;
+      const editorMarkdownMatches = Boolean(
+        alreadyHydratedSameMemo &&
+        isEditorReady(currentEditor) &&
+        docToMarkdown(currentEditor.getJSON() as TiptapDoc) === nextMarkdown &&
+        title === nextTitle &&
+        tagsText === nextTagsText
+      );
+      const sourceAlreadyApplied = alreadyHydratedSameMemo && appliedEditorSourceKeyRef.current === sourceKey;
+
+      // Skip a full document replace when content already matches — setContent
+      // always resets the selection and feels like a line jump / jump-to-end.
+      if (sourceAlreadyApplied || editorMarkdownMatches) {
+        editingMemoIdRef.current = memo.id;
+        appliedEditorSourceKeyRef.current = sourceKey;
+        if (queuedUpdate) {
+          const nextState = syncStatusToSaveState(queuedUpdate.status);
+          setSaveState(nextState);
+          setSaveConflictInfo(nextState === "conflict" ? getMemoSaveConflictInfoFromQueueItem(queuedUpdate) : null);
+        }
+        if (requiresLocalEditSession(memo)) {
+          editSessionRef.current = editSessionRef.current ?? createLocalEditSession(memo);
+        } else {
+          void api.createMemoEditSession(memo.id).then((response) => {
+            if (cancelled || editingMemoIdRef.current !== memo.id) return;
+            editSessionRef.current = response.editSession;
+          }).catch(() => {
+            // Keep any previous session for this memo.
+          });
+        }
+        return;
+      }
+
+      const previousSelection = alreadyHydratedSameMemo && isEditorReady(currentEditor)
+        ? {
+            from: currentEditor.state.selection.from,
+            to: currentEditor.state.selection.to,
+          }
+        : null;
 
       hydratingRef.current = true;
       editingMemoIdRef.current = memo.id;
       hasUnsavedChangesRef.current = nextHasUnsavedChanges;
       setHasUnsavedChanges(nextHasUnsavedChanges);
-      setSaveState(queuedUpdate ? syncStatusToSaveState(queuedUpdate.status) : "idle");
+      if (queuedUpdate) {
+        const nextState = syncStatusToSaveState(queuedUpdate.status);
+        setSaveState(nextState);
+        setSaveConflictInfo(nextState === "conflict" ? getMemoSaveConflictInfoFromQueueItem(queuedUpdate) : null);
+      } else {
+        setSaveState("idle");
+        setSaveConflictInfo(null);
+      }
       setTitle(nextTitle);
       setTagsText(nextTagsText);
       setMobilePlainText(nextMarkdown);
@@ -1901,11 +2033,33 @@ const RichEditorPane = ({
           console.error("Failed to set TipTap contentJson, falling back to markdownToDoc:", err);
           currentEditor.commands.setContent(markdownToDoc(nextMarkdown));
         }
+
+        // Re-applying content on an already-open note (e.g. draft vs server)
+        // must not yank the caret to the document end.
+        if (previousSelection) {
+          const maxPos = currentEditor.state.doc.content.size;
+          const from = Math.max(1, Math.min(previousSelection.from, maxPos));
+          const to = Math.max(1, Math.min(previousSelection.to, maxPos));
+          currentEditor.commands.setTextSelection({ from, to });
+        }
       }
 
+      appliedEditorSourceKeyRef.current = sourceKey;
       hydratedMemoIdRef.current = memo.id;
-      editSessionRef.current = editSessionResponse?.editSession ?? (requiresLocalEditSession(memo) ? createLocalEditSession(memo) : null);
       setHydratedEditorMemoId(memo.id);
+
+      if (requiresLocalEditSession(memo)) {
+        editSessionRef.current = createLocalEditSession(memo);
+      } else {
+        // Do not block first paint / caret on the edit-session network round-trip.
+        void api.createMemoEditSession(memo.id).then((response) => {
+          if (cancelled || editingMemoIdRef.current !== memo.id) return;
+          editSessionRef.current = response.editSession;
+        }).catch(() => {
+          if (cancelled || editingMemoIdRef.current !== memo.id) return;
+          editSessionRef.current = createLocalEditSession(memo);
+        });
+      }
 
       window.setTimeout(() => {
         hydratingRef.current = false;
@@ -1915,6 +2069,9 @@ const RichEditorPane = ({
     return () => {
       cancelled = true;
     };
+    // title/tagsText are read only for same-content skip detection; re-running on
+    // every keystroke would re-hydrate the editor while the user is typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [isTrashView, memo, editor]);
 
   useEffect(() => {
@@ -1964,11 +2121,30 @@ const RichEditorPane = ({
   useEffect(() => {
     const handleSyncCompleted = (event: Event) => {
       const result = (event as CustomEvent<{ failed?: number; conflicted?: number }>).detail;
-      if ((result?.failed ?? 0) > 0 || (result?.conflicted ?? 0) > 0 || hasUnsavedChangesRef.current) {
+      const memoId = memoRef.current?.id;
+
+      if (memoId && (result?.conflicted ?? 0) > 0) {
+        void localDb.syncQueue.get(getMemoUpdateQueueId(memoId)).then((item) => {
+          if (!item || item.status !== "conflict" || memoRef.current?.id !== memoId) {
+            return;
+          }
+          setSaveState("conflict");
+          setSaveConflictInfo(getMemoSaveConflictInfoFromQueueItem(item));
+        });
         return;
       }
 
-      setSaveState((current) => current === "queued" ? "saved" : current);
+      if ((result?.failed ?? 0) > 0 || hasUnsavedChangesRef.current) {
+        return;
+      }
+
+      setSaveState((current) => {
+        if (current !== "queued") {
+          return current;
+        }
+        setSaveConflictInfo(null);
+        return "saved";
+      });
     };
 
     window.addEventListener("edgeever:sync-completed", handleSyncCompleted);
@@ -2250,6 +2426,7 @@ const RichEditorPane = ({
         hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
         await localDb.drafts.delete(savedMemo.id);
+        setSaveConflictInfo(null);
         setSaveState(queued ? "queued" : "saved");
         if (!queued) {
           window.setTimeout(() => setSaveState("idle"), 1400);
@@ -2260,16 +2437,15 @@ const RichEditorPane = ({
       persistCurrentDraft();
       hasUnsavedChangesRef.current = true;
       setHasUnsavedChanges(true);
+      setSaveConflictInfo(null);
       setSaveState("idle");
     },
     onError: async (error) => {
       const sourceError = error instanceof MemoSaveRequestError ? error.originalError : error;
-      const code =
-        sourceError && typeof sourceError === "object" && "code" in sourceError
-          ? String(sourceError.code)
-          : null;
+      const conflictInfo = getMemoSaveConflictInfo(sourceError);
 
-      if (code === "revision_conflict") {
+      if (conflictInfo) {
+        setSaveConflictInfo(conflictInfo);
         setSaveState("conflict");
         return;
       }
@@ -2286,10 +2462,12 @@ const RichEditorPane = ({
 
         hasUnsavedChangesRef.current = false;
         setHasUnsavedChanges(false);
+        setSaveConflictInfo(null);
         setSaveState("queued");
         return;
       }
 
+      setSaveConflictInfo(null);
       setSaveState("error");
     },
   });
@@ -2573,6 +2751,141 @@ const RichEditorPane = ({
 
     return () => window.clearTimeout(timer);
   }, [dirtyVersion, editor, hasUnsavedChanges, memo, saveMutation, saveState, useMobilePlainTextEditor]);
+
+  // Must stay above early returns so hook order never changes across loading/empty/editor states.
+  const saveConflictReason = useMemo(
+    () => (saveState === "conflict" ? formatMemoSaveConflictReason(t, saveConflictInfo) : null),
+    [saveConflictInfo, saveState, t],
+  );
+
+  useEffect(() => {
+    if (saveState !== "conflict") {
+      setConflictActionPending(null);
+      setConflictActionMessage(null);
+    }
+  }, [saveState]);
+
+  const getLocalDraftMarkdown = useCallback(() => {
+    if (useMobilePlainTextEditor) {
+      return getMobilePlainTextValue();
+    }
+    if (useMarkdownSourceEditor) {
+      return markdownSource;
+    }
+    const contentJson = getCurrentContentJson();
+    if (contentJson) {
+      return docToMarkdown(contentJson);
+    }
+    return memo?.contentMarkdown ?? "";
+  }, [
+    getCurrentContentJson,
+    getMobilePlainTextValue,
+    markdownSource,
+    memo?.contentMarkdown,
+    useMarkdownSourceEditor,
+    useMobilePlainTextEditor,
+  ]);
+
+  const handleCopyLocalDraft = useCallback(async () => {
+    if (conflictActionPending) {
+      return;
+    }
+
+    setConflictActionPending("copy");
+    setConflictActionMessage(null);
+    try {
+      const text = formatLocalDraftClipboardText({
+        title,
+        tags: parseTagsText(tagsText),
+        contentMarkdown: getLocalDraftMarkdown(),
+      });
+      const copied = await copyTextToClipboard(text);
+      if (!copied) {
+        setConflictActionMessage(t("editor.saveState.conflictCopyDraftFailed"));
+        return;
+      }
+      setConflictActionMessage(t("editor.saveState.conflictCopyDraftDone"));
+      window.setTimeout(() => {
+        setConflictActionMessage((current) =>
+          current === t("editor.saveState.conflictCopyDraftDone") ? null : current
+        );
+      }, 2000);
+    } catch {
+      setConflictActionMessage(t("editor.saveState.conflictCopyDraftFailed"));
+    } finally {
+      setConflictActionPending(null);
+    }
+  }, [conflictActionPending, getLocalDraftMarkdown, t, tagsText, title]);
+
+  const handleAdoptCloudAndReload = useCallback(async () => {
+    const currentMemo = memoRef.current;
+    if (!currentMemo || conflictActionPending === "adopt") {
+      return;
+    }
+
+    setConflictActionPending("adopt");
+    setConflictActionMessage(null);
+    try {
+      const { memo: remoteMemo } = await repository.adoptCloudMemo(currentMemo.id);
+      await onSaved(remoteMemo);
+
+      hasUnsavedChangesRef.current = false;
+      setHasUnsavedChanges(false);
+      setSaveConflictInfo(null);
+      setSaveState("idle");
+      setConflictActionMessage(null);
+
+      const nextTitle = getEditableMemoTitle(remoteMemo.title);
+      const nextTagsText = remoteMemo.tags.join(", ");
+      const nextContent = resolveMemoContentDoc(remoteMemo.contentJson, remoteMemo.contentMarkdown);
+      const nextMarkdown = remoteMemo.contentMarkdown || docToMarkdown(nextContent);
+
+      memoRef.current = remoteMemo;
+      editSessionRef.current = null;
+      hydratedMemoIdRef.current = remoteMemo.id;
+      setHydratedEditorMemoId(remoteMemo.id);
+      editingMemoIdRef.current = remoteMemo.id;
+      appliedEditorSourceKeyRef.current = `memo:${remoteMemo.id}:${remoteMemo.revision}:${remoteMemo.updatedAt}:${remoteMemo.contentHash}:${nextTitle}:${nextTagsText}:${nextMarkdown}`;
+
+      setTitle(nextTitle);
+      setTagsText(nextTagsText);
+      setMobilePlainText(nextMarkdown);
+      setMarkdownSource(nextMarkdown);
+      setMobilePlainTextElementValue(mobileTextAreaRef.current, nextMarkdown);
+
+      const currentEditor = editorRef.current;
+      if (isEditorReady(currentEditor)) {
+        hydratingRef.current = true;
+        try {
+          currentEditor.commands.setContent(nextContent);
+        } catch (err) {
+          console.error("Failed to apply cloud memo after conflict resolve:", err);
+          currentEditor.commands.setContent(markdownToDoc(nextMarkdown));
+        }
+        window.setTimeout(() => {
+          hydratingRef.current = false;
+        }, 0);
+      }
+
+      if (requiresLocalEditSession(remoteMemo)) {
+        editSessionRef.current = createLocalEditSession(remoteMemo);
+      } else {
+        void api.createMemoEditSession(remoteMemo.id).then((response) => {
+          if (editingMemoIdRef.current !== remoteMemo.id) return;
+          editSessionRef.current = response.editSession;
+        }).catch(() => {
+          if (editingMemoIdRef.current !== remoteMemo.id) return;
+          editSessionRef.current = createLocalEditSession(remoteMemo);
+        });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["memo", remoteMemo.id] });
+    } catch {
+      setConflictActionMessage(t("editor.saveState.conflictAdoptFailed"));
+    } finally {
+      setConflictActionPending(null);
+    }
+  }, [conflictActionPending, onSaved, queryClient, repository, t]);
 
   if (isSelectionMode) {
     return (
@@ -2983,6 +3296,8 @@ const RichEditorPane = ({
               className={cn("hidden items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium sm:inline-flex", saveStateClassName)}
               role="status"
               aria-live="polite"
+              title={saveConflictReason ?? undefined}
+              aria-label={saveState === "conflict" && saveConflictReason ? `${saveLabel}. ${saveConflictReason}` : undefined}
               {...statusSettleMotion}
             >
               {saveState === "saving" ? (
@@ -3001,6 +3316,8 @@ const RichEditorPane = ({
               className={cn("inline-flex max-w-[5.5rem] truncate rounded-full px-2 py-1 text-[11px] font-medium sm:hidden", mobileStatusClassName)}
               role="status"
               aria-live="polite"
+              title={saveConflictReason ?? undefined}
+              aria-label={saveState === "conflict" && saveConflictReason ? `${saveLabel}. ${saveConflictReason}` : undefined}
               {...statusSettleMotion}
             >
               {mobileStatusLabel}
@@ -3379,6 +3696,44 @@ const RichEditorPane = ({
             onPickNoteLink={() => setNoteLinkPickerOpen(true)}
           />
         )}
+        {saveState === "conflict" && saveConflictReason ? (
+          <div
+            className="flex flex-col gap-2 border-t border-rose-100 bg-rose-50 px-3 py-2 text-xs leading-relaxed text-rose-800 sm:px-5"
+            role="alert"
+          >
+            <div className="flex items-start gap-2">
+              <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1">{saveConflictReason}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pl-5">
+              <Button
+                size="sm"
+                variant="solid"
+                className="h-7 bg-rose-700 px-2.5 text-[11px] text-white hover:bg-rose-800"
+                disabled={conflictActionPending !== null}
+                onClick={() => void handleAdoptCloudAndReload()}
+              >
+                {conflictActionPending === "adopt"
+                  ? t("editor.saveState.conflictAdopting")
+                  : t("editor.saveState.conflictAdoptCloud")}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2.5 text-[11px] text-rose-800 hover:bg-rose-100"
+                disabled={conflictActionPending !== null}
+                onClick={() => void handleCopyLocalDraft()}
+              >
+                {t("editor.saveState.conflictCopyDraft")}
+              </Button>
+              {conflictActionMessage ? (
+                <span className="text-[11px] font-medium text-rose-700" role="status" aria-live="polite">
+                  {conflictActionMessage}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <div

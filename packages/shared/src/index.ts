@@ -4,6 +4,7 @@ export * from "./github-feedback";
 export * from "./image-display";
 export * from "./image-referrer";
 export * from "./memo-safety";
+export * from "./memo-conflict";
 export * from "./memo-content-style";
 export * from "./note-links";
 export * from "./notebooks";

@@ -1395,6 +1395,7 @@ export const MemoListPane = ({
                   multiSelectKeyDown={multiSelectKeyDown}
                   onOpen={() => onOpenMemo(memo.id)}
                   onRestore={() => onRestoreMemo(memo.id)}
+                  onDelete={() => onDeleteMemo(memo.id)}
                   onOpenContextMenu={(event) => handleOpenMemoContextMenu(memo, event)}
                   onOpenSelectionContextMenu={(event) => handleOpenSelectionContextMenu(memo, event)}
                   onOpenSelectionKeyboardContextMenu={(target) => handleOpenSelectionKeyboardContextMenu(memo, target)}

@@ -1,6 +1,6 @@
 {
   "name": "edgeever",
-  "version": "1.11.1",
+  "version": "1.12.5",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -20,6 +20,7 @@
     "dev:desktop": "concurrently -k -n web,desktop -c magenta,cyan \"bun run dev:web\" \"bun run --cwd apps/desktop dev\"",
     "dev:mobile": "bun --cwd apps/mobile expo start",
     "prepare:mobile:icons": "bun scripts/prepare-mobile-icons.mjs",
+    "prepare:desktop:icons": "bun scripts/prepare-desktop-icons.mjs",
     "build:android:fast": "bash scripts/build-android-local.sh fast",
     "build:android:fast:local": "bun --env-file=${EDGE_EVER_ANDROID_ENV_FILE:-$HOME/.config/edgeever/android/signing.env} run build:android:fast",
     "build:android:apk": "bash scripts/build-android-local.sh apk",
@@ -36,10 +37,10 @@
     "dev:extension": "vite --config apps/extension/vite.config.ts",
     "build:web": "vite build --config apps/web/vite.config.ts",
     "build:desktop:sidecar": "cargo build --manifest-path crates/desktop-sidecar/Cargo.toml --release",
-    "build:desktop": "EDGE_EVER_DESKTOP_BUILD=1 bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
+    "build:desktop": "EDGE_EVER_DESKTOP_BUILD=1 bun run prepare:desktop:icons && bun run build:web && bun run build:desktop:sidecar && bun run --cwd apps/desktop dist",
     "benchmark:desktop:sidecar": "bun scripts/benchmark-desktop-sidecar.mjs",
     "verify:web-performance": "bun scripts/verify-web-performance.mjs",
-    "test:release-planning": "bun test scripts/plan-native-release.test.mjs scripts/check-native-release-assets.test.mjs scripts/create-mac-update-metadata.test.mjs scripts/release.test.mjs scripts/validate-store-delivery.test.mjs scripts/store-delivery.test.mjs scripts/verify-android-apk-signature.test.mjs apps/web/src/lib/version-check.test.mjs apps/mobile/src/lib/mobile-release.test.ts",
+    "test:release-planning": "bun test scripts/plan-native-release.test.mjs scripts/check-native-release-assets.test.mjs scripts/create-mac-update-metadata.test.mjs scripts/release.test.mjs scripts/validate-store-delivery.test.mjs scripts/store-delivery.test.mjs scripts/verify-android-apk-signature.test.mjs scripts/desktop-icns.test.mjs apps/web/src/lib/version-check.test.mjs apps/mobile/src/lib/mobile-release.test.ts",
     "release": "bun scripts/release.mjs",
     "publish:stores": "bun scripts/store-delivery.mjs",
     "test:desktop:sidecar": "bun scripts/test-desktop-sidecar.mjs",

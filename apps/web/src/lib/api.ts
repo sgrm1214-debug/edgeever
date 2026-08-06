@@ -236,12 +236,14 @@ export type JsonBackupPage = MarkdownExportPage & {
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
+  details?: unknown;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, details?: unknown) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -276,7 +278,9 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    const error = body && typeof body === "object" && "error" in body ? (body as { error?: { code?: string; message?: string } }).error : undefined;
+    const error = body && typeof body === "object" && "error" in body
+      ? (body as { error?: { code?: string; message?: string; details?: unknown } }).error
+      : undefined;
     const message =
       body && typeof body === "object" && "error" in body
         ? error?.message
@@ -294,7 +298,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
       }
     }
 
-    throw new ApiRequestError(message || "Request failed", response.status, error?.code);
+    throw new ApiRequestError(message || "Request failed", response.status, error?.code, error?.details);
   }
 
   const body = await response.json() as T;

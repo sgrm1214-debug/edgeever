@@ -46,4 +46,10 @@ describe("mobile app scope", () => {
     expect(memoDetailSource).toContain('syncStatus === "conflict"');
     expect(memoDetailSource).toContain("onResolveSyncConflict");
   });
+
+  test("renders note detail body with the shared read-only TipTap viewer", () => {
+    expect(memoDetailSource).toContain('mode="viewer"');
+    expect(memoDetailSource).toContain("LocalTiptapEditor");
+    expect(memoDetailSource).not.toContain("react-native-markdown-display");
+  });
 });

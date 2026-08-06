@@ -83,6 +83,8 @@ import { useMobileLocale } from "../lib/mobile-locale";
 import { useSession } from "../lib/session";
 import {
   deleteMobileSyncQueueItem,
+  discardMobileMemoConflict,
+  getMobileConflictDraftClipboardText,
   listMobileSyncQueueItems,
   queueMobileMemoCreate,
   queueMobileMemoUpdate,
@@ -928,49 +930,68 @@ export const WorkspaceScreen = ({
     });
   };
 
-  const handleMemoSyncConflict = (memo: MemoDetail) => {
+  const handleCopyConflictDraft = useCallback(async (memo: MemoDetail) => {
+    try {
+      const text = await getMobileConflictDraftClipboardText(syncQueueScope, memo.id);
+      if (!text?.trim()) {
+        Alert.alert("复制失败", "没有可复制的本地草稿。");
+        return;
+      }
+      await Clipboard.setStringAsync(text);
+      Alert.alert("已复制", "本地草稿已复制到剪贴板。");
+    } catch (error) {
+      Alert.alert("复制失败", error instanceof Error ? error.message : "请重试");
+    }
+  }, [syncQueueScope]);
+
+  const handleAdoptCloudVersion = useCallback(async (memo: MemoDetail) => {
+    if (!client) {
+      return;
+    }
+
+    try {
+      const remoteMemo = await discardMobileMemoConflict(client, syncQueueScope, memo.id);
+      await Promise.all([
+        clearMobileMemoDraft(memo.id),
+        upsertLocalMemo(dataScope, remoteMemo),
+      ]);
+      queryClient.setQueryData(["mobile", "memo", "notebook", memo.id], { memo: remoteMemo });
+      queryClient.setQueryData(["mobile", "memo", "trash", memo.id], { memo: remoteMemo });
+      await Promise.all([
+        refreshSyncQueueItems(),
+        queryClient.invalidateQueries({ queryKey: ["mobile", "memos"] }),
+        queryClient.invalidateQueries({ queryKey: ["mobile", "search"] }),
+        queryClient.invalidateQueries({ queryKey: ["mobile", "memo", "notebook", memo.id] }),
+        queryClient.invalidateQueries({ queryKey: ["mobile", "memo", "trash", memo.id] }),
+      ]);
+    } catch (error) {
+      Alert.alert("采用云端版本失败", error instanceof Error ? error.message : "请检查网络后重试");
+    }
+  }, [client, dataScope, queryClient, refreshSyncQueueItems, syncQueueScope]);
+
+  const handleMemoSyncConflict = useCallback((memo: MemoDetail) => {
     Alert.alert(
       "同步冲突",
-      "云端笔记已在其他设备更新，本地修改没有覆盖云端。你可以查看版本历史，或放弃本地修改并使用云端版本。",
+      "云端笔记已在其他标签页、设备，或离线期间被更新，本地草稿无法直接覆盖。可先复制本地草稿，再采用云端版本后继续编辑。",
       [
         { text: "取消", style: "cancel" },
+        {
+          text: "复制本地草稿",
+          onPress: () => {
+            void handleCopyConflictDraft(memo);
+          },
+        },
         { text: "查看历史", onPress: () => setRevisionMemo(memo) },
         {
-          text: "使用云端版本",
+          text: "采用云端并重新加载",
           style: "destructive",
           onPress: () => {
-            void (async () => {
-              if (!client) {
-                return;
-              }
-
-              try {
-                const conflict = (await listMobileSyncQueueItems(syncQueueScope))
-                  .find((item) => item.memoId === memo.id && item.status === "conflict");
-                const response = await client.getMemo(memo.id);
-                if (conflict) {
-                  await deleteMobileSyncQueueItem(syncQueueScope, conflict.id);
-                }
-                await Promise.all([
-                  clearMobileMemoDraft(memo.id),
-                  upsertLocalMemo(dataScope, response.memo),
-                ]);
-                queryClient.setQueryData(["mobile", "memo", "notebook", memo.id], response);
-                queryClient.setQueryData(["mobile", "memo", "trash", memo.id], response);
-                await Promise.all([
-                  refreshSyncQueueItems(),
-                  queryClient.invalidateQueries({ queryKey: ["mobile", "memos"] }),
-                  queryClient.invalidateQueries({ queryKey: ["mobile", "search"] }),
-                ]);
-              } catch (error) {
-                Alert.alert("加载失败", error instanceof Error ? error.message : "请稍后重试");
-              }
-            })();
+            void handleAdoptCloudVersion(memo);
           },
         },
       ]
     );
-  };
+  }, [handleAdoptCloudVersion, handleCopyConflictDraft]);
 
   const handleDeleteSelection = () => {
     const permanent = memoView === "trash";
@@ -1078,6 +1099,8 @@ export const WorkspaceScreen = ({
         onRichEdit={(memo) => void openRichEditor(memo)}
         onOpenRevisions={setRevisionMemo}
         onRenameResource={handleRenameResource}
+        onAdoptCloudVersion={(memo) => void handleAdoptCloudVersion(memo)}
+        onCopyLocalDraft={(memo) => void handleCopyConflictDraft(memo)}
         onResolveSyncConflict={handleMemoSyncConflict}
         onRestore={(memo) => restoreMemoMutation.mutate(memo)}
         onShare={(memo) => shareMemoMutation.mutate(memo)}
@@ -1888,7 +1911,13 @@ const CreateMemoModal = ({
 
   const saveResourceAs = useCallback(async (target: MobileResourceTarget) => {
     if (!client) throw new Error(resolvedLocale === "en-US" ? "The resource client is unavailable." : "当前无法读取资源。");
-    await saveMobileResourceAs(client, target);
+    const result = await saveMobileResourceAs(client, target);
+    if (result.kind === "saf") {
+      Alert.alert(
+        resolvedLocale === "en-US" ? "Downloaded" : "下载成功",
+        resolvedLocale === "en-US" ? `Saved ${result.filename}` : `已保存：${result.filename}`
+      );
+    }
   }, [client, resolvedLocale]);
 
   const renameResource = useCallback(async (target: MobileResourceTarget, filename: string) => {
@@ -2434,7 +2463,13 @@ const RichEditorModal = ({
 
   const saveResourceAs = useCallback(async (target: MobileResourceTarget) => {
     if (!client) throw new Error(resolvedLocale === "en-US" ? "The resource client is unavailable." : "当前无法读取资源。");
-    await saveMobileResourceAs(client, target);
+    const result = await saveMobileResourceAs(client, target);
+    if (result.kind === "saf") {
+      Alert.alert(
+        resolvedLocale === "en-US" ? "Downloaded" : "下载成功",
+        resolvedLocale === "en-US" ? `Saved ${result.filename}` : `已保存：${result.filename}`
+      );
+    }
   }, [client, resolvedLocale]);
 
   const renameResource = useCallback(async (target: MobileResourceTarget, filename: string) => {

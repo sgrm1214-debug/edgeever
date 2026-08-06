@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SvgXml } from "react-native-svg";
 import LocalTiptapEditor from "./LocalTiptapEditor";
+import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import { getMermaidSvgAspectRatio, sanitizeMobileMermaidSvg } from "../lib/mobile-mermaid";
 
 type MermaidResult = { source: string; svg: string | null };
@@ -63,6 +64,7 @@ export const MobileMermaidProvider = ({
         <LocalTiptapEditor
           diagramsJson={diagramsJson}
           dom={{
+            ...SAFE_DOM_WEBVIEW_PROPS,
             bounces: false,
             containerStyle: styles.renderer,
             scrollEnabled: false,

@@ -63,7 +63,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { FadeInDown, FadeOutUp, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import Markdown, { type ASTNode, type RenderRules } from "react-native-markdown-display";
@@ -106,6 +106,7 @@ import { prepareUploadAsset } from "../lib/mobile-image-upload";
 import MobileWebClipCapture from "../components/MobileWebClipCapture";
 import { showEdgeEverKeyboard } from "../../modules/edgeever-keyboard";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
+import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import { MobileResourceActions } from "../components/MobileResourceActions";
 import { resolveMobileThemeStyles, useMobileTheme } from "../lib/mobile-theme";
 import { useMobileUpdate } from "../lib/mobile-update";
@@ -1943,6 +1944,7 @@ const CreateMemoModal = ({
       baseUrl={baseUrl}
       content={contentJsonRef.current}
       dom={{
+        ...SAFE_DOM_WEBVIEW_PROPS,
         bounces: false,
         contentInsetAdjustmentBehavior: "never",
         overScrollMode: "never",
@@ -2496,6 +2498,7 @@ const RichEditorModal = ({
         baseUrl={baseUrl}
         content={contentJsonRef.current}
         dom={{
+          ...SAFE_DOM_WEBVIEW_PROPS,
           bounces: false,
           contentInsetAdjustmentBehavior: "never",
           overScrollMode: "never",

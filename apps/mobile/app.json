@@ -3,7 +3,7 @@
     "name": "EdgeEver",
     "slug": "edgeever",
     "scheme": "edgeever",
-    "version": "1.12.5",
+    "version": "1.12.6",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -24,11 +24,16 @@
       "supportsTablet": false,
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "UIRequiresFullScreen": true,
+        "NSMicrophoneUsageDescription": "EdgeEver only uses the microphone if web content inside a note explicitly requests it.",
+        "NSCameraUsageDescription": "EdgeEver only uses the camera if web content inside a note explicitly requests it."
       }
     },
     "android": {
       "package": "org.edgeever.mobile",
-      "versionCode": 85,
+      "versionCode": 86,
       "adaptiveIcon": {
         "backgroundColor": "#d1fae5",
         "backgroundImage": "./assets/icon.png",

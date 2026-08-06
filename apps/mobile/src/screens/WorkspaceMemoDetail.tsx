@@ -8,6 +8,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, History, MoreHorizontal, Pencil
 import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { MobileResourceActions } from "../components/MobileResourceActions";
+import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import {
   openMobileResource,
   parseMobileResourceTargetJson,
@@ -620,6 +621,7 @@ export const MemoDetailModal = ({
                 baseUrl={baseUrl}
                 content={viewerContent}
                 dom={{
+                  ...SAFE_DOM_WEBVIEW_PROPS,
                   bounces: true,
                   contentInsetAdjustmentBehavior: "never",
                   overScrollMode: "never",

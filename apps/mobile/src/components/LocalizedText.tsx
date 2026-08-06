@@ -16,6 +16,11 @@ const translateChildren = (children: ReactNode, translate: (value: string) => st
     if (typeof child === "string") {
       return translate(child);
     }
+    // Keep numeric/boolean leaves as plain strings so Fabric's AttributedString
+    // cache never receives mixed non-text host children under Text.
+    if (typeof child === "number" || typeof child === "boolean") {
+      return String(child);
+    }
     if (isValidElement(child) && child.type === NativeText) {
       return child;
     }
@@ -25,7 +30,7 @@ const translateChildren = (children: ReactNode, translate: (value: string) => st
 export const Text = forwardRef<ComponentRef<typeof NativeText>, TextProps>(({ children, ...props }, ref) => {
   const { translate } = useMobileLocale();
   return (
-    <NativeText {...props} ref={ref}>
+    <NativeText allowFontScaling {...props} ref={ref}>
       {translateChildren(children, translate)}
     </NativeText>
   );

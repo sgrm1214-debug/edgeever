@@ -3,7 +3,7 @@ import type { MemoFilterMode } from "@edgeever/client";
 import type { MemoSummary, Notebook } from "@edgeever/shared";
 import { MOBILE_UI_METRICS, toggleMobileMemoFilterMode } from "@edgeever/shared/mobile-ui";
 import { ActivityIndicator, FlatList, Platform, RefreshControl, View } from "react-native";
-import Animated, { FadeInDown, FadeOutUp, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { Check, ChevronDown, ChevronLeft, MoreHorizontal, Plus, RotateCcw, Search, Sparkles, Tag, X } from "../components/icons";
 import { Pressable, Text, TextInput } from "../components/LocalizedText";
 import type { MobileBootstrapProgress } from "../lib/local-mirror";
@@ -400,11 +400,11 @@ const MemoCard = memo(function MemoCard({
     transform: [{ scale: pressScale.value }],
   }));
 
+  // Avoid Reanimated layout/entering transitions on list cards: concurrent
+  // Fabric text measurement on iPad (compatibility mode / wide width) crashed
+  // App Review builds with SIGSEGV inside RCTTextLayoutManager.
   return (
     <Animated.View
-      entering={FadeInDown.duration(260).springify().damping(18)}
-      exiting={FadeOutUp.duration(220)}
-      layout={LinearTransition.duration(220)}
       style={[
         styles.memoCard,
         listDensity === "compact" && styles.memoCardCompact,

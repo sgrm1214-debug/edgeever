@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
+import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import type { MobileRenderedWebPage } from "../lib/mobile-web-clip";
 
 type MobileWebClipCaptureProps = {
@@ -124,6 +125,7 @@ export default function MobileWebClipCapture({
   return (
     <View pointerEvents="none" style={styles.host}>
       <WebView
+        {...SAFE_DOM_WEBVIEW_PROPS}
         domStorageEnabled
         injectedJavaScript={CAPTURE_SCRIPT}
         javaScriptEnabled

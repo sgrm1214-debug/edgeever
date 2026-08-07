@@ -16,6 +16,12 @@ import {
   type MobileResourceTarget,
 } from "../lib/mobile-attachments";
 import { useMobileLocale } from "../lib/mobile-locale";
+import {
+  createOnceProtectedResourceFailureNotifier,
+  isProtectedResourceSource,
+  loadProtectedResourceDataUrl,
+  type ProtectedResourceLoadFailure,
+} from "../lib/mobile-protected-resources";
 import { useMobileTheme } from "../lib/mobile-theme";
 import { useSession } from "../lib/session";
 import { beginEditorStartup } from "../lib/startup-performance";
@@ -30,29 +36,6 @@ type SessionLike = { baseUrl: string; token: string } | null;
 type AuthenticatedImageSource = {
   headers?: { Authorization: string };
   uri: string;
-};
-
-const isProtectedResourceSource = (source: string, session: SessionLike) => {
-  const baseUrl = session?.baseUrl.replace(/\/+$/, "") ?? "";
-  return source.startsWith("/api/v1/resources/")
-    || Boolean(baseUrl && (source.startsWith(`${baseUrl}/api/v1/resources/`) || source.startsWith("/api/v1/resources/")));
-};
-
-/** Ensure protected resource URLs hit the blob route the API serves. */
-const normalizeProtectedResourcePath = (source: string, session: SessionLike) => {
-  const baseUrl = session?.baseUrl.replace(/\/+$/, "") ?? "";
-  let path = source;
-  if (baseUrl && path.startsWith(`${baseUrl}/`)) {
-    path = path.slice(baseUrl.length);
-  }
-  if (!path.startsWith("/api/v1/resources/")) {
-    return path;
-  }
-  if (/\/blob(?:$|[?#])/.test(path)) {
-    return path;
-  }
-  const match = path.match(/^(\/api\/v1\/resources\/[^/?#]+)/);
-  return match ? `${match[1]}/blob` : path;
 };
 
 const getAuthenticatedResourceSource = (
@@ -70,48 +53,37 @@ const getAuthenticatedResourceSource = (
   };
 };
 
-const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onerror = () => reject(reader.error ?? new Error("资源读取失败"));
-  reader.onloadend = () => {
-    if (typeof reader.result === "string") {
-      resolve(reader.result);
-      return;
-    }
-    reject(new Error("资源读取失败"));
-  };
-  reader.readAsDataURL(blob);
-});
-
 const resourceDataUrlCache = new Map<string, Promise<string | null>>();
-const loadProtectedResourceDataUrl = (
+const loadAuthenticatedImageDataUrl = (
   source: string,
   session: SessionLike,
-  getResourceBlob: ((resourceUrl: string) => Promise<Blob>) | null | undefined
+  getResourceBlob: ((resourceUrl: string) => Promise<Blob>) | null | undefined,
+  onFailure?: (failure: ProtectedResourceLoadFailure) => void
 ) => {
   if (!getResourceBlob || !isProtectedResourceSource(source, session)) {
     return Promise.resolve(null);
   }
-  const path = normalizeProtectedResourcePath(source, session);
-  const cacheKey = `${session?.token ?? ""}\n${path}`;
-  const cached = resourceDataUrlCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-  if (resourceDataUrlCache.size >= RESOURCE_DATA_URL_CACHE_LIMIT) {
-    const oldestKey = resourceDataUrlCache.keys().next().value;
-    if (oldestKey) {
-      resourceDataUrlCache.delete(oldestKey);
-    }
-  }
-  const pending = getResourceBlob(path)
-    .then(blobToDataUrl)
-    .catch(() => {
-      resourceDataUrlCache.delete(cacheKey);
-      return null;
-    });
-  resourceDataUrlCache.set(cacheKey, pending);
-  return pending;
+  return loadProtectedResourceDataUrl(source, {
+    baseUrl: session?.baseUrl ?? "",
+    cache: resourceDataUrlCache,
+    cacheLimit: RESOURCE_DATA_URL_CACHE_LIMIT,
+    getResourceBlob,
+    onFailure,
+    token: session?.token,
+  });
+};
+
+const alertProtectedImageLoadFailure = (
+  locale: "zh-CN" | "en-US",
+  failure: ProtectedResourceLoadFailure
+) => {
+  const statusLabel = failure.status != null ? String(failure.status) : locale === "en-US" ? "network error" : "网络错误";
+  Alert.alert(
+    locale === "en-US" ? "Image failed to load" : "图片加载失败",
+    locale === "en-US"
+      ? `Could not load a note image (${statusLabel}). Check the network and try again.`
+      : `笔记中的图片未能加载（${statusLabel}）。请检查网络后重试。`
+  );
 };
 
 type CachedSvgResource = {
@@ -165,6 +137,7 @@ const AuthenticatedResourceImage = ({
   fitAspect = false,
   href,
   loadResourceBlob,
+  onLoadFailure,
   resizeMode = "cover",
   session,
   style,
@@ -173,28 +146,45 @@ const AuthenticatedResourceImage = ({
   fitAspect?: boolean;
   href: string;
   loadResourceBlob?: ((resourceUrl: string) => Promise<Blob>) | null;
+  onLoadFailure?: (failure: ProtectedResourceLoadFailure) => void;
   resizeMode?: "center" | "contain" | "cover" | "repeat" | "stretch";
   session: SessionLike;
   style: StyleProp<ImageStyle>;
 }) => {
   const headerSource = useMemo(() => getAuthenticatedResourceSource(href, session), [href, session]);
-  const [displaySource, setDisplaySource] = useState<AuthenticatedImageSource>(headerSource);
+  const isProtected = isProtectedResourceSource(href, session);
+  // Protected images: wait for the data URL so we never paint a failed first frame.
+  const [displaySource, setDisplaySource] = useState<AuthenticatedImageSource | null>(
+    isProtected ? null : headerSource
+  );
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const [svgXml, setSvgXml] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const svgRequestStartedRef = useRef(false);
   const svgSourceKeyRef = useRef("");
-  const svgSourceKey = getAuthenticatedSvgCacheKey(displaySource);
+  const svgSourceKey = displaySource ? getAuthenticatedSvgCacheKey(displaySource) : "";
   const imageStyle = fitAspect ? [style, { aspectRatio, height: undefined, width: "100%" as const }] : style;
 
   useEffect(() => {
     let cancelled = false;
     setSvgXml(null);
     setAspectRatio(16 / 9);
+    setLoadFailed(false);
     svgRequestStartedRef.current = false;
-    setDisplaySource(headerSource);
+    setDisplaySource(isProtectedResourceSource(href, session) ? null : headerSource);
 
-    void loadProtectedResourceDataUrl(href, session, loadResourceBlob).then((dataUrl) => {
-      if (cancelled || !dataUrl) {
+    if (!isProtectedResourceSource(href, session)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadAuthenticatedImageDataUrl(href, session, loadResourceBlob, onLoadFailure).then((dataUrl) => {
+      if (cancelled) {
+        return;
+      }
+      if (!dataUrl) {
+        setLoadFailed(true);
         return;
       }
       setDisplaySource({ uri: dataUrl });
@@ -203,7 +193,7 @@ const AuthenticatedResourceImage = ({
     return () => {
       cancelled = true;
     };
-  }, [headerSource, href, loadResourceBlob, session]);
+  }, [headerSource, href, loadResourceBlob, onLoadFailure, session]);
 
   useEffect(() => {
     svgSourceKeyRef.current = svgSourceKey;
@@ -228,7 +218,7 @@ const AuthenticatedResourceImage = ({
   }, [svgSourceKey]);
 
   const loadSvgFallback = () => {
-    if (svgRequestStartedRef.current) {
+    if (svgRequestStartedRef.current || !displaySource) {
       return;
     }
     svgRequestStartedRef.current = true;
@@ -248,6 +238,18 @@ const AuthenticatedResourceImage = ({
     return (
       <View accessibilityLabel={alt || undefined} accessible={Boolean(alt)} style={imageStyle}>
         <SvgXml height="100%" width="100%" xml={svgXml} />
+      </View>
+    );
+  }
+
+  if (!displaySource || loadFailed) {
+    return (
+      <View
+        accessibilityLabel={alt || undefined}
+        accessible={Boolean(alt)}
+        style={[imageStyle, resourceImageStyles.previewPlaceholder]}
+      >
+        {loadFailed ? null : <ActivityIndicator color="#94a3b8" />}
       </View>
     );
   }
@@ -304,8 +306,10 @@ export const MemoDetailModal = ({
   onOpenRevisions,
   onRenameResource,
   onResolveSyncConflict,
+  onRetrySync,
   onRestore,
   onShare,
+  syncError,
   syncStatus,
   visible,
 }: {
@@ -325,8 +329,10 @@ export const MemoDetailModal = ({
   onOpenRevisions: (memo: MemoDetail) => void;
   onRenameResource: (memo: MemoDetail, target: MobileResourceTarget, filename: string) => Promise<void>;
   onResolveSyncConflict: (memo: MemoDetail) => void;
+  onRetrySync: () => void;
   onRestore: (memo: MemoDetail) => void;
   onShare: (memo: MemoDetail) => void;
+  syncError: string | null;
   syncStatus: MobileSyncQueueItem["status"] | null;
   visible: boolean;
 }) => {
@@ -344,6 +350,14 @@ export const MemoDetailModal = ({
   const [viewerReady, setViewerReady] = useState(false);
   const viewerRef = useRef<LocalTiptapEditorRef>(null);
   const resourceDataUrlCacheRef = useRef(new Map<string, Promise<string | null>>());
+  // One user-visible notice per opened memo (multi-image notes should not spam alerts).
+  const imageLoadFailureNotifier = useMemo(
+    () =>
+      createOnceProtectedResourceFailureNotifier((failure) => {
+        alertProtectedImageLoadFailure(resolvedLocale, failure);
+      }),
+    [memo?.id, resolvedLocale]
+  );
 
   const baseUrl = session?.baseUrl.replace(/\/+$/, "") ?? "";
   const viewerContent = useMemo<TiptapDoc>(
@@ -378,15 +392,15 @@ export const MemoDetailModal = ({
     if (!client) {
       return Promise.resolve(null);
     }
-    const path = normalizeProtectedResourcePath(source, session);
-    const cached = resourceDataUrlCacheRef.current.get(path);
-    if (cached) {
-      return cached;
-    }
-    const pending = client.getResourceBlob(path).then(blobToDataUrl).catch(() => null);
-    resourceDataUrlCacheRef.current.set(path, pending);
-    return pending;
-  }, [client, session]);
+    return loadProtectedResourceDataUrl(source, {
+      baseUrl: session?.baseUrl ?? "",
+      cache: resourceDataUrlCacheRef.current,
+      cacheLimit: RESOURCE_DATA_URL_CACHE_LIMIT,
+      getResourceBlob: client.getResourceBlob,
+      onFailure: imageLoadFailureNotifier,
+      token: session?.token,
+    });
+  }, [client, imageLoadFailureNotifier, session?.baseUrl, session?.token]);
 
   const onResourcePress = useCallback(async (targetJson: string) => {
     const target = parseMobileResourceTargetJson(targetJson);
@@ -421,6 +435,26 @@ export const MemoDetailModal = ({
         : syncStatus === "pending"
           ? "待同步"
           : "已同步";
+  const syncStatusInteractive = syncStatus === "conflict" || syncStatus === "error" || syncStatus === "pending";
+  const handleSyncStatusPress = () => {
+    if (!memo) {
+      return;
+    }
+    if (syncStatus === "conflict") {
+      onResolveSyncConflict(memo);
+      return;
+    }
+    if (syncStatus === "error" || syncStatus === "pending") {
+      const detail = syncError?.trim()
+        || (syncStatus === "pending"
+          ? "本地改动还在等待上传到云端。可立即重试同步。"
+          : "本地改动未能上传到云端。可立即重试同步。");
+      Alert.alert(syncStatusLabel, detail, [
+        { text: "取消", style: "cancel" },
+        { text: "立即同步", onPress: onRetrySync },
+      ]);
+    }
+  };
   const editFabBottom = Math.max(
     safeAreaInsets.bottom,
     Platform.OS === "android" ? ANDROID_SYSTEM_NAVIGATION_FALLBACK : 0
@@ -465,15 +499,26 @@ export const MemoDetailModal = ({
           </Pressable>
           <View style={styles.detailHeaderActions}>
             <Pressable
-              accessibilityHint={syncStatus === "conflict" ? "查看并处理同步冲突" : undefined}
+              accessibilityHint={
+                syncStatus === "conflict"
+                  ? "查看并处理同步冲突"
+                  : syncStatusInteractive
+                    ? "查看同步状态并立即重试"
+                    : undefined
+              }
               accessibilityLabel={syncStatusLabel}
-              accessibilityRole={syncStatus === "conflict" ? "button" : "text"}
-              disabled={syncStatus !== "conflict" || !memo}
-              onPress={() => memo && onResolveSyncConflict(memo)}
+              accessibilityRole={syncStatusInteractive ? "button" : "text"}
+              disabled={!syncStatusInteractive || !memo}
+              onPress={handleSyncStatusPress}
             >
               <Text
                 numberOfLines={1}
-                style={[styles.detailSyncStatus, syncStatus === "conflict" && styles.detailSyncStatusConflict]}
+                style={[
+                  styles.detailSyncStatus,
+                  syncStatus === "conflict" && styles.detailSyncStatusConflict,
+                  syncStatus === "error" && styles.detailSyncStatusError,
+                  syncStatus === "pending" && styles.detailSyncStatusPending,
+                ]}
               >
                 {syncStatusLabel}
               </Text>
@@ -522,6 +567,7 @@ export const MemoDetailModal = ({
             <Text style={styles.conflictBannerText}>
               云端笔记已在其他标签页、设备，或离线期间被更新。可先复制本地草稿，再采用云端版本后继续编辑。
             </Text>
+            {syncError ? <Text style={styles.conflictBannerText}>{syncError}</Text> : null}
             <View style={styles.conflictBannerActions}>
               <Pressable
                 accessibilityLabel="采用云端并重新加载"
@@ -547,6 +593,36 @@ export const MemoDetailModal = ({
               >
                 <Text style={styles.conflictBannerSecondaryButtonText}>更多</Text>
               </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {(syncStatus === "error" || syncStatus === "pending") && memo ? (
+          <View style={syncStatus === "error" ? styles.syncErrorBanner : styles.syncPendingBanner}>
+            <Text style={syncStatus === "error" ? styles.syncErrorBannerText : styles.syncPendingBannerText}>
+              {syncStatus === "error"
+                ? (syncError?.trim() || "本地改动未能上传到云端。内容仍保存在本机，可立即重试。")
+                : (syncError?.trim() || "本地改动待上传。下拉刷新或点此可立即同步。")}
+            </Text>
+            <View style={styles.conflictBannerActions}>
+              <Pressable
+                accessibilityLabel="立即同步"
+                accessibilityRole="button"
+                onPress={onRetrySync}
+                style={syncStatus === "error" ? styles.syncErrorBannerPrimaryButton : styles.syncPendingBannerPrimaryButton}
+              >
+                <Text style={styles.conflictBannerPrimaryButtonText}>立即同步</Text>
+              </Pressable>
+              {syncStatus === "error" ? (
+                <Pressable
+                  accessibilityLabel="复制本地草稿"
+                  accessibilityRole="button"
+                  onPress={() => onCopyLocalDraft(memo)}
+                  style={styles.syncErrorBannerSecondaryButton}
+                >
+                  <Text style={styles.syncErrorBannerSecondaryButtonText}>复制本地草稿</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -699,6 +775,7 @@ export const MemoDetailModal = ({
                 alt={imagePreview.alt}
                 href={imagePreview.source}
                 loadResourceBlob={client?.getResourceBlob}
+                onLoadFailure={imageLoadFailureNotifier}
                 resizeMode="contain"
                 session={session}
                 style={resourceImageStyles.previewImage}
@@ -783,5 +860,9 @@ const resourceImageStyles = StyleSheet.create({
   previewImage: {
     height: "100%",
     width: "100%",
+  },
+  previewPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

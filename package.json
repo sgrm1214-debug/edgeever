@@ -52,6 +52,7 @@
     "preview:site": "bun --cwd apps/site preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "typecheck:mobile": "bun run --cwd apps/mobile typecheck",
+    "typecheck:ios-editor": "bun run --cwd apps/ios/EditorSource typecheck",
     "test:restore-deleted-notebook": "bun scripts/test-restore-deleted-notebook.mjs",
     "test:mcp": "bun scripts/test-mcp.mjs",
     "db:migrate:local": "EDGE_EVER_INSTANCE= bun scripts/run-wrangler.mjs d1 migrations apply DB --local",

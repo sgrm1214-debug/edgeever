@@ -12,7 +12,7 @@ This document defines the standard operating specifications and conventions for 
    - Fork `tianma-if/edgeever` to the target GitHub account.
 
 2. **Enable Workflow**
-   - In the **Actions** tab of the Forked repository, enable the **Update deployed EdgeEver** automatic update workflow.
+   - In the **Actions** tab of the Forked repository, enable the **Update deployed EdgeEver** automatic update workflow (required on public forks: scheduled workflows are disabled by default).
 
 3. **Cloudflare Project Import**
    - Log into the Cloudflare **Workers & Pages** console and import the Fork repository.
@@ -42,4 +42,7 @@ This document defines the standard operating specifications and conventions for 
      - Verify login API using the configured `EDGE_EVER_AUTH_USERNAME` (default `admin`) and `EDGE_EVER_AUTH_PASSWORD`.
 
 7. **Verify Upstream Update Channel**
-   - Manually trigger **Update deployed EdgeEver** once in the Fork's **Actions** tab to confirm upstream synchronization and automated builds work properly.
+   - Manually trigger **Update deployed EdgeEver** once in the Fork's **Actions** tab.
+   - Open the job **Summary** and confirm it reports the upstream target (stable Release or edge `main`) and either an update publish or an explicit *already aligned* result.
+   - Confirm Cloudflare **Deployments** builds the published `main` commit when a push occurred.
+   - Do not rely on GitHub **Sync fork** for routine upgrades; use this workflow as the deploy-mirror path.

@@ -29,8 +29,9 @@ export const useMobileAutomaticSync = ({
   const [syncQueueItems, setSyncQueueItems] = useState<MobileSyncQueueItem[]>([]);
   const runningRef = useRef(false);
   const requestedRef = useRef(false);
+  const requestedForceRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const runRef = useRef<() => Promise<void>>(async () => undefined);
+  const runRef = useRef<(force?: boolean) => Promise<void>>(async () => undefined);
 
   const refreshSyncQueueItems = useCallback(async () => {
     const items = await listMobileSyncQueueItems(syncQueueScope);
@@ -47,13 +48,14 @@ export const useMobileAutomaticSync = ({
     ]);
   }, [queryClient]);
 
-  const runAutomaticSync = useCallback(async () => {
+  const runAutomaticSync = useCallback(async (force = false) => {
     if (!client) {
       return;
     }
 
     if (runningRef.current) {
       requestedRef.current = true;
+      requestedForceRef.current = requestedForceRef.current || force;
       return;
     }
 
@@ -63,29 +65,41 @@ export const useMobileAutomaticSync = ({
     }
 
     runningRef.current = true;
+    let shouldForce = force;
 
     try {
-      const summary = await loadMobileSyncQueueSummary(syncQueueScope);
-      if (summary.pending + summary.error + summary.syncing === 0) {
-        return;
-      }
+      for (;;) {
+        const summary = await loadMobileSyncQueueSummary(syncQueueScope);
+        const retryable = summary.pending + summary.error + summary.syncing;
 
-      await syncMobileQueuedChanges(client, syncQueueScope, {
-        onSynced: async (memo, item) => {
-          if (item.kind === "memo.create") {
-            await replaceLocalMemoId(dataScope, item.memoId, memo);
-            onMemoIdRemapped(item.memoId, memo);
-          } else {
-            await upsertLocalMemo(dataScope, memo);
+        if (retryable > 0) {
+          await syncMobileQueuedChanges(client, syncQueueScope, {
+            force: shouldForce,
+            onSynced: async (memo, item) => {
+              if (item.kind === "memo.create") {
+                await replaceLocalMemoId(dataScope, item.memoId, memo);
+                onMemoIdRemapped(item.memoId, memo);
+              } else {
+                await upsertLocalMemo(dataScope, memo);
+              }
+              queryClient.setQueryData(["mobile", "memo", "notebook", memo.id], { memo });
+              queryClient.setQueryData(["mobile", "memo", "trash", memo.id], { memo });
+            },
+          });
+
+          const nextSummary = await loadMobileSyncQueueSummary(syncQueueScope);
+          if (nextSummary.total === 0) {
+            await invalidateSyncedWorkspace();
           }
-          queryClient.setQueryData(["mobile", "memo", "notebook", memo.id], { memo });
-          queryClient.setQueryData(["mobile", "memo", "trash", memo.id], { memo });
-        },
-      });
+        }
 
-      const nextSummary = await loadMobileSyncQueueSummary(syncQueueScope);
-      if (nextSummary.total === 0) {
-        await invalidateSyncedWorkspace();
+        if (!requestedRef.current) {
+          break;
+        }
+
+        shouldForce = requestedForceRef.current;
+        requestedRef.current = false;
+        requestedForceRef.current = false;
       }
     } catch {
       // Queue metadata remains durable; the scheduled pass resumes it.
@@ -94,8 +108,10 @@ export const useMobileAutomaticSync = ({
       runningRef.current = false;
 
       if (requestedRef.current) {
+        const nextForce = requestedForceRef.current;
         requestedRef.current = false;
-        void runRef.current();
+        requestedForceRef.current = false;
+        void runRef.current(nextForce);
         return;
       }
 
@@ -103,11 +119,15 @@ export const useMobileAutomaticSync = ({
       if (retryDelay !== null) {
         retryTimerRef.current = setTimeout(() => {
           retryTimerRef.current = null;
-          void runRef.current();
+          void runRef.current(false);
         }, retryDelay);
       }
     }
   }, [client, dataScope, invalidateSyncedWorkspace, onMemoIdRemapped, queryClient, refreshSyncQueueItems, syncQueueScope]);
+
+  const runForcedSync = useCallback(async () => {
+    await runAutomaticSync(true);
+  }, [runAutomaticSync]);
 
   runRef.current = runAutomaticSync;
 
@@ -116,11 +136,12 @@ export const useMobileAutomaticSync = ({
       return;
     }
 
-    void runRef.current();
+    void runRef.current(false);
 
     const subscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
       if (nextState === "active") {
-        void runRef.current();
+        // Returning to the app should immediately retry any deferred failures.
+        void runRef.current(true);
       }
     });
 
@@ -136,6 +157,7 @@ export const useMobileAutomaticSync = ({
   return {
     refreshSyncQueueItems,
     runAutomaticSync,
+    runForcedSync,
     syncQueueItems,
   };
 };

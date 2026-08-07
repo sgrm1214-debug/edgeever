@@ -1,18 +1,28 @@
 name: Update deployed EdgeEver
 
+# Keeps a deployment Fork aligned with upstream EdgeEver.
+# 99.99% of forks never change application code — they only need a stable
+# mirror of the official release (or edge main) plus a Cloudflare rebuild.
+# Customized forks still merge when needed and fail closed on conflicts.
+
 on:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
     inputs:
       channel:
-        description: Update channel for this run
+        description: Update channel for this run (stable = latest formal Release, edge = upstream main)
         required: true
         default: stable
         type: choice
         options:
           - stable
           - edge
+      force_redeploy:
+        description: When already on the target version, push an empty commit so Cloudflare Builds runs again
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -32,6 +42,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       UPSTREAM_REPOSITORY: tianma-if/edgeever
       UPDATE_CHANNEL: ${{ inputs.channel || vars.EDGE_EVER_UPDATE_CHANNEL || 'stable' }}
+      FORCE_REDEPLOY: ${{ inputs.force_redeploy || false }}
 
     steps:
       - name: Checkout deployed repository
@@ -73,50 +84,162 @@ jobs:
           esac
 
           target_commit="$(git rev-parse "${target_ref}^{commit}")"
-          if git merge-base --is-ancestor "${target_commit}" HEAD; then
-            update_required=false
-            bootstrap_required=false
-          else
-            update_required=true
-            bootstrap_required=false
+          head_commit="$(git rev-parse HEAD)"
+          target_version="$(git show "${target_commit}:package.json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+          if [ -z "${target_version}" ]; then
+            target_version="unknown"
+          fi
+          head_version="$(python3 -c 'import json; print(json.load(open("package.json")).get("version",""))' 2>/dev/null || true)"
+          if [ -z "${head_version}" ]; then
+            head_version="unknown"
+          fi
 
-            # Cloudflare Deploy buttons create a fresh repository with a
-            # synthetic `source repo import` commit instead of preserving the
-            # upstream Git history. The first update must connect that import
-            # history to upstream before normal merges can work. Only do this
-            # automatically when the downstream repository contains no changes
-            # beyond the updater workflow itself; otherwise fail closed and ask
-            # the owner to resolve the customized repository manually.
-            root_commit="$(git rev-list --max-parents=0 HEAD)"
-            root_subject="$(git show -s --format=%s "${root_commit}")"
-            non_workflow_changes="$(git diff --name-only "${root_commit}" HEAD -- ':!.github/workflows/sync-edgeever-upstream.yml')"
-            if [ "${root_subject}" = "source repo import" ] && [ -z "${non_workflow_changes}" ]; then
-              bootstrap_required=true
+          # Product content diff ignores only this updater workflow so deploy
+          # forks that only differ in history or the updater file can reset.
+          content_diff="$(git diff --name-only "${target_commit}" HEAD -- ':!.github/workflows/sync-edgeever-upstream.yml' || true)"
+
+          root_commit="$(git rev-list --max-parents=0 HEAD | head -n 1)"
+          root_subject="$(git show -s --format=%s "${root_commit}")"
+          non_workflow_changes="$(git diff --name-only "${root_commit}" HEAD -- ':!.github/workflows/sync-edgeever-upstream.yml' || true)"
+          bootstrap_import=false
+          if [ "${root_subject}" = "source repo import" ] && [ -z "${non_workflow_changes}" ]; then
+            bootstrap_import=true
+          fi
+
+          update_required=false
+          align_mode=none
+          reason=""
+          republish_only=false
+
+          if [ -z "${content_diff}" ]; then
+            update_required=false
+            align_mode=none
+            if [ "${head_commit}" = "${target_commit}" ]; then
+              reason=already_on_target
+            else
+              reason=content_matches_target
+            fi
+            if [ "${FORCE_REDEPLOY}" = "true" ]; then
+              republish_only=true
+            fi
+          elif git merge-base --is-ancestor HEAD "${target_commit}" 2>/dev/null; then
+            # Strictly behind upstream target — safe fast-forward via reset.
+            update_required=true
+            align_mode=reset
+            reason=behind_target
+          elif [ "${bootstrap_import}" = "true" ]; then
+            # Cloudflare import history with no app customizations.
+            update_required=true
+            align_mode=reset
+            reason=bootstrap_import
+          elif git merge-base --is-ancestor "${target_commit}" HEAD 2>/dev/null; then
+            # Target is already in history but working tree still differs
+            # (should be rare). Prefer merge to preserve any local tip commits.
+            update_required=true
+            align_mode=merge
+            reason=ahead_with_content_drift
+          else
+            # Diverged or unrelated history with real content differences.
+            # Deploy-only forks (only the updater workflow ever changed) reset;
+            # customized forks merge and fail closed on conflicts.
+            if [ -z "${non_workflow_changes}" ] || [ "${bootstrap_import}" = "true" ]; then
+              update_required=true
+              align_mode=reset
+              reason=deploy_mirror_reset
+            else
+              update_required=true
+              align_mode=merge
+              reason=customized_merge
             fi
           fi
 
           {
             echo "target_ref=${target_ref}"
             echo "target_commit=${target_commit}"
+            echo "target_version=${target_version}"
+            echo "head_commit=${head_commit}"
+            echo "head_version=${head_version}"
             echo "update_required=${update_required}"
-            echo "bootstrap_required=${bootstrap_required}"
+            echo "align_mode=${align_mode}"
+            echo "reason=${reason}"
+            echo "republish_only=${republish_only}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Merge upstream update
+          {
+            echo "### EdgeEver upstream sync"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Channel | \`${UPDATE_CHANNEL}\` |"
+            echo "| Upstream target | \`${target_ref}\` (\`${target_commit:0:12}\`, v${target_version}) |"
+            echo "| Fork main before | \`${head_commit:0:12}\` (v${head_version}) |"
+            echo "| Decision | \`${reason}\` / align=\`${align_mode}\` / update=\`${update_required}\` / republish=\`${republish_only}\` |"
+            echo ""
+            case "${reason}" in
+              already_on_target)
+                echo "**Already on upstream target.** No git update is needed. This is success for a read-only deployment fork — not a skipped failure."
+                ;;
+              content_matches_target)
+                echo "**Application content already matches upstream target** (history tip may differ). No git update is needed for deployment."
+                ;;
+              behind_target)
+                echo "**Fork is behind upstream.** Aligning with a hard reset to the target commit (deploy-mirror path)."
+                ;;
+              bootstrap_import)
+                echo "**Cloudflare import history detected.** Resetting onto upstream target so the fork becomes a normal EdgeEver history."
+                ;;
+              deploy_mirror_reset)
+                echo "**Deploy-only fork with diverged history.** Resetting onto upstream target."
+                ;;
+              customized_merge|ahead_with_content_drift)
+                echo "**Local application changes detected.** Merging upstream target and leaving production unchanged if verification fails."
+                ;;
+              *)
+                echo "Decision reason: \`${reason}\`."
+                ;;
+            esac
+            if [ "${republish_only}" = "true" ]; then
+              echo ""
+              echo "\`force_redeploy\` is set: will push an empty commit so Cloudflare Workers Builds runs again."
+            fi
+            echo ""
+            echo "Prefer this workflow over GitHub **Sync fork**. Sync fork tracks upstream \`main\` history and can make the next stable run look like a no-op even when you expected a merge step to run."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "channel=${UPDATE_CHANNEL} target=${target_ref}@${target_commit:0:12} (v${target_version}) head=${head_commit:0:12} (v${head_version}) reason=${reason} align=${align_mode} update=${update_required} republish=${republish_only}"
+
+      - name: Align to upstream
         if: steps.upstream.outputs.update_required == 'true'
         env:
           TARGET_COMMIT: ${{ steps.upstream.outputs.target_commit }}
           TARGET_REF: ${{ steps.upstream.outputs.target_ref }}
-          BOOTSTRAP_REQUIRED: ${{ steps.upstream.outputs.bootstrap_required }}
+          ALIGN_MODE: ${{ steps.upstream.outputs.align_mode }}
+          REASON: ${{ steps.upstream.outputs.reason }}
         run: |
+          set -euo pipefail
           git config user.name "edgeever-updater[bot]"
           git config user.email "edgeever-updater[bot]@users.noreply.github.com"
-          if [ "${BOOTSTRAP_REQUIRED}" = "true" ]; then
-            git merge --allow-unrelated-histories --no-edit -X theirs \
-              -m "chore: initialize EdgeEver history from ${TARGET_REF}" "${TARGET_COMMIT}"
-          else
-            git merge --no-edit -m "chore: update EdgeEver from ${TARGET_REF}" "${TARGET_COMMIT}"
-          fi
+
+          case "${ALIGN_MODE}" in
+            reset)
+              git reset --hard "${TARGET_COMMIT}"
+              git clean -fd
+              echo "Reset main onto ${TARGET_REF} (${TARGET_COMMIT:0:12}) because ${REASON}."
+              ;;
+            merge)
+              if ! git merge --no-edit -m "chore: update EdgeEver from ${TARGET_REF}" "${TARGET_COMMIT}"; then
+                git merge --abort || true
+                echo "Merge from ${TARGET_REF} conflicted with local application changes." >&2
+                echo "Resolve the customized fork manually, or reset main to upstream if you do not need local code changes." >&2
+                exit 1
+              fi
+              echo "Merged ${TARGET_REF} (${TARGET_COMMIT:0:12}) because ${REASON}."
+              ;;
+            *)
+              echo "Unsupported align mode: ${ALIGN_MODE}" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Set up Bun
         if: steps.upstream.outputs.update_required == 'true'
@@ -127,6 +250,7 @@ jobs:
       - name: Verify update
         if: steps.upstream.outputs.update_required == 'true'
         run: |
+          set -euo pipefail
           bun install --frozen-lockfile
           bun run db:migrate:local
           bun test
@@ -134,8 +258,87 @@ jobs:
           bun run build
 
       - name: Publish update
-        if: steps.upstream.outputs.update_required == 'true'
-        run: git push origin HEAD:main
+        id: publish
+        if: steps.upstream.outputs.update_required == 'true' || steps.upstream.outputs.republish_only == 'true'
+        env:
+          TARGET_REF: ${{ steps.upstream.outputs.target_ref }}
+          UPDATE_REQUIRED: ${{ steps.upstream.outputs.update_required }}
+          REPUBLISH_ONLY: ${{ steps.upstream.outputs.republish_only }}
+          ALIGN_MODE: ${{ steps.upstream.outputs.align_mode }}
+        run: |
+          set -euo pipefail
+          git config user.name "edgeever-updater[bot]"
+          git config user.email "edgeever-updater[bot]@users.noreply.github.com"
+
+          if [ "${REPUBLISH_ONLY}" = "true" ] && [ "${UPDATE_REQUIRED}" != "true" ]; then
+            git commit --allow-empty -m "chore: retrigger EdgeEver deployment for ${TARGET_REF}"
+            git push origin HEAD:main
+            echo "mode=empty_commit" >> "${GITHUB_OUTPUT}"
+            echo "Pushed empty commit to retrigger Cloudflare Workers Builds."
+            exit 0
+          fi
+
+          if [ "${ALIGN_MODE}" = "reset" ]; then
+            # Deploy mirrors may rewrite short import/divergent history.
+            git push --force-with-lease origin HEAD:main
+            echo "mode=force_with_lease" >> "${GITHUB_OUTPUT}"
+            echo "Published reset main for ${TARGET_REF}."
+          else
+            git push origin HEAD:main
+            echo "mode=push" >> "${GITHUB_OUTPUT}"
+            echo "Published merge for ${TARGET_REF}."
+          fi
+
+      - name: Trigger Cloudflare Deploy Hook
+        if: steps.publish.outcome == 'success'
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_HOOK_URL:-}" ]; then
+            echo "No EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL secret — relying on Cloudflare Git integration for main pushes."
+            echo "Optional: add a Workers/Pages Deploy Hook secret if pushes do not start builds." >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          curl -fsS -X POST "${DEPLOY_HOOK_URL}" >/dev/null
+          echo "Triggered Cloudflare Deploy Hook."
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Triggered optional Cloudflare Deploy Hook after publish." >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Final status
+        if: always() && steps.upstream.outcome == 'success'
+        env:
+          TARGET_REF: ${{ steps.upstream.outputs.target_ref }}
+          TARGET_COMMIT: ${{ steps.upstream.outputs.target_commit }}
+          TARGET_VERSION: ${{ steps.upstream.outputs.target_version }}
+          UPDATE_REQUIRED: ${{ steps.upstream.outputs.update_required }}
+          REPUBLISH_ONLY: ${{ steps.upstream.outputs.republish_only }}
+          REASON: ${{ steps.upstream.outputs.reason }}
+          ALIGN_MODE: ${{ steps.upstream.outputs.align_mode }}
+        run: |
+          set -euo pipefail
+          final_commit="$(git rev-parse HEAD)"
+          {
+            echo ""
+            echo "### Result"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Final main | \`${final_commit:0:12}\` |"
+            echo "| Target | \`${TARGET_REF}\` / v${TARGET_VERSION} |"
+            if [ "${UPDATE_REQUIRED}" = "true" ]; then
+              echo "| Outcome | Updated and published (\`${ALIGN_MODE}\`) |"
+              echo ""
+              echo "Cloudflare Workers Builds should deploy this commit from \`main\`. Confirm the Deployment commit SHA matches \`${final_commit:0:12}\`."
+            elif [ "${REPUBLISH_ONLY}" = "true" ]; then
+              echo "| Outcome | Republished empty commit for redeploy |"
+            else
+              echo "| Outcome | Already aligned (\`${REASON}\`) — no push |"
+              echo ""
+              echo "If the live site still shows an older version while Git is current, open Cloudflare **Deployments** and retry the latest build, or re-run this workflow with **force_redeploy**."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "final=${final_commit:0:12} reason=${REASON} update=${UPDATE_REQUIRED} republish=${REPUBLISH_ONLY}"
 
       - name: Report an update failure
         if: failure()
@@ -143,10 +346,11 @@ jobs:
         env:
           TARGET_REF: ${{ steps.upstream.outputs.target_ref || 'unknown' }}
         run: |
+          set -euo pipefail
           title="EdgeEver automatic update requires attention"
           existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
           if [ -z "${existing}" ]; then
             gh issue create \
               --title "${title}" \
-              --body "The daily update from \`${UPSTREAM_REPOSITORY}\` (${TARGET_REF}) could not be merged or verified. The current production deployment was left unchanged. Open the failed **Update deployed EdgeEver** workflow run for details, then retry it manually after resolving the problem."
+              --body "The daily update from \`${UPSTREAM_REPOSITORY}\` (${TARGET_REF}) could not be aligned or verified. The current production deployment was left unchanged. Open the failed **Update deployed EdgeEver** workflow run for details (see the job summary for channel/target/reason), then retry it manually after resolving the problem."
           fi

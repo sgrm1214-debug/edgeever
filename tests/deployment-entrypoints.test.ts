@@ -165,12 +165,19 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(workflow).toContain("EDGE_EVER_UPDATE_CHANNEL");
     expect(workflow).toContain("stable)");
     expect(workflow).toContain("edge)");
+    expect(workflow).toContain("force_redeploy");
     expect(workflow).toContain("bun run db:migrate:local");
     expect(workflow).toContain("bun test");
     expect(workflow).toContain("git push origin HEAD:main");
+    expect(workflow).toContain("git push --force-with-lease origin HEAD:main");
+    expect(workflow).toContain("git reset --hard");
     expect(workflow).toContain("source repo import");
-    expect(workflow).toContain("--allow-unrelated-histories");
+    expect(workflow).toContain("content_matches_target");
+    expect(workflow).toContain("already_on_target");
+    expect(workflow).toContain("GITHUB_STEP_SUMMARY");
+    expect(workflow).toContain("EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL");
     expect(workflow).toContain("non_workflow_changes");
+    expect(workflow).toContain("Prefer this workflow over GitHub **Sync fork**");
   });
 
   test("public deployment documentation exposes only Fork and Agent paths", () => {

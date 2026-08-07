@@ -85,16 +85,23 @@ Deploy command: bun run deploy:cloudflare-builds
 
 ## 高级配置：更新通道设置
 
-部署默认自动跟随官方正式 Releases（稳定版）。若希望跟进最前沿的 `main` 分支（Edge 预览版），可前往 Cloudflare 的 **Settings** -> **Variables and Bindings** 添加如下环境变量：
+默认情况下，**Update deployed EdgeEver** 跟随官方正式 Release（稳定版）。若希望跟随上游 `main`（Edge 预览版），请在 Fork 仓库设置 **GitHub Repository Variable**（**Settings → Secrets and variables → Actions → Variables**）：
 
 ```text
 EDGE_EVER_UPDATE_CHANNEL=edge
 ```
+
+手动运行工作流时也可以直接选择 `stable` / `edge`。
 
 ---
 
 ## 常见问题与排错
 
 - **首次构建失败**：请检查 Cloudflare 控制台中 Worker 的 **Deployments** 构建日志，确认 D1 Binding 为 `DB`、数据库名称严格为 `edgeever`、R2 Binding 为 `RESOURCES`，并确认 Workers Builds API Token 具有 D1 读取和编辑权限。如有意使用其他 D1 数据库，请添加构建变量 `EDGE_EVER_D1_DATABASE_ID` 并填入其 UUID。
-- **无法同步上游更新**：打开您 Fork 仓库的 **Actions** 标签页，确认 **Update deployed EdgeEver** 工作流是否处于已启用状态，并尝试手动点击 **Run workflow**。
+- **无法同步上游更新**：
+  1. 打开 Fork 的 **Actions**，启用 **Update deployed EdgeEver**（公共 Fork 上定时任务默认关闭）。
+  2. 手动 **Run workflow** 一次，打开 Job **Summary**：会写明上游目标版本，以及本次是「已更新」「已对齐」还是失败。
+  3. 若绿色成功且 Summary 为 *Already on upstream target* / 已对齐，表示 Git 已是该通道目标版本，不是静默故障。若网站仍旧，请对照 Cloudflare **Deployments** 的 commit SHA，或勾选 **force_redeploy** 再跑一次。
+  4. 日常升级请优先用本工作流，而不是 GitHub **Sync fork**。
+- **Git 已 push 但网站没变**：确认 Workers Builds 是否针对新的 `main` SHA 构建。可选：添加仓库 Secret `EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL`，让工作流在 publish 后调用 Deploy Hook。
 - **需要重置或手动恢复部署**：请参阅 [手动部署指南](manual-deploy.zh-CN.md)。

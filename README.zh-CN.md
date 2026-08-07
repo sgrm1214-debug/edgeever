@@ -108,7 +108,7 @@ EdgeEver 采用纯 Serverless 架构，完全运行在 Cloudflare 免费配额�
 
 原生客户端提供更流畅、稳定的使用体验，以及更完善的系统级集成，并支持本地存储与离线编辑。恢复联网后，内容会自动增量同步，适合高频使用和弱网场景。
 
-Android App 现已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载签名 APK。iOS App 已提交，目前仍在 App Store 审核中。
+Android App 现已上架 [Google Play](https://play.google.com/store/apps/details?id=org.edgeever.mobile)，也可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载签名 APK。iOS 客户端为 `apps/ios` 下的原生 SwiftUI 应用，已提交 App Store，目前仍在审核中。
 
 macOS App 可从 [GitHub Releases](https://github.com/tianma-if/edgeever/releases) 下载。Windows 版本正在处理代码签名证书问题，解决后即可发布。
 
@@ -134,7 +134,8 @@ macOS App 可从 [GitHub Releases](https://github.com/tianma-if/edgeever/release
 - 官网：Astro 静态站点，位于 `apps/site`，可独立构建并部署到 Cloudflare Pages。
 - 前端：Vite、React、React Router、TanStack Query，UI 基于 Tailwind CSS、shadcn/ui、Radix UI。
 - 编辑器：TipTap / ProseMirror，支持 Markdown；PWA 使用 vite-plugin-pwa、Workbox、Dexie。
-- 移动 App：Expo + React Native，采用 SQLite 本地存储与增量同步。
+- Android App：`apps/mobile` 中的 Expo + React Native，采用 SQLite 本地存储与增量同步。
+- iOS App：`apps/ios` 中的原生 SwiftUI（iOS 17+），内置 TipTap EditorBundle、GRDB 本地镜像/outbox，界面与 Android 壳层对齐。
 - 原生桌面端：Electron + Rust sidecar，兼顾跨平台一致体验与高性能本地数据服务；基于 SQLite 支持离线编辑、联网后增量同步与本地备份。
 - 网页裁剪：Manifest V3、Mozilla Readability、Turndown，支持 Chrome、Microsoft Edge 与 Firefox。
 - 后端：Cloudflare Workers、Hono、Zod、D1、R2，提供 REST API、OpenAPI 与 Remote MCP。
@@ -178,7 +179,8 @@ bun run build
 apps/web          Vite + React 前端、PWA、离线草稿与同步队列
 apps/extension    Chrome/Edge/Firefox Manifest V3 网页裁剪插件
 apps/api          Cloudflare Worker + Hono API、OpenAPI、MCP endpoint
-apps/mobile       Expo + React Native 移动端 App
+apps/mobile       Expo + React Native Android App
+apps/ios          原生 SwiftUI iOS App（TipTap EditorBundle、GRDB）
 apps/desktop      Electron 桌面端壳层、preload bridge 与原生打包配置
 apps/site         Astro 官方网站，可独立部署
 packages/client   Web 与移动端共享的 API Client
@@ -188,7 +190,7 @@ crates/desktop-sidecar
 scripts           Wrangler 封装、密码 hash、CLI、MCP stdio bridge、Evernote ENEX 导入
 migrations        D1 数据库迁移
 docs              OpenAPI schema、架构、迁移与部署文档
-.github/workflows Web、移动端、桌面端打包、部署与 Release 的 CI
+.github/workflows Web、移动端、iOS、桌面端打包、部署与 Release 的 CI
 wrangler.toml     Cloudflare Workers、Assets、D1、R2 配置
 ```
 

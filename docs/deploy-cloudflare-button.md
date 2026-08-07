@@ -85,16 +85,23 @@ The deploy command automatically looks up the D1 UUID by the `edgeever` database
 
 ## Advanced Configuration: Update Channels
 
-By default, deployments follow official stable Release tags. If you want to follow the latest `main` branch (Edge preview builds), add the following environment variable in Cloudflare under **Settings** -> **Variables and Bindings**:
+By default, **Update deployed EdgeEver** follows official stable Release tags. To follow upstream `main` (Edge preview builds), set this **GitHub Repository Variable** on the Fork (**Settings → Secrets and variables → Actions → Variables**):
 
 ```text
 EDGE_EVER_UPDATE_CHANNEL=edge
 ```
+
+You can also pick `stable` / `edge` when manually running the workflow.
 
 ---
 
 ## Troubleshooting
 
 - **Initial build failed**: Check the Worker **Deployments** log. Verify that the D1 binding is `DB`, its database is named exactly `edgeever`, the R2 binding is `RESOURCES`, and the Workers Builds API token has D1 read/edit permission. For an intentionally different D1 database, add the build variable `EDGE_EVER_D1_DATABASE_ID` with its UUID.
-- **Updates not syncing**: Navigate to your Fork's **Actions** tab, verify **Update deployed EdgeEver** is enabled, and try clicking **Run workflow** manually.
+- **Updates not syncing**:
+  1. On the Fork **Actions** tab, enable **Update deployed EdgeEver** (scheduled workflows are off by default on public forks).
+  2. Run it once with **Run workflow**. Open the job **Summary**: it states the upstream target version and whether the fork was updated, already aligned, or failed.
+  3. A green run with *Already on upstream target* means Git already matches that channel — not a broken skip. If the live site is still old, check Cloudflare **Deployments** commit SHA, or re-run with **force_redeploy**.
+  4. Prefer this workflow over GitHub **Sync fork** for day-to-day upgrades.
+- **Push succeeded but site unchanged**: Confirm Workers Builds ran for the new `main` SHA. Optionally add repository secret `EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL` so the workflow can call a Deploy Hook after publish.
 - **Reset or Manual Recovery**: See the [Cloudflare Manual Deployment Guide](manual-deploy.md).

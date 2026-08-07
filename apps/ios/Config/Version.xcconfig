@@ -1,0 +1,4 @@
+// Bump MARKETING_VERSION with monorepo release X.Y.Z when shipping App Store builds.
+// CURRENT_PROJECT_VERSION must increase for every store upload (TestFlight / App Store).
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1

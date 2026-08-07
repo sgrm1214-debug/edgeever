@@ -34,3 +34,6 @@ credentials.json
 
 # Local HyperFrames video workspace.
 /videos/edgeever-promo/
+
+# Local App Review crash dumps / image self-test screenshots.
+.tmp-app-review-crashes/

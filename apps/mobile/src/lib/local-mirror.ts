@@ -163,6 +163,22 @@ export const deleteLocalMemo = async (scope: string, memoId: string) => {
   await db.runAsync(`DELETE FROM mobile_memos WHERE scope = ? AND id = ?`, scope, memoId);
 };
 
+/** Soft-delete a mirror row so list views hide it without waiting for a remote sync. */
+export const softDeleteLocalMemo = async (scope: string, memoId: string) => {
+  const memo = await getLocalMemo(scope, memoId);
+  if (!memo || memo.isDeleted) {
+    return false;
+  }
+  const now = new Date().toISOString();
+  await upsertLocalMemo(scope, {
+    ...memo,
+    isDeleted: true,
+    deletedAt: now,
+    updatedAt: now,
+  });
+  return true;
+};
+
 export const replaceLocalMemoId = async (scope: string, temporaryId: string, memo: MemoDetail) => {
   const db = await getDatabase();
   await db.withExclusiveTransactionAsync(async (tx) => {

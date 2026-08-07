@@ -1,0 +1,131 @@
+name: EdgeEver
+options:
+  bundleIdPrefix: org.edgeever
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  developmentLanguage: en
+  xcodeVersion: "16.0"
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    from: 7.0.0
+  Pow:
+    url: https://github.com/EmergeTools/Pow
+    from: 1.0.0
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 1.0.0
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+targets:
+  EdgeEver:
+    type: application
+    platform: iOS
+    sources:
+      - path: EdgeEver
+        excludes:
+          - Resources/Info.plist
+    resources:
+      - path: EdgeEver/Resources/Assets.xcassets
+      - path: EdgeEver/Resources/Localizable.xcstrings
+      - path: EdgeEver/Resources/PrivacyInfo.xcprivacy
+      - path: EdgeEver/Resources/EditorBundle
+    dependencies:
+      - package: GRDB
+        product: GRDB
+      - package: Pow
+        product: Pow
+      - target: ShareExtension
+    embed:
+      - path: ShareExtension.appex
+        buildPhase: embedAppExtensions
+        codeSign: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.edgeever.mobile
+        PRODUCT_NAME: EdgeEver
+        INFOPLIST_FILE: EdgeEver/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: EdgeEver/Resources/EdgeEver.entitlements
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_TESTABILITY: true
+    info:
+      path: EdgeEver/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: EdgeEver
+        CFBundleName: EdgeEver
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+        CFBundleURLTypes:
+          - CFBundleURLName: org.edgeever.mobile
+            CFBundleURLSchemes:
+              - edgeever
+        ITSAppUsesNonExemptEncryption: false
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+          NSAllowsArbitraryLoadsInWebContent: true
+        NSPhotoLibraryUsageDescription: EdgeEver needs photo library access to insert images into notes.
+        NSCameraUsageDescription: EdgeEver only uses the camera if content inside a note explicitly requests it.
+        NSMicrophoneUsageDescription: EdgeEver only uses the microphone if content inside a note explicitly requests it.
+    entitlements:
+      path: EdgeEver/Resources/EdgeEver.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.org.edgeever.mobile
+    scheme:
+      testTargets:
+        - EdgeEverTests
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.edgeever.mobile.share-extension
+        PRODUCT_NAME: ShareExtension
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: ShareExtension/ShareExtension.entitlements
+        GENERATE_INFOPLIST_FILE: false
+        SKIP_INSTALL: true
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.org.edgeever.mobile
+  EdgeEverTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/EdgeEverTests
+    dependencies:
+      - target: EdgeEver
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.edgeever.mobile.tests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/EdgeEver.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/EdgeEver"
+        BUNDLE_LOADER: "$(TEST_HOST)"

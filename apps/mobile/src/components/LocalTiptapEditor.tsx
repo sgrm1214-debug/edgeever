@@ -34,6 +34,7 @@ import {
   isMobileImageUploadPlaceholderSource,
   stripMobileImageUploadPlaceholders,
 } from "../lib/mobile-image-upload-placeholder";
+import { toProtectedResourceLoadPath } from "../lib/mobile-protected-resources";
 
 type EditorDoc = TiptapDoc;
 
@@ -887,11 +888,10 @@ const normalizeImageSources = (doc: EditorDoc, baseUrl: string) => {
 const getPersistableEditorDoc = (doc: EditorDoc, baseUrl: string) =>
   normalizeImageSources(stripMobileImageUploadPlaceholders(doc), baseUrl);
 
-const normalizeProtectedResourceSource = (source: string, baseUrl: string) => {
-  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
-  const relativeSource = source.startsWith(`${normalizedBaseUrl}/`) ? source.slice(normalizedBaseUrl.length) : source;
-  return relativeSource.startsWith("/api/v1/resources/") ? relativeSource : null;
-};
+const normalizeProtectedResourceSource = (source: string, baseUrl: string) =>
+  // Shared normalizer adds `/blob` so editor loads hit the API blob route even when
+  // note content stores the bare `/api/v1/resources/:id` form.
+  toProtectedResourceLoadPath(source, baseUrl);
 
 const resolveUrl = (source: string, baseUrl: string) => {
   if (!source.startsWith("/")) {
@@ -1312,6 +1312,14 @@ const createProtectedImageExtension = (
             placeholder.removeAttribute("role");
             placeholder.removeAttribute("aria-live");
           };
+          // Keep the upload preview until decode succeeds — never swap to a
+          // 401-prone bare resource URL that flashes a broken icon.
+          preload.onerror = () => {
+            if (activeRequestId !== requestId) {
+              return;
+            }
+            overlay.textContent = locale === "en-US" ? "Image failed to load" : "图片加载失败";
+          };
           preload.src = displaySource;
         };
 
@@ -1328,13 +1336,18 @@ const createProtectedImageExtension = (
 
           void loadResource(protectedSource)
             .then((dataUrl) => {
-              if (activeRequestId === requestId) {
-                revealLoadedImage(dataUrl ?? resolveUrl(source, baseUrl), attributes, activeRequestId);
+              if (activeRequestId !== requestId) {
+                return;
               }
+              if (dataUrl) {
+                revealLoadedImage(dataUrl, attributes, activeRequestId);
+                return;
+              }
+              overlay.textContent = locale === "en-US" ? "Image failed to load" : "图片加载失败";
             })
             .catch(() => {
               if (activeRequestId === requestId) {
-                revealLoadedImage(resolveUrl(source, baseUrl), attributes, activeRequestId);
+                overlay.textContent = locale === "en-US" ? "Image failed to load" : "图片加载失败";
               }
             });
         };
@@ -1376,13 +1389,28 @@ const createProtectedImageExtension = (
       }
 
       const wrapper = document.createElement("figure");
-      wrapper.className = "edgeever-image-node";
+      wrapper.className = "edgeever-image-node is-loading";
       wrapper.contentEditable = "false";
+      wrapper.setAttribute("role", "img");
+      wrapper.setAttribute("aria-busy", "true");
+
+      const loading = document.createElement("div");
+      loading.className = "edgeever-image-loading";
+      loading.setAttribute("aria-hidden", "true");
+      const spinner = document.createElement("span");
+      spinner.className = "edgeever-image-upload-spinner";
+      loading.append(spinner);
+
       const image = document.createElement("img");
+      // Never leave <img> without a successful src — empty/401 src paints the
+      // browser broken-image glyph before the authenticated data URL arrives.
+      image.hidden = true;
+
       const actionButton = document.createElement("button");
       actionButton.type = "button";
       actionButton.className = "edgeever-image-actions";
       actionButton.contentEditable = "false";
+      actionButton.hidden = true;
       actionButton.setAttribute("aria-label", locale === "en-US" ? "Image actions" : "图片操作");
       actionButton.textContent = "⋯";
       bindImageActionButton(wrapper, actionButton);
@@ -1398,23 +1426,47 @@ const createProtectedImageExtension = (
           emitImagePreview(wrapper);
         });
       }
-      wrapper.append(image, actionButton, sizeControls.dom);
+      wrapper.append(loading, image, actionButton, sizeControls.dom);
       const imageType = node.type;
       let requestId = 0;
+      let renderedSource = "";
+      let displayReady = false;
 
       const clearRequest = () => {
         requestId += 1;
       };
 
-      const renderNode = (attributes: Record<string, unknown>) => {
-        clearRequest();
-        sizeControls.setActiveWidth(applyImageWidth(wrapper, attributes));
-        const source = String(attributes.src ?? "");
+      const setImagePhase = (phase: "loading" | "ready" | "failed") => {
+        wrapper.classList.toggle("is-loading", phase === "loading");
+        wrapper.classList.toggle("is-failed", phase === "failed");
+        wrapper.setAttribute("aria-busy", phase === "loading" ? "true" : "false");
+        loading.hidden = phase === "ready";
+        image.hidden = phase !== "ready";
+        actionButton.hidden = phase !== "ready";
+        if (phase === "failed") {
+          loading.replaceChildren();
+          const label = document.createElement("span");
+          label.className = "edgeever-image-loading-label";
+          label.textContent = locale === "en-US" ? "Image failed to load" : "图片加载失败";
+          loading.append(label);
+          loading.hidden = false;
+        } else if (phase === "loading") {
+          loading.replaceChildren(spinner);
+        }
+      };
+
+      const applyImageMeta = (attributes: Record<string, unknown>) => {
         const alt = String(attributes.alt ?? "");
         const title = String(attributes.title ?? "");
+        const source = String(attributes.src ?? "");
         wrapper.dataset.resourceHref = source;
         wrapper.dataset.resourceFilename = alt || title;
         image.alt = alt;
+        if (alt) {
+          wrapper.setAttribute("aria-label", alt);
+        } else {
+          wrapper.removeAttribute("aria-label");
+        }
         const referrerPolicy = getImageReferrerPolicy(source);
         if (referrerPolicy) {
           image.referrerPolicy = referrerPolicy;
@@ -1426,24 +1478,73 @@ const createProtectedImageExtension = (
         } else {
           image.removeAttribute("title");
         }
+      };
 
-        const protectedSource = normalizeProtectedResourceSource(source, baseUrl);
-        if (!protectedSource) {
-          image.src = resolveUrl(source, baseUrl);
+      /** Decode off-DOM first so the visible <img> never paints a broken glyph. */
+      const revealDisplaySource = (displaySource: string, activeRequestId: number) => {
+        const preload = document.createElement("img");
+        const preloadReferrerPolicy = getImageReferrerPolicy(displaySource);
+        if (preloadReferrerPolicy) {
+          preload.referrerPolicy = preloadReferrerPolicy;
+        }
+        preload.onload = () => {
+          if (activeRequestId !== requestId) {
+            return;
+          }
+          image.src = displaySource;
+          displayReady = true;
+          setImagePhase("ready");
+        };
+        preload.onerror = () => {
+          if (activeRequestId !== requestId) {
+            return;
+          }
+          displayReady = false;
+          image.removeAttribute("src");
+          setImagePhase("failed");
+        };
+        preload.src = displaySource;
+      };
+
+      const renderNode = (attributes: Record<string, unknown>) => {
+        sizeControls.setActiveWidth(applyImageWidth(wrapper, attributes));
+        applyImageMeta(attributes);
+        const source = String(attributes.src ?? "");
+
+        // Width / alt-only updates must not tear down a successfully loaded image.
+        if (source === renderedSource && displayReady && image.getAttribute("src")) {
           return;
         }
 
+        clearRequest();
+        renderedSource = source;
+        displayReady = false;
         image.removeAttribute("src");
+        setImagePhase("loading");
+
         const activeRequestId = requestId;
+        const protectedSource = normalizeProtectedResourceSource(source, baseUrl);
+        if (!protectedSource) {
+          revealDisplaySource(resolveUrl(source, baseUrl), activeRequestId);
+          return;
+        }
+
         void loadResource(protectedSource)
           .then((dataUrl) => {
-            if (activeRequestId === requestId) {
-              image.src = dataUrl ?? resolveUrl(source, baseUrl);
+            if (activeRequestId !== requestId) {
+              return;
             }
+            // Do not fall back to an unauthenticated absolute URL — that 401s and
+            // briefly shows the broken-image icon before any error UI.
+            if (!dataUrl) {
+              setImagePhase("failed");
+              return;
+            }
+            revealDisplaySource(dataUrl, activeRequestId);
           })
           .catch(() => {
             if (activeRequestId === requestId) {
-              image.src = resolveUrl(source, baseUrl);
+              setImagePhase("failed");
             }
           });
       };
@@ -1461,7 +1562,7 @@ const createProtectedImageExtension = (
         },
         selectNode: () => {
           wrapper.classList.add("is-selected");
-          sizeControls.setVisible(!readOnly);
+          sizeControls.setVisible(!readOnly && displayReady);
         },
         deselectNode: () => {
           wrapper.classList.remove("is-selected");
@@ -1799,9 +1900,15 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-image-upload-preview { display: block; width: 100%; max-height: 360px; margin: 0 !important; object-fit: contain; border-radius: 10px; }
   .edgeever-image-upload-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 10px; background: rgba(15, 23, 42, 0.38); color: #fff; font-size: 14px; font-weight: 600; text-shadow: 0 1px 2px rgba(15, 23, 42, 0.45); }
   .edgeever-image-node, .edgeever-image-upload-result { position: relative; display: block; max-width: 100%; margin: 14px auto; line-height: 0; }
-  .edgeever-image-node > img, .edgeever-image-upload-result > img { width: 100%; margin: 0; }
+  .edgeever-image-node.is-loading, .edgeever-image-node.is-failed { min-height: 120px; overflow: hidden; border-radius: 10px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; }
+  .edgeever-image-loading { display: flex; min-height: 120px; align-items: center; justify-content: center; gap: 10px; padding: 16px; color: ${theme === "dark" ? "#94a3b8" : "#64748b"}; font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .edgeever-image-loading[hidden] { display: none; }
+  .edgeever-image-loading-label { text-align: center; }
+  .edgeever-image-node > img, .edgeever-image-upload-result > img { display: block; width: 100%; margin: 0; border-radius: 10px; }
+  .edgeever-image-node > img[hidden] { display: none; }
   .edgeever-image-node.is-selected > img, .edgeever-image-upload-result.is-selected > img { outline: 2px solid #0f766e; outline-offset: 3px; }
   .edgeever-image-actions { position: absolute; right: 8px; bottom: 8px; z-index: 3; display: inline-flex; width: 42px; height: 42px; appearance: none; align-items: center; justify-content: center; border: 1px solid ${theme === "dark" ? "#475569" : "#cbd5e1"}; border-radius: 999px; background: ${theme === "dark" ? "rgba(15, 23, 42, 0.9)" : "rgba(255, 255, 255, 0.92)"}; color: ${theme === "dark" ? "#e2e8f0" : "#334155"}; font-size: 24px; font-weight: 700; line-height: 1; box-shadow: 0 3px 12px rgba(15, 23, 42, 0.2); }
+  .edgeever-image-actions[hidden] { display: none; }
   .edgeever-image-size-controls { position: absolute; top: 8px; left: 50%; z-index: 2; display: flex; width: max-content; max-width: calc(100vw - 40px); align-items: center; gap: 3px; transform: translateX(-50%); border: 1px solid ${theme === "dark" ? "#475569" : "#bbf7d0"}; border-radius: 9px; padding: 4px; background: ${theme === "dark" ? "rgba(15, 23, 42, 0.96)" : "rgba(255, 255, 255, 0.96)"}; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2); line-height: 1.15; }
   .edgeever-image-size-controls[hidden] { display: none; }
   .edgeever-image-size-button { display: inline-flex; min-width: 52px; min-height: 38px; appearance: none; align-items: center; justify-content: center; border: 0; border-radius: 7px; padding: 4px 7px; background: transparent; color: ${theme === "dark" ? "#cbd5e1" : "#475569"}; font: inherit; font-size: 12px; font-weight: 700; }

@@ -147,6 +147,97 @@ export const deleteMobileSyncQueueItem = async (scope: string, id: string) => {
   return loadMobileSyncQueueSummary(scope);
 };
 
+/** Drop a successful online update so a stale outbox entry cannot re-apply older content. */
+export const clearMobileMemoUpdateQueueItem = async (scope: string, memoId: string) => {
+  await removeMobileSyncQueueItem(scope, getMobileMemoUpdateQueueId(memoId));
+  return loadMobileSyncQueueSummary(scope);
+};
+
+/**
+ * Clear backoff so the next sync pass retries immediately.
+ * Conflict items stay conflicted until the user resolves them.
+ */
+export const armMobileSyncQueueImmediateRetry = async (scope: string) => {
+  const now = new Date().toISOString();
+  await mutateMobileSyncQueue(scope, (items) =>
+    items.map((item) => {
+      if (item.status === "conflict") {
+        return item;
+      }
+      if (item.status === "pending" || item.status === "error" || item.status === "syncing") {
+        return {
+          ...item,
+          status: "pending",
+          nextAttemptAt: null,
+          updatedAt: now,
+        };
+      }
+      return item;
+    })
+  );
+  return loadMobileSyncQueueSummary(scope);
+};
+
+export const markMobileMemoUpdateConflict = async (scope: string, memoId: string, lastError: string) => {
+  const id = getMobileMemoUpdateQueueId(memoId);
+  const now = new Date().toISOString();
+  await mutateMobileSyncQueue(scope, (items) =>
+    items.map((item) => {
+      if (item.id !== id && !(item.kind === "memo.create" && item.memoId === memoId)) {
+        return item;
+      }
+      return {
+        ...item,
+        status: "conflict",
+        lastError,
+        nextAttemptAt: null,
+        updatedAt: now,
+      };
+    })
+  );
+  return loadMobileSyncQueueSummary(scope);
+};
+
+export const markMobileMemoUpdateError = async (scope: string, memoId: string, lastError: string) => {
+  const id = getMobileMemoUpdateQueueId(memoId);
+  const now = new Date().toISOString();
+  await mutateMobileSyncQueue(scope, (items) =>
+    items.map((item) => {
+      if (item.id !== id && !(item.kind === "memo.create" && item.memoId === memoId)) {
+        return item;
+      }
+      return {
+        ...item,
+        status: "error",
+        lastError,
+        nextAttemptAt: null,
+        updatedAt: now,
+      };
+    })
+  );
+  return loadMobileSyncQueueSummary(scope);
+};
+
+export const getMobileSyncErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Sync failed";
+
+export const isMobileSyncConflictError = (error: unknown) => {
+  if (!(error instanceof ApiRequestError)) {
+    return false;
+  }
+  if (error.status === 409) {
+    return true;
+  }
+  const code = (error.code ?? "").toLowerCase();
+  return code.includes("conflict");
+};
+
+/** Drop every create/update queue entry for a memo (used when discarding local-only notes). */
+export const cancelMobileMemoQueueItems = async (scope: string, memoId: string) => {
+  await mutateMobileSyncQueue(scope, (items) => items.filter((item) => item.memoId !== memoId));
+  return loadMobileSyncQueueSummary(scope);
+};
+
 /**
  * Discard a single note's conflicted local queue item and return the
  * authoritative cloud memo so the UI can rehydrate cleanly.
@@ -207,14 +298,19 @@ export const syncMobileQueuedChanges = async (
   client: ReturnType<typeof createEdgeEverClient>,
   scope: string,
   options: {
+    force?: boolean;
     onSynced?: (memo: MemoDetail, item: MobileSyncQueueItem) => void | Promise<void>;
   } = {}
 ): Promise<MobileSyncRunResult> => {
+  if (options.force) {
+    await armMobileSyncQueueImmediateRetry(scope);
+  }
+
   const result = createEmptySyncRunResult();
   const now = new Date();
   const items = (await readMobileSyncQueue(scope))
     .filter((item) => item.status === "pending" || item.status === "error" || item.status === "syncing")
-    .filter((item) => !item.nextAttemptAt || new Date(item.nextAttemptAt) <= now)
+    .filter((item) => options.force || !item.nextAttemptAt || new Date(item.nextAttemptAt) <= now)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   for (const item of items) {
@@ -232,20 +328,31 @@ export const syncMobileQueuedChanges = async (
       if (removed) {
         await options.onSynced?.(memo, item);
       } else if (item.kind === "memo.create") {
-        await promoteQueuedMemoCreate(scope, item.id, itemVersion, memo);
-        await options.onSynced?.(memo, item);
+        const promoted = await promoteQueuedMemoCreate(scope, item.id, itemVersion, memo);
+        if (promoted) {
+          await options.onSynced?.(memo, item);
+        } else {
+          // User cancelled the offline create while it was in flight. The local
+          // row is already gone; soft-delete the remote orphan so it does not
+          // reappear on the next mirror sync.
+          try {
+            await client.deleteMemo(memo.id, { permanent: false });
+          } catch {
+            // Best-effort cleanup; a later full sync can still reconcile.
+          }
+        }
       } else {
         await rebaseQueuedMemoUpdate(scope, item.id, itemVersion, memo);
       }
       result.synced += 1;
     } catch (error) {
-      const status = isRevisionConflict(error) ? "conflict" : "error";
+      const status = isMobileSyncConflictError(error) ? "conflict" : "error";
       const attemptCount = item.attemptCount + 1;
 
       await updateMobileSyncQueueItem(scope, item.id, {
         status,
         attemptCount,
-        lastError: getErrorMessage(error),
+        lastError: getMobileSyncErrorMessage(error),
         nextAttemptAt: status === "error" ? getSyncRetryAt(attemptCount) : null,
         updatedAt: new Date().toISOString(),
       }, itemVersion);
@@ -263,10 +370,15 @@ export const syncMobileQueuedChanges = async (
 
 export const shouldQueueMobileMemoSaveError = (error: unknown) => {
   if (error instanceof ApiRequestError) {
-    return error.status === 408 || error.status === 429 || error.status >= 500;
+    return error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500;
   }
 
-  return error instanceof TypeError || getErrorMessage(error).toLowerCase().includes("network");
+  const message = getMobileSyncErrorMessage(error).toLowerCase();
+  return error instanceof TypeError
+    || message.includes("network")
+    || message.includes("failed to fetch")
+    || message.includes("network request failed")
+    || message.includes("timeout");
 };
 
 const syncMobileQueueItem = async (client: ReturnType<typeof createEdgeEverClient>, item: MobileSyncQueueItem) => {
@@ -385,14 +497,21 @@ const rebaseQueuedMemoUpdate = async (scope: string, id: string, syncedVersion: 
   );
 };
 
-const promoteQueuedMemoCreate = async (scope: string, id: string, syncedVersion: number, memo: MemoDetail) => {
+const promoteQueuedMemoCreate = async (
+  scope: string,
+  id: string,
+  syncedVersion: number,
+  memo: MemoDetail
+): Promise<boolean> => {
+  let promoted = false;
   await mutateMobileSyncQueue(scope, (items) => {
     const current = items.find((item) => item.id === id);
     if (!current || current.kind !== "memo.create" || current.version <= syncedVersion) {
       return items;
     }
+    promoted = true;
     const now = new Date().toISOString();
-    const promoted: MobileMemoUpdateSyncQueueItem = {
+    const promotedItem: MobileMemoUpdateSyncQueueItem = {
       id: getMobileMemoUpdateQueueId(memo.id),
       kind: "memo.update",
       memoId: memo.id,
@@ -413,8 +532,9 @@ const promoteQueuedMemoCreate = async (scope: string, id: string, syncedVersion:
       updatedAt: now,
       version: 1,
     };
-    return [promoted, ...items.filter((item) => item.id !== id && item.id !== promoted.id)];
+    return [promotedItem, ...items.filter((item) => item.id !== id && item.id !== promotedItem.id)];
   });
+  return promoted;
 };
 
 const mutateMobileSyncQueue = async (scope: string, mutate: (items: MobileSyncQueueItem[]) => MobileSyncQueueItem[]) => {
@@ -441,6 +561,4 @@ const isMobileSyncQueueItem = (value: unknown): value is MobileSyncQueueItem => 
   return (item.kind === "memo.update" || item.kind === "memo.create") && typeof item.id === "string" && typeof item.memoId === "string" && Boolean(item.payload);
 };
 
-const isRevisionConflict = (error: unknown) => error instanceof ApiRequestError && error.code === "revision_conflict";
 
-const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "Sync failed");

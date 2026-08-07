@@ -6,7 +6,8 @@ edgeever/
 │   ├── web/              Vite + React product UI, PWA, offline drafts, sync queue
 │   ├── extension/        Chrome/Edge/Firefox Manifest V3 web clipper
 │   ├── api/              Cloudflare Worker + Hono API, OpenAPI, MCP endpoint
-│   ├── mobile/           Expo + React Native mobile app
+│   ├── mobile/           Expo + React Native Android app (production path)
+│   ├── ios/              Native SwiftUI iOS app (TipTap EditorBundle, GRDB mirror/outbox; see docs/ios-swift-rewrite.md)
 │   ├── desktop/          Electron shell, preload bridge, and packaging
 │   └── site/             Astro official website
 ├── packages/

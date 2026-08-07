@@ -12,7 +12,7 @@
    - Fork `tianma-if/edgeever` 到目标 GitHub 账户。
 
 2. **启用工作流**
-   - 在 Fork 仓库的 **Actions** 标签页中，启用 **Update deployed EdgeEver** 自动更新工作流。
+   - 在 Fork 仓库的 **Actions** 标签页中，启用 **Update deployed EdgeEver** 自动更新工作流（公共 Fork 上定时任务默认关闭，必须手动启用）。
 
 3. **Cloudflare 项目导入**
    - 登录 Cloudflare **Workers & Pages** 控制台，导入该 Fork 仓库。
@@ -42,4 +42,7 @@
      - 使用之前配置的 `EDGE_EVER_AUTH_USERNAME`（默认 `admin`）和 `EDGE_EVER_AUTH_PASSWORD` 验证登录 API 是否可用。
 
 7. **验证上游更新通道**
-   - 在 Fork 的 **Actions** 中手动运行一次 **Update deployed EdgeEver**，确认上游同步与构建更新流程畅通。
+   - 在 Fork 的 **Actions** 中手动运行一次 **Update deployed EdgeEver**。
+   - 打开 Job **Summary**，确认已显示上游目标（stable Release 或 edge `main`），以及「已发布更新」或明确的「已对齐」结果。
+   - 若发生了 push，确认 Cloudflare **Deployments** 构建的是对应的 `main` commit。
+   - 日常升级不要依赖 GitHub **Sync fork**，请以本工作流作为部署镜像同步路径。

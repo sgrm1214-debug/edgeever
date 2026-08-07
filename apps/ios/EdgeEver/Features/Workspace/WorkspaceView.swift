@@ -1,0 +1,658 @@
+import SwiftUI
+import Pow
+
+/// Wrapper so `fullScreenCover(item:)` can present edit for a memo id.
+struct EditingMemoRoute: Identifiable, Hashable {
+    let id: String
+}
+
+struct WorkspaceView: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var store = WorkspaceStore()
+    @State private var path = NavigationPath()
+    @State private var showSettings = false
+    @State private var showNewNote = false
+    @State private var showMoveSheet = false
+    @State private var conflictItem: OutboxItem?
+    @State private var createTapCount = 0
+    @State private var syncPulse = 0
+    /// Edit is presented from the workspace root — more reliable than cover on a pushed detail page.
+    @State private var editingMemo: EditingMemoRoute?
+
+    /// Android SafeAreaView edges=[top,left,right] — bottom chrome owns home indicator.
+    private var showsBottomChrome: Bool {
+        store.selectionMode || path.isEmpty
+    }
+
+    /// Solid chrome height = nav band + home-indicator. Create button sits *inside* the band
+    /// (below the top separator), so list padding must not invent a second empty strip.
+    private var bottomChromeHeight: CGFloat {
+        MobileUIMetrics.bottomChromeHeight
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            // List pads the solid white chrome height; create button lives inside the tab bar under the separator.
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    syncBanner
+                    listHeader
+                    NotesListView(store: store, path: $path)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .background(AppTheme.background)
+                .padding(.bottom, showsBottomChrome ? bottomChromeHeight : 0)
+
+                if store.selectionMode {
+                    selectionBar
+                } else if path.isEmpty {
+                    bottomNav
+                }
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .navigationBarHidden(true)
+            .navigationDestination(for: String.self) { memoId in
+                MemoDetailView(memoId: memoId) { editId in
+                    // 1) Show edit cover over detail.
+                    editingMemo = EditingMemoRoute(id: editId)
+                    // 2) After the cover is up, silently drop detail so the underlay is the list.
+                    //    Dismissing edit then reveals list only — no detail flash.
+                    DispatchQueue.main.async {
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            path = NavigationPath()
+                        }
+                    }
+                }
+            }
+            // Android Me is full-screen (activeView === "settings"), not a half-sheet Form.
+            .fullScreenCover(isPresented: $showSettings) {
+                SettingsView()
+            }
+            // Android CreateMemoModal is fullScreen — not a half sheet / Form.
+            .fullScreenCover(isPresented: $showNewNote) {
+                MemoEditView(mode: .create(notebookId: store.selectedNotebookId ?? store.notebooks.first?.id ?? ""))
+                    .onDisappear { store.reload(env: env) }
+            }
+            // Edit cover on workspace root; underlay is list (detail popped once cover is presented).
+            .fullScreenCover(item: $editingMemo) { route in
+                MemoEditView(
+                    mode: .edit(memoId: route.id),
+                    onLeaveToList: {
+                        // Pop detail first (no animation) while cover still covers the stack,
+                        // then dismiss the cover so the user only ever sees the list.
+                        var t = Transaction()
+                        t.disablesAnimations = true
+                        withTransaction(t) {
+                            path = NavigationPath()
+                        }
+                        editingMemo = nil
+                        store.reload(env: env)
+                    }
+                )
+            }
+            .sheet(isPresented: $store.showNotebookPicker) {
+                NotebookPickerSheet(store: store)
+            }
+            .sheet(isPresented: $store.showActions) {
+                ListActionsSheet(store: store)
+            }
+            .sheet(isPresented: $showMoveSheet) {
+                MoveNotebookSheet(notebooks: store.notebooks) { notebookId in
+                    Task {
+                        await store.moveSelection(env: env, notebookId: notebookId)
+                        showMoveSheet = false
+                    }
+                }
+            }
+            .sheet(item: $conflictItem) { item in
+                ConflictResolutionView(item: item) {
+                    conflictItem = nil
+                    store.reload(env: env)
+                }
+            }
+            .onAppear {
+                store.reload(env: env)
+                consumeShare()
+                detectConflicts()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .edgeEverShareReceived)) { _ in
+                consumeShare()
+            }
+            .onChange(of: env.session.session?.token) { _, _ in
+                store.reload(env: env)
+            }
+            .onChange(of: env.isSyncing) { wasSyncing, isSyncing in
+                // Refresh list when a background/bootstrap sync finishes.
+                if wasSyncing && !isSyncing {
+                    store.reload(env: env)
+                    syncPulse += 1
+                }
+            }
+            .refreshable {
+                await env.runSyncCycle()
+                store.reload(env: env)
+                detectConflicts()
+            }
+        }
+        .preferredColorScheme(env.preferences.colorScheme)
+    }
+
+    // MARK: - Header (Android NotesView parity)
+
+    private var listHeader: some View {
+        let searchActive = !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        return VStack(alignment: .leading, spacing: 0) {
+            if store.selectionMode {
+                HStack(spacing: 0) {
+                    Button {
+                        store.clearSelection()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(AppTheme.slate)
+                            .frame(width: 38, height: 38)
+                    }
+                    Text(store.selectedMemoIds.isEmpty
+                        ? env.preferences.t("选择笔记", en: "Select notes")
+                        : env.preferences.t("已选择 \(store.selectedMemoIds.count) 条", en: "\(store.selectedMemoIds.count) selected"))
+                        .font(.system(size: 17, weight: .heavy))
+                        .foregroundStyle(AppTheme.title)
+                        .padding(.horizontal, 8)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 44)
+            }
+
+            HStack(alignment: .center) {
+                Button {
+                    store.showNotebookPicker = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(store.titleLabel)
+                            .font(AppTheme.notebookTitleFont)
+                            .foregroundStyle(AppTheme.title)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(AppTheme.secondary)
+                    }
+                    .frame(minHeight: MobileUIMetrics.compactControlHeight)
+                }
+                .buttonStyle(.plain)
+                Spacer(minLength: 8)
+                Button {
+                    store.showActions = true
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.slate)
+                        .frame(width: MobileUIMetrics.compactControlHeight, height: MobileUIMetrics.compactControlHeight)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(env.preferences.t("列表选项", en: "List options"))
+            }
+            .padding(.bottom, 12)
+
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(searchActive ? AppTheme.accent : AppTheme.secondary)
+                        .symbolEffect(.bounce, value: searchActive)
+                    TextField(env.preferences.t("搜索笔记", en: "Search notes"), text: $store.searchText)
+                        .font(AppTheme.searchFont)
+                        .foregroundStyle(AppTheme.title)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    if searchActive {
+                        Button {
+                            withAnimation(Motion.search) {
+                                store.searchText = ""
+                            }
+                            store.reload(env: env)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(AppTheme.secondary)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .frame(height: MobileUIMetrics.compactControlHeight)
+                .background(searchActive ? AppTheme.searchActiveFill : AppTheme.searchFill)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(searchActive ? AppTheme.accentBright : Color.clear, lineWidth: 1)
+                )
+                .animation(Motion.search, value: searchActive)
+
+                filterChip(
+                    active: store.filter == .pinned,
+                    // Match Android pin filter glyph (star outline / filled when active)
+                    systemImage: store.filter == .pinned ? "star.fill" : "star",
+                    label: env.preferences.t("置顶", en: "Pinned")
+                ) {
+                    withAnimation(Motion.chip) {
+                        store.toggleFilter(.pinned)
+                    }
+                    store.reload(env: env)
+                }
+                filterChip(
+                    active: store.filter == .tagged,
+                    systemImage: "tag",
+                    label: env.preferences.t("有标签", en: "Tagged")
+                ) {
+                    withAnimation(Motion.chip) {
+                        store.toggleFilter(.tagged)
+                    }
+                    store.reload(env: env)
+                }
+                filterChip(
+                    active: store.filter == .untagged,
+                    systemImage: "tag.fill",
+                    label: env.preferences.t("无标签", en: "Untagged")
+                ) {
+                    withAnimation(Motion.chip) {
+                        store.toggleFilter(.untagged)
+                    }
+                    store.reload(env: env)
+                }
+            }
+            .edgeEverSelectionFeedback(store.filter)
+            .onChange(of: store.searchText) { _, _ in
+                store.scheduleSearch(env: env)
+            }
+
+            if searchActive || store.filter != .all {
+                constraintBar
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .background(AppTheme.background)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(AppTheme.border).frame(height: 1)
+        }
+        .animation(Motion.search, value: searchActive || store.filter != .all)
+    }
+
+    private var constraintBar: some View {
+        let searchActive = !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        return HStack(spacing: 8) {
+            if searchActive {
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(env.preferences.t("正在搜索", en: "Searching"))
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(AppTheme.accent)
+                .clipShape(Capsule())
+
+                Text(env.preferences.t("\(store.totalCount) 条结果", en: "\(store.totalCount) results"))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.accentText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button(env.preferences.t("退出搜索", en: "Exit")) {
+                    store.searchText = ""
+                    store.reload(env: env)
+                }
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppTheme.accentText)
+            } else {
+                Text(env.preferences.t("筛选：\(filterLabel) · \(store.totalCount) 条", en: "Filter: \(filterLabelEN) · \(store.totalCount)"))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(env.preferences.t("重置", en: "Reset")) {
+                    store.filter = .all
+                    store.reload(env: env)
+                }
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(AppTheme.slate)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .frame(minHeight: 32)
+        .background(searchActive ? AppTheme.searchActiveFill : Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(searchActive ? AppTheme.accentBorder : AppTheme.border, lineWidth: 1)
+        )
+        .overlay(alignment: .leading) {
+            if searchActive {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(AppTheme.accentBright)
+                    .frame(width: 3)
+                    .padding(.vertical, 1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var filterLabel: String {
+        switch store.filter {
+        case .pinned: return "置顶"
+        case .tagged: return "有标签"
+        case .untagged: return "无标签"
+        case .all: return "全部"
+        }
+    }
+
+    private var filterLabelEN: String {
+        switch store.filter {
+        case .pinned: return "Pinned"
+        case .tagged: return "Tagged"
+        case .untagged: return "Untagged"
+        case .all: return "All"
+        }
+    }
+
+    private func filterChip(active: Bool, systemImage: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(active ? .white : AppTheme.slate)
+                .frame(width: MobileUIMetrics.compactControlHeight, height: MobileUIMetrics.compactControlHeight)
+                .background(active ? AppTheme.filterActive : Color.white)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(active ? AppTheme.filterActive : AppTheme.border, lineWidth: 1))
+                .accessibilityLabel(label)
+                // Pow ping when filter becomes active
+                .changeEffect(
+                    .ping(shape: Circle(), style: AppTheme.filterActive.opacity(0.35), count: 1),
+                    value: active,
+                    isEnabled: active
+                )
+        }
+        .buttonStyle(FilterChipButtonStyle(active: active))
+    }
+
+    /// Bottom tab chrome:
+    /// 1. top separator
+    /// 2. Home | Create | Me — all *below* the separator (create must not sit on the line)
+    /// 3. home-indicator slab
+    /// Create is slightly smaller than the 52pt Android float so it fits cleanly under the line.
+    private var bottomNav: some View {
+        let canCreate = !store.notebooks.isEmpty
+        let bottomInset = MobileUIMetrics.bottomSafeInset
+        let createSize = MobileUIMetrics.bottomCreateButtonSize
+
+        return VStack(spacing: 0) {
+            // Separator first — tab content is strictly below this line.
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(height: 1)
+                .frame(maxWidth: .infinity)
+
+            HStack(spacing: 0) {
+                bottomNavItem(
+                    systemImage: "house.fill",
+                    label: env.preferences.t("首页", en: "Home"),
+                    active: true
+                ) {
+                    withAnimation(Motion.chip) {
+                        path = NavigationPath()
+                    }
+                }
+
+                Button {
+                    createTapCount += 1
+                    showNewNote = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(canCreate ? .white : Color(hex: 0xE2E8F0))
+                        .frame(width: createSize, height: createSize)
+                        .background(canCreate ? AppTheme.accentBright : Color(hex: 0xCBD5E1))
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.white, lineWidth: 3))
+                        .shadow(
+                            color: AppTheme.fabShadow.opacity(canCreate ? 0.28 : 0),
+                            radius: 6,
+                            y: 3
+                        )
+                        .contentShape(Circle())
+                }
+                .buttonStyle(CreateButtonPressStyle())
+                .edgeEverCreatePing(count: createTapCount)
+                .disabled(!canCreate)
+                .accessibilityLabel(env.preferences.t("新建笔记", en: "New note"))
+                .accessibilityIdentifier("bottomCreateButton")
+                .frame(maxWidth: .infinity)
+
+                bottomNavItem(
+                    systemImage: "person",
+                    label: env.preferences.t("我的", en: "Me"),
+                    active: false
+                ) {
+                    showSettings = true
+                }
+            }
+            .padding(.horizontal, 28)
+            .frame(height: MobileUIMetrics.bottomNavigationHeight)
+            .frame(maxWidth: .infinity)
+
+            // Home indicator — same white surface, continuous with the 52pt band.
+            Color.white
+                .frame(height: bottomInset)
+                .frame(maxWidth: .infinity)
+        }
+        .background(Color.white)
+        .accessibilityIdentifier("bottomNav")
+    }
+
+    private func bottomNavItem(
+        systemImage: String,
+        label: String,
+        active: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(active ? AppTheme.title : AppTheme.secondary)
+                Text(label)
+                    .font(AppTheme.bottomNavFont)
+                    .foregroundStyle(active ? AppTheme.title : AppTheme.secondary)
+            }
+            .frame(minWidth: 58, minHeight: MobileUIMetrics.minimumTouchTarget)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var selectionBar: some View {
+        let bottomInset = MobileUIMetrics.bottomSafeInset
+        return VStack(spacing: 0) {
+            HStack(spacing: 24) {
+                Button {
+                    showMoveSheet = true
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "folder")
+                        Text(env.preferences.t("移动", en: "Move")).font(.caption2.weight(.bold))
+                    }
+                }
+                Button(role: .destructive) {
+                    Task { await store.softDeleteSelection(env: env) }
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "trash")
+                        Text(env.preferences.t("删除", en: "Delete")).font(.caption2.weight(.bold))
+                    }
+                }
+                Spacer()
+                Text(env.preferences.t("已选 \(store.selectedMemoIds.count)", en: "\(store.selectedMemoIds.count) selected"))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.secondary)
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 4)
+            .frame(height: MobileUIMetrics.bottomNavigationHeight, alignment: .top)
+            .frame(maxWidth: .infinity)
+
+            Color.white
+                .frame(height: bottomInset)
+                .frame(maxWidth: .infinity)
+        }
+        .background(Color.white)
+        .overlay(alignment: .top) {
+            Rectangle().fill(AppTheme.border).frame(height: 1)
+        }
+        .accessibilityIdentifier("selectionBar")
+    }
+
+    private var syncBanner: some View {
+        Group {
+            if env.isSyncing {
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: progressValue)
+                        .tint(AppTheme.accent)
+                    if let p = env.bootstrapProgress, p.totalCount > 0 {
+                        Text(env.preferences.t("已加载 \(p.loadedCount) / \(p.totalCount) 条笔记", en: "Loaded \(p.loadedCount) / \(p.totalCount) notes"))
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.secondary)
+                    } else {
+                        Text(env.preferences.t("正在同步笔记", en: "Syncing notes"))
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.white)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            if let err = env.lastSyncError {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.danger)
+                    .padding(.horizontal, 12)
+                    .edgeEverErrorShake(on: err)
+                    .transition(Motion.softFade)
+            }
+        }
+        .animation(Motion.search, value: env.isSyncing)
+        .animation(Motion.search, value: env.lastSyncError)
+    }
+
+    private var progressValue: Double {
+        guard let p = env.bootstrapProgress, p.totalCount > 0 else { return 0 }
+        return Double(p.loadedCount) / Double(p.totalCount)
+    }
+
+    private func consumeShare() {
+        let payloads = env.shareHandoff.consumePending()
+        guard let first = payloads.first, let scope = env.session.dataScope else { return }
+        var bodyParts: [String] = []
+        if let title = first.title, !title.isEmpty { bodyParts.append(title) }
+        if let url = first.url, !url.isEmpty { bodyParts.append(url) }
+        if let text = first.text, !text.isEmpty { bodyParts.append(text) }
+        let body = bodyParts.joined(separator: "\n\n")
+        try? env.drafts.write(
+            scope: scope,
+            draft: MemoDraft(
+                draftKey: DraftRepository.newKey,
+                title: first.title ?? "",
+                contentMarkdown: body,
+                contentJson: nil,
+                notebookId: store.selectedNotebookId ?? store.notebooks.first?.id ?? "",
+                tagsText: "",
+                expectedRevision: nil,
+                updatedAt: EdgeEverDate.nowString()
+            )
+        )
+        showNewNote = true
+    }
+
+    private func detectConflicts() {
+        guard let scope = env.session.dataScope else { return }
+        let items = (try? env.outbox.listItems(scope: scope)) ?? []
+        conflictItem = items.first { $0.status == .conflict }
+    }
+}
+
+// NotebookPickerSheet / ListActionsSheet live in their own files for Android parity.
+
+struct MoveNotebookSheet: View {
+    @Environment(AppEnvironment.self) private var env
+    let notebooks: [Notebook]
+    var onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color(hex: 0xCBD5E1))
+                .frame(width: 42, height: 4)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+
+            HStack {
+                Text(env.preferences.t("移动到", en: "Move to"))
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(AppTheme.title)
+                Spacer()
+                Button(env.preferences.t("取消", en: "Cancel")) { dismiss() }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.slate)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(AppTheme.secondary)
+                TextField(env.preferences.t("搜索笔记本", en: "Search notebooks"), text: $query)
+                    .font(.system(size: 14))
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(AppTheme.searchFill)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+
+            ScrollView {
+                let items = NotebookHierarchy.treeItems(from: notebooks)
+                let visible = NotebookHierarchy.searchVisibleIds(notebooks: notebooks, searchText: query)
+                VStack(spacing: 0) {
+                    ForEach(items.filter { visible.contains($0.id) }) { item in
+                        Button {
+                            onPick(item.id)
+                        } label: {
+                            Text(item.name)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(AppTheme.title)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, CGFloat(min(item.depth * 18, 54)))
+                                .padding(.horizontal, 12)
+                                .frame(minHeight: 48)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+    }
+}

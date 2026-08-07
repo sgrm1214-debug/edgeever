@@ -13,9 +13,13 @@ Authorization:
 ## Updates and troubleshooting
 
 - A push to `main` builds, applies D1 migrations, deploys, and verifies EdgeEver.
-- **Update deployed EdgeEver** checks the latest formal Release daily.
-- Set the GitHub Repository Variable `EDGE_EVER_UPDATE_CHANNEL=edge` to follow upstream `main`.
-- Build failure: inspect the Worker **Deployments** log.
-- Scheduled update failure: enable and run the workflow from the Fork's **Actions** tab.
-
-Legacy Cloudflare-created repositories with only a `source repo import` commit are bootstrapped on their first update. Do not use this bootstrap path after custom application changes.
+- **Update deployed EdgeEver** keeps a deployment Fork as an upstream **deploy mirror**:
+  - Default channel `stable` tracks the latest formal Release tag.
+  - Set the GitHub Repository Variable `EDGE_EVER_UPDATE_CHANNEL=edge` to follow upstream `main`.
+  - Read-only forks (no app code changes) **reset** onto the target when behind; customized forks **merge** and fail closed on conflicts.
+  - Every run writes a job **Summary** with channel, target version, decision reason, and whether a push happened. A green run that says *Already on upstream target* is success, not a silent failure.
+  - Prefer this workflow over GitHub **Sync fork**. Sync fork follows upstream `main` history and can make the next stable run a deliberate no-op.
+- Optional: repository secret `EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL` triggers a Cloudflare Deploy Hook after a successful push (useful when the Git integration misses a push).
+- Optional: re-run the workflow with **force_redeploy** to push an empty commit when Git is already current but Cloudflare needs another build.
+- Build failure: inspect the Worker **Deployments** log and confirm the Deployment commit SHA matches Fork `main`.
+- Scheduled update never runs: on a public Fork, enable **Update deployed EdgeEver** under **Actions** (scheduled workflows are disabled by default on forks, and may pause after long inactivity).

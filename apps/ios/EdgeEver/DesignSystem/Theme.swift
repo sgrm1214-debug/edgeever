@@ -28,6 +28,16 @@ enum AppTheme {
     static let accentText = Color(hex: 0x065F46)
     static let danger = Color(hex: 0xDC2626)
 
+    // First-sync progress / error (Android memoSync* + memoListLoading* / memoListError*)
+    static let syncProgressTrack = Color(hex: 0xD1FAE5)
+    static let syncProgressFill = Color(hex: 0x059669)
+    static let syncErrorBackground = Color(hex: 0xFFFBEB)
+    static let syncErrorBorder = Color(hex: 0xFCD34D)
+    static let syncErrorTitle = Color(hex: 0x451A03)
+    static let syncErrorBody = Color(hex: 0x92400E)
+    static let syncErrorRetryFill = Color(hex: 0xFEF3C7)
+    static let emptyDashBorder = Color(hex: 0xCBD5E1)
+
     // Tag chip
     static let tagBackground = Color(hex: 0xF1F5F9)
 
@@ -41,6 +51,9 @@ enum AppTheme {
     static let tagFont = Font.system(size: 12, weight: .medium)
     static let searchFont = Font.system(size: 14)
     static let bottomNavFont = Font.system(size: 11, weight: .bold)
+
+    /// Android `fontWeight: "800"`.
+    static let heavy = Font.Weight.heavy
 }
 
 extension Color {

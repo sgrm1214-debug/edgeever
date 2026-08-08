@@ -1,12 +1,34 @@
 import "./styles.css";
-import { Editor } from "@tiptap/core";
+import { Editor, mergeAttributes, Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import CodeBlock from "@tiptap/extension-code-block";
 import { TableKit } from "@tiptap/extension-table";
 import { Markdown } from "@tiptap/markdown";
+import { NodeSelection } from "@tiptap/pm/state";
 import mermaid from "mermaid";
+
+/** Keep in sync with packages/shared MergeDivider (iOS bundle cannot import monorepo shared). */
+const MergeDivider = Node.create({
+  name: "edgeeverMergeDivider",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: true,
+  parseHTML() {
+    return [{ tag: "hr[data-edgeever-merge-divider]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "hr",
+      mergeAttributes(HTMLAttributes, {
+        "data-edgeever-merge-divider": "true",
+        class: "edgeever-merge-divider",
+      }),
+    ];
+  },
+});
 
 type BridgeMessage =
   | { type: "ready"; startupMs: number }
@@ -168,18 +190,397 @@ async function renderMermaidBlocks(root: HTMLElement, theme: "light" | "dark") {
   }
 }
 
+const IMAGE_WIDTH_PRESETS = [
+  { label: "25%", width: 25 },
+  { label: "50%", width: 50 },
+  { label: "75%", width: 75 },
+  { label: "100%", width: 100 },
+] as const;
+
+function parseImageWidth(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : Number.parseFloat(String(raw).replace("%", ""));
+  if (!Number.isFinite(n)) return null;
+  return Math.min(100, Math.max(10, Math.round(n)));
+}
+
+function clampImageWidth(n: number): number {
+  return Math.min(100, Math.max(10, Math.round(n)));
+}
+
+/**
+ * Image width is a % of the editor content column.
+ * Apply to the figure itself (not only the <img>) so the layout box shrinks
+ * with the picture — otherwise WKWebView keeps a full-width slot and paints
+ * a pale selection wash in the empty half.
+ */
+function applyFigureWidth(el: HTMLElement, width: number | null) {
+  const w = width == null ? null : clampImageWidth(width);
+  if (w == null) {
+    el.style.removeProperty("width");
+    el.style.removeProperty("max-width");
+    el.style.removeProperty("--ee-image-width");
+    delete el.dataset.width;
+    el.classList.remove("has-width");
+    return;
+  }
+  const pct = `${w}%`;
+  el.dataset.width = String(w);
+  el.classList.add("has-width");
+  el.style.setProperty("--ee-image-width", pct);
+  // Inline styles beat any generic img/figure rules; max-width keeps us inside the column.
+  el.style.setProperty("width", pct);
+  el.style.setProperty("max-width", pct);
+  el.style.setProperty("margin-left", "auto");
+  el.style.setProperty("margin-right", "auto");
+  el.style.setProperty("box-sizing", "border-box");
+  el.style.setProperty("display", "block");
+}
+
+/**
+ * iOS WKWebView + ProseMirror: control taps must:
+ * 1) preventDefault on pointerdown so PM does not steal NodeSelection
+ * 2) run the action on pointerup (click is suppressed after preventDefault)
+ * Desktop still gets a debounced click fallback.
+ */
+function bindImageControlTap(el: HTMLElement, action: () => void) {
+  let lastRun = 0;
+  const block = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+  };
+  const run = (event: Event) => {
+    block(event);
+    const now = Date.now();
+    if (now - lastRun < 350) return;
+    lastRun = now;
+    action();
+  };
+  el.addEventListener("pointerdown", block);
+  el.addEventListener("mousedown", block);
+  el.addEventListener("touchstart", block, { passive: false });
+  el.addEventListener("pointerup", run);
+  el.addEventListener("click", run);
+}
+
+/**
+ * Android LocalTiptapEditor image node parity:
+ * - figure wrapper + ⋯ action button
+ * - viewer: tap image → fullscreen preview; ⋯ → resource sheet
+ * - editor: tap image → select + show width bar (25/50/75/100%); ⋯ → resource sheet
+ */
+function createEdgeEverImageExtension() {
+  return Image.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        width: {
+          default: null,
+          parseHTML: (element) =>
+            parseImageWidth(
+              element.getAttribute("data-width") ?? element.getAttribute("width") ?? (element as HTMLElement).style.width
+            ),
+          renderHTML: (attributes) => {
+            const width = parseImageWidth(attributes.width);
+            return width ? { "data-width": String(width), style: `width: ${width}%` } : {};
+          },
+        },
+      };
+    },
+    addNodeView() {
+      return ({ editor: ed, getPos, node }) => {
+        let currentNode = node;
+        const wrapper = document.createElement("figure");
+        wrapper.className = "edgeever-image-node is-loading";
+        wrapper.contentEditable = "false";
+        wrapper.setAttribute("role", "img");
+
+        const loading = document.createElement("div");
+        loading.className = "edgeever-image-loading";
+        const spinner = document.createElement("span");
+        spinner.className = "edgeever-image-upload-spinner";
+        loading.append(spinner);
+
+        const image = document.createElement("img");
+        image.draggable = false;
+        image.hidden = true;
+
+        const actionButton = document.createElement("button");
+        actionButton.type = "button";
+        actionButton.className = "edgeever-image-actions";
+        actionButton.contentEditable = "false";
+        actionButton.hidden = true;
+        actionButton.setAttribute("aria-label", "图片操作");
+        actionButton.textContent = "⋯";
+
+        const sizeControls = document.createElement("div");
+        sizeControls.className = "edgeever-image-size-controls";
+        sizeControls.contentEditable = "false";
+        sizeControls.hidden = true;
+        sizeControls.setAttribute("role", "group");
+        sizeControls.setAttribute("aria-label", "图片宽度");
+
+        const applyWidthAtPos = (width: number) => {
+          const pos = getPos();
+          if (typeof pos !== "number") return;
+          const n = ed.state.doc.nodeAt(pos);
+          if (!n || n.type.name !== "image") return;
+          const nextWidth = clampImageWidth(width);
+          // Avoid chain().focus() — iOS WKWebView often drops NodeSelection mid-gesture.
+          let tr = ed.state.tr.setNodeMarkup(pos, undefined, {
+            ...n.attrs,
+            width: nextWidth,
+          });
+          try {
+            tr = tr.setSelection(NodeSelection.create(tr.doc, pos));
+          } catch {
+            /* keep markup update even if selection fails */
+          }
+          ed.view.dispatch(tr);
+          applyFigureWidth(wrapper, nextWidth);
+          setActiveWidth(nextWidth);
+        };
+
+        const sizeButtons: Array<{ button: HTMLButtonElement; width: number }> = [];
+        for (const preset of IMAGE_WIDTH_PRESETS) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "edgeever-image-size-button";
+          btn.textContent = preset.label;
+          btn.setAttribute("aria-label", preset.label);
+          btn.setAttribute("aria-pressed", "false");
+          bindImageControlTap(btn, () => applyWidthAtPos(preset.width));
+          sizeButtons.push({ button: btn, width: preset.width });
+          sizeControls.append(btn);
+        }
+
+        const setActiveWidth = (width: number | null) => {
+          for (const item of sizeButtons) {
+            const active = width != null && item.width === width;
+            item.button.classList.toggle("is-active", active);
+            item.button.setAttribute("aria-pressed", String(active));
+          }
+        };
+
+        const setPhase = (phase: "loading" | "ready" | "failed") => {
+          wrapper.classList.toggle("is-loading", phase === "loading");
+          wrapper.classList.toggle("is-failed", phase === "failed");
+          loading.hidden = phase === "ready";
+          image.hidden = phase !== "ready";
+          actionButton.hidden = phase !== "ready";
+          if (phase === "failed") {
+            loading.replaceChildren();
+            const label = document.createElement("span");
+            label.className = "edgeever-image-loading-label";
+            label.textContent = "图片加载失败";
+            loading.append(label);
+            loading.hidden = false;
+          } else if (phase === "loading") {
+            loading.replaceChildren(spinner);
+          }
+        };
+
+        const resourceHrefFromAttrs = (attrs: Record<string, unknown>) => {
+          const src = String(attrs.src ?? "");
+          // Prefer protected API path over display data:/edgeever-res:
+          if (isProtectedResource(src) || getResourceIdFromHref(src)) return src;
+          return wrapper.dataset.resourceHref || src;
+        };
+
+        const emitActions = () => {
+          const href =
+            wrapper.dataset.resourceHref ||
+            image.dataset.originalSrc ||
+            resourceHrefFromAttrs(currentNode.attrs as Record<string, unknown>);
+          const json = buildImageTargetJson(href, String(currentNode.attrs.alt ?? "image"));
+          if (json) {
+            post({ type: "resourcePress", targetJson: json });
+            return;
+          }
+          // Still notify native with best-effort payload when id parse fails.
+          post({
+            type: "log",
+            message: `image actions: no resource id for href=${href.slice(0, 120)}`,
+          });
+        };
+
+        const emitPreview = () => {
+          const href =
+            wrapper.dataset.resourceHref ||
+            image.dataset.originalSrc ||
+            resourceHrefFromAttrs(currentNode.attrs as Record<string, unknown>) ||
+            image.getAttribute("src") ||
+            "";
+          if (!href) return;
+          post({
+            type: "imagePreview",
+            source: href,
+            alt: String(currentNode.attrs.alt ?? ""),
+          });
+        };
+
+        bindImageControlTap(actionButton, emitActions);
+
+        // Android parity:
+        // - viewer: tap image → fullscreen preview
+        // - editor: tap image → select node (shows 25/50/75/100% width bar); ⋯ → action sheet
+        // Image body: only stopPropagation on pointerdown (keeps scroll working).
+        let lastImageActivate = 0;
+        const onImageActivate = (event: Event) => {
+          if (event.target instanceof Element && event.target.closest(".edgeever-image-actions")) {
+            return;
+          }
+          const now = Date.now();
+          if (now - lastImageActivate < 350) return;
+          lastImageActivate = now;
+          event.stopPropagation();
+          if (mode === "viewer" || !ed.isEditable) {
+            event.preventDefault();
+            emitPreview();
+            return;
+          }
+          event.preventDefault();
+          const pos = getPos();
+          if (typeof pos === "number") {
+            ed.chain().setNodeSelection(pos).run();
+          }
+        };
+        image.addEventListener("pointerdown", (event) => event.stopPropagation());
+        image.addEventListener("click", onImageActivate);
+        image.addEventListener("pointerup", (event) => {
+          // iOS sometimes skips click after PM handles pointer; activate on short taps.
+          if (event.pointerType === "touch" || event.pointerType === "pen") {
+            onImageActivate(event);
+          }
+        });
+
+        wrapper.append(loading, image, actionButton, sizeControls);
+
+        let requestId = 0;
+        let renderedSource = "";
+        let selected = false;
+
+        const applyMeta = (attrs: Record<string, unknown>) => {
+          const alt = String(attrs.alt ?? "");
+          image.alt = alt;
+          const width = parseImageWidth(attrs.width);
+          applyFigureWidth(wrapper, width);
+          setActiveWidth(width);
+          const src = String(attrs.src ?? "");
+          const rid = getResourceIdFromHref(src);
+          if (rid) {
+            wrapper.dataset.resourceHref = normalizeResourceHref(src, rid);
+            image.dataset.originalSrc = wrapper.dataset.resourceHref;
+          }
+        };
+
+        const loadImage = (attrs: Record<string, unknown>) => {
+          requestId += 1;
+          const active = requestId;
+          const src = String(attrs.src ?? "");
+          renderedSource = src;
+          applyMeta(attrs);
+          setPhase("loading");
+          sizeControls.hidden = true;
+
+          const finish = (display: string) => {
+            if (active !== requestId) return;
+            image.onload = () => {
+              if (active !== requestId) return;
+              setPhase("ready");
+              image.style.cursor = mode === "viewer" || !ed.isEditable ? "zoom-in" : "pointer";
+              if (selected && ed.isEditable && mode === "editor") {
+                sizeControls.hidden = false;
+              }
+            };
+            image.onerror = () => {
+              if (active !== requestId) return;
+              setPhase("failed");
+            };
+            image.src = display;
+          };
+
+          if (!src) {
+            setPhase("failed");
+            return;
+          }
+          if (src.startsWith("data:") || src.startsWith("edgeever-res:") || src.startsWith("blob:")) {
+            finish(src);
+            return;
+          }
+          if (needsNativeHydration(src)) {
+            void requestResource(src).then((dataUrl) => {
+              if (active !== requestId) return;
+              if (dataUrl) finish(dataUrl);
+              else setPhase("failed");
+            });
+            return;
+          }
+          finish(src);
+        };
+
+        loadImage(node.attrs as Record<string, unknown>);
+
+        return {
+          dom: wrapper,
+          update: (updated) => {
+            if (updated.type.name !== "image") return false;
+            currentNode = updated;
+            const nextSrc = String(updated.attrs.src ?? "");
+            applyMeta(updated.attrs as Record<string, unknown>);
+            if (nextSrc !== renderedSource) {
+              loadImage(updated.attrs as Record<string, unknown>);
+            } else {
+              setActiveWidth(parseImageWidth(updated.attrs.width));
+              applyFigureWidth(wrapper, parseImageWidth(updated.attrs.width));
+            }
+            return true;
+          },
+          selectNode: () => {
+            selected = true;
+            wrapper.classList.add("is-selected");
+            // Re-assert layout width so selection never leaves a full-width empty slot.
+            const selWidth =
+              parseImageWidth(
+                (ed.state.selection as { node?: { attrs?: { width?: unknown } } }).node?.attrs?.width
+              ) ?? parseImageWidth(wrapper.dataset.width) ?? parseImageWidth(currentNode.attrs.width);
+            applyFigureWidth(wrapper, selWidth);
+            // Width bar only in editor when the image is the active node selection.
+            if (ed.isEditable && mode === "editor" && !image.hidden) {
+              sizeControls.hidden = false;
+              setActiveWidth(selWidth);
+            }
+          },
+          deselectNode: () => {
+            selected = false;
+            wrapper.classList.remove("is-selected");
+            sizeControls.hidden = true;
+          },
+          destroy: () => {
+            requestId += 1;
+          },
+        };
+      };
+    },
+  }).configure({
+    inline: false,
+    allowBase64: true,
+  });
+}
+
 function buildExtensions(placeholder: string) {
   return [
     StarterKit.configure({
       codeBlock: false,
     }),
+    MergeDivider,
     CodeBlock.configure({
       languageClassPrefix: "language-",
     }),
-    Image.configure({
-      inline: false,
-      allowBase64: true,
-    }),
+    createEdgeEverImageExtension(),
     TableKit.configure({
       table: { resizable: false },
     }),
@@ -225,11 +626,21 @@ const editor = new Editor({
  * - attachment link → always resource action sheet
  * - viewer image click → fullscreen preview
  * - viewer image long-press / contextmenu → resource action sheet
- * - editor image click → resource action sheet
+ * - editor image click inside nodeView → select + width bar (owned by nodeView)
+ * - editor image ⋯ → resource action sheet (owned by nodeView)
  */
 function handleResourcePointer(event: Event, kind: "click" | "contextmenu"): boolean {
   const target = event.target as HTMLElement | null;
   if (!target) return false;
+
+  // Size / ⋯ controls own their gestures — never intercept from PM handleClick.
+  if (
+    target.closest(".edgeever-image-size-controls") ||
+    target.closest(".edgeever-image-actions") ||
+    target.closest(".edgeever-image-size-button")
+  ) {
+    return true;
+  }
 
   const link = target.closest("a");
   if (link instanceof HTMLAnchorElement) {
@@ -247,6 +658,11 @@ function handleResourcePointer(event: Event, kind: "click" | "contextmenu"): boo
 
   const img = target.closest("img");
   if (img instanceof HTMLImageElement) {
+    // Custom image nodeView owns image taps (select/preview/⋯).
+    if (img.closest("figure.edgeever-image-node") && kind === "click") {
+      return false;
+    }
+
     const src = img.dataset.originalSrc || img.getAttribute("src") || "";
     const protectedSrc =
       img.dataset.originalSrc ||
@@ -267,7 +683,8 @@ function handleResourcePointer(event: Event, kind: "click" | "contextmenu"): boo
     const hrefForMenu = protectedSrc || src;
     const filename = img.getAttribute("alt") || "image";
 
-    if (kind === "contextmenu" || mode === "editor") {
+    // Long-press / context menu → resource actions (editor + viewer).
+    if (kind === "contextmenu") {
       const json = buildImageTargetJson(hrefForMenu, filename);
       if (json) {
         event.preventDefault();
@@ -277,7 +694,7 @@ function handleResourcePointer(event: Event, kind: "click" | "contextmenu"): boo
       }
     }
 
-    // Viewer plain tap → fullscreen preview (use original protected path when possible).
+    // Viewer plain tap on bare <img> (no nodeView) → preview.
     if (mode === "viewer" && kind === "click") {
       event.preventDefault();
       event.stopPropagation();
@@ -415,6 +832,8 @@ const api: EdgeEverEditorAPI = {
     editor.setEditable(mode === "editor");
     setToolbarVisible(mode === "editor");
     document.documentElement.dataset.theme = opts.theme || "light";
+    document.body.classList.toggle("viewer-mode", mode === "viewer");
+    document.body.classList.toggle("editor-mode", mode === "editor");
     if (opts.placeholder) {
       // placeholder is extension config; update via meta class
       editorEl.setAttribute("data-placeholder", opts.placeholder);
@@ -490,7 +909,21 @@ const api: EdgeEverEditorAPI = {
   },
 
   focusEnd() {
-    editor.commands.focus("end");
+    try {
+      editor.commands.focus("end");
+    } catch {
+      /* ignore */
+    }
+    // iOS WKWebView: TipTap selection alone may not move DOM focus to the contenteditable.
+    // Explicitly focus ProseMirror so the software keyboard can attach after native first-responder.
+    try {
+      const dom = editor.view?.dom as HTMLElement | undefined;
+      if (dom && typeof dom.focus === "function") {
+        dom.focus({ preventScroll: true });
+      }
+    } catch {
+      /* ignore */
+    }
   },
 
   flush() {

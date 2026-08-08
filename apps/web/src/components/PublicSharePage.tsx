@@ -13,6 +13,7 @@ import { EdgeEverCodeBlock, codeBlockLowlight } from "@/lib/code-block";
 import {
   parseImageWidth,
   getImageReferrerPolicy,
+  MergeDivider,
   resolveMemoContentDoc,
   rewriteMemoResourcesForShare,
   type PublicMemoShare,
@@ -77,6 +78,7 @@ const SharedDocument = ({ share, token }: { share: PublicMemoShare; token: strin
     extensions: [
       StarterKit.configure({ codeBlock: false, link: { openOnClick: true } }),
       EdgeEverCodeBlock.configure({ lowlight: codeBlockLowlight, defaultLanguage: "plaintext" }),
+      MergeDivider,
       SharedThemeBlock,
       SharedImage.configure({ allowBase64: false, inline: false }),
       TableKit.configure({ table: { renderWrapper: true } }),

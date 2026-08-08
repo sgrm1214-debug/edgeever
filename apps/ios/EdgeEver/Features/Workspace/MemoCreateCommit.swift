@@ -67,6 +67,7 @@ enum MemoCreateCommit {
                         expectedContentHash: expectedContentHash ?? placeholder.contentHash,
                         title: displayTitle,
                         contentMarkdown: contentMarkdown,
+                        contentJson: contentJSON,
                         notebookId: notebookId,
                         tags: tags
                     )
@@ -99,6 +100,7 @@ enum MemoCreateCommit {
                     expectedContentHash: hash,
                     title: displayTitle,
                     contentMarkdown: contentMarkdown,
+                    contentJson: contentJSON,
                     notebookId: notebookId,
                     tags: tags
                 )
@@ -109,7 +111,7 @@ enum MemoCreateCommit {
         }
 
         let localId = "local:\(UUID().uuidString.lowercased())"
-        let placeholder = MemoDetail.localPlaceholder(
+        var placeholder = MemoDetail.localPlaceholder(
             id: localId,
             notebookId: notebookId,
             title: title,
@@ -117,6 +119,10 @@ enum MemoCreateCommit {
             tags: tags,
             createdAt: now
         )
+        // Persist TipTap JSON so image width attrs survive into detail/viewer.
+        if let contentJSON, let json = try? JSONValue.parse(contentJSON) {
+            placeholder.contentJson = json
+        }
         try mirror.upsertMemo(scope: scope, memo: placeholder)
         try outbox.enqueueCreate(
             scope: scope,
@@ -124,6 +130,7 @@ enum MemoCreateCommit {
                 memoId: localId,
                 title: displayTitle,
                 contentMarkdown: contentMarkdown,
+                contentJson: contentJSON,
                 notebookId: notebookId,
                 tags: tags,
                 createdAt: now

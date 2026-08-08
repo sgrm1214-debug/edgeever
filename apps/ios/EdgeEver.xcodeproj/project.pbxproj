@@ -55,6 +55,7 @@
 		AA7C45A51254081D6035E20F /* ChromeParity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 410470CB94CB0505A3EF5801 /* ChromeParity.swift */; };
 		B08E58823845817F84C52A52 /* NotesListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30C95F4EABCD08555D97C6B /* NotesListView.swift */; };
 		B13CF9D8320DF366EA58601F /* ImageCompressor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B15550738F6080C23DE15F /* ImageCompressor.swift */; };
+		B79E88A198C6635419CAE9E5 /* WKWebView+ProgrammaticKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9128735A19D0D834D5CD4947 /* WKWebView+ProgrammaticKeyboard.swift */; };
 		BBFC2539859878814E2F7197 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C2945A52C2957CCFC09FCF /* KeychainStore.swift */; };
 		C37DA99E090A783562506CDA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = EFF10CDC8FB8C97DA0103AA0 /* PrivacyInfo.xcprivacy */; };
 		C8A4FA6119134F68F5DC7415 /* LocalMirrorRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDEF3A661FA08F338EC96C74 /* LocalMirrorRepository.swift */; };
@@ -136,6 +137,7 @@
 		86F590FE9371571DC7456154 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		8720E0D6F00D1509B76A374B /* OutboxFlusher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboxFlusher.swift; sourceTree = "<group>"; };
 		8A536119D29812EF11DAEAA8 /* TipTapContentSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipTapContentSourceTests.swift; sourceTree = "<group>"; };
+		9128735A19D0D834D5CD4947 /* WKWebView+ProgrammaticKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WKWebView+ProgrammaticKeyboard.swift"; sourceTree = "<group>"; };
 		94DF0091B1FC2783AEC2D9F6 /* EdgeEverTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = EdgeEverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9799115E572F9AF0B59A5AD4 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		9B02E8D28111E1E732F3BF36 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -417,6 +419,7 @@
 				AE1D4EB4B51C66E9CD72FF7F /* TipTapContentSource.swift */,
 				36831A94478123A1EE9BB538 /* TipTapWarmPool.swift */,
 				12DCA98C14CC6F28C22C41A1 /* TipTapWebView.swift */,
+				9128735A19D0D834D5CD4947 /* WKWebView+ProgrammaticKeyboard.swift */,
 			);
 			path = Editor;
 			sourceTree = "<group>";
@@ -516,15 +519,15 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					06BD8BFE81996E1AAAACD634 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 9KA3NM38B6;
 						ProvisioningStyle = Automatic;
 					};
 					7B4AF236874DD8459683F02B = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 9KA3NM38B6;
 						ProvisioningStyle = Automatic;
 					};
 					E55B18ED6114D23320B85FA0 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = 9KA3NM38B6;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -640,6 +643,7 @@
 				4BA97CD264D0929B20ED19DB /* TipTapWebView.swift in Sources */,
 				2A07555B54946A177E1ECFF2 /* Typography.swift in Sources */,
 				6A671BB702DA77A0548E6E29 /* URL+Normalize.swift in Sources */,
+				B79E88A198C6635419CAE9E5 /* WKWebView+ProgrammaticKeyboard.swift in Sources */,
 				38640D9CE35D118F325AABC5 /* WorkspaceStore.swift in Sources */,
 				487717BFBCCF86B783B33B44 /* WorkspaceView.swift in Sources */,
 			);
@@ -665,10 +669,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "org.edgeever.mobile.share-extension";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.edgeever.mobile.expo-sharing-extension";
 				PRODUCT_NAME = ShareExtension;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -712,8 +718,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 33;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -725,7 +731,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.12.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -743,6 +749,8 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = EdgeEver/Resources/EdgeEver.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = EdgeEver/Resources/Info.plist;
@@ -794,8 +802,8 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				CURRENT_PROJECT_VERSION = 33;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -813,7 +821,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.12.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -829,10 +837,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = "org.edgeever.mobile.share-extension";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.edgeever.mobile.expo-sharing-extension";
 				PRODUCT_NAME = ShareExtension;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -881,6 +891,8 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = EdgeEver/Resources/EdgeEver.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9KA3NM38B6;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = EdgeEver/Resources/Info.plist;

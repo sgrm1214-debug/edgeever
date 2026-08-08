@@ -54,6 +54,37 @@ struct ResourceTarget: Equatable, Hashable, Identifiable {
             resourceId: id
         )
     }
+
+    /// Build an image target from a preview source (API path / absolute URL / edgeever-res id).
+    static func image(fromPreviewSource source: String, alt: String) -> ResourceTarget? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let id = resourceId(from: trimmed) {
+            let name = alt.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ResourceTarget(
+                kind: .image,
+                href: "/api/v1/resources/\(id)/blob",
+                filename: name.isEmpty ? "image-\(id)" : name,
+                resourceId: id
+            )
+        }
+        // edgeever-res://local/<id>
+        if trimmed.hasPrefix("edgeever-res:"),
+           let url = URL(string: trimmed),
+           let id = EdgeEverResourceSchemeHandler.resourceId(from: url),
+           id != "blob",
+           !id.isEmpty
+        {
+            let name = alt.trimmingCharacters(in: .whitespacesAndNewlines)
+            return ResourceTarget(
+                kind: .image,
+                href: "/api/v1/resources/\(id)/blob",
+                filename: name.isEmpty ? "image-\(id)" : name,
+                resourceId: id
+            )
+        }
+        return nil
+    }
 }
 
 // MARK: - Android-parity bottom sheet
@@ -484,6 +515,7 @@ struct ResourceActionSheet: View {
 // MARK: - Fullscreen image preview (viewer)
 
 /// SVG-friendly fullscreen preview using WKWebView (handles demo cat SVG).
+/// Only pass `data:` URLs — never `edgeever-res://` (this web view has no scheme handler).
 struct ResourceSVGPreview: UIViewRepresentable {
     let dataURL: String
 
@@ -499,6 +531,8 @@ struct ResourceSVGPreview: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        // Prefer embedding base64 bytes so we never depend on custom schemes.
+        let src = dataURL.replacingOccurrences(of: "\"", with: "&quot;")
         let html = """
         <!DOCTYPE html><html><head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=4">
@@ -506,44 +540,67 @@ struct ResourceSVGPreview: UIViewRepresentable {
           html,body{margin:0;height:100%;background:#000;display:flex;align-items:center;justify-content:center;}
           img{max-width:100%;max-height:100%;object-fit:contain;}
         </style></head><body>
-        <img src="\(dataURL.replacingOccurrences(of: "\"", with: "&quot;"))" />
+        <img src="\(src)" />
         </body></html>
         """
         webView.loadHTMLString(html, baseURL: nil)
     }
 }
 
+/// Fullscreen preview for note images (Android viewer tap → modal).
+///
+/// TipTap in-note images use `edgeever-res://` for authenticated blobs. That scheme only works
+/// inside the TipTap WKWebView (registered scheme handler). This host resolves blobs to
+/// `UIImage` / `data:` URLs so the black preview sheet never shows a broken `?` icon.
 struct ResourceImagePreviewHost: View {
     let source: String
     let alt: String
     let baseURL: URL?
     let token: String?
     var onClose: () -> Void
+    /// When set, long-press opens the resource action sheet on top of the preview.
+    var canMutate: Bool = false
+    var onContentChanged: (() -> Void)? = nil
 
-    @State private var displayURL: String?
+    @State private var uiImage: UIImage?
+    @State private var svgDataURL: String?
     @State private var failed = false
+    @State private var failedMessage: String?
+    @State private var actionsTarget: ResourceTarget?
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let displayURL {
-                if displayURL.contains("image/svg") || displayURL.hasPrefix("data:image/svg") {
-                    ResourceSVGPreview(dataURL: displayURL)
-                        .ignoresSafeArea()
-                } else if let data = dataFromDataURL(displayURL), let img = UIImage(data: data) {
-                    Image(uiImage: img)
+            Group {
+                if let uiImage {
+                    Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFit()
                         .padding(12)
-                } else {
-                    ResourceSVGPreview(dataURL: displayURL)
+                } else if let svgDataURL {
+                    ResourceSVGPreview(dataURL: svgDataURL)
                         .ignoresSafeArea()
+                } else if failed {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 36, weight: .light))
+                            .foregroundStyle(.white.opacity(0.45))
+                        Text(failedMessage ?? (alt.isEmpty ? "无法加载图片" : alt))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                    }
+                } else {
+                    ProgressView().tint(.white)
                 }
-            } else if failed {
-                Text(alt.isEmpty ? "Image" : alt)
-                    .foregroundStyle(.white.opacity(0.7))
-            } else {
-                ProgressView().tint(.white)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onLongPressGesture(minimumDuration: 0.45) {
+                if let target = ResourceTarget.image(fromPreviewSource: source, alt: alt) {
+                    actionsTarget = target
+                }
             }
 
             VStack {
@@ -562,25 +619,124 @@ struct ResourceImagePreviewHost: View {
                 Spacer()
             }
         }
-        .task { await resolve() }
+        .sheet(item: $actionsTarget) { target in
+            ResourceActionSheet(
+                target: target,
+                canMutate: canMutate,
+                onContentChanged: { onContentChanged?() }
+            )
+            .presentationDetents([.height(360), .medium])
+            .presentationDragIndicator(.hidden)
+        }
+        .task(id: source) { await resolve() }
     }
 
     private func resolve() async {
-        if source.hasPrefix("data:") {
-            displayURL = source
+        failed = false
+        failedMessage = nil
+        uiImage = nil
+        svgDataURL = nil
+
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            failed = true
+            failedMessage = "无效图片"
             return
         }
+
+        // 1) Already a data URL (SVG or raster).
+        if trimmed.hasPrefix("data:") {
+            applyResolvedDisplay(trimmed)
+            return
+        }
+
+        // 2) Already hydrated into the in-memory blob map (edgeever-res://local/<id>).
+        if let fromBlob = await blobAsDisplay(fromEdgeEverURL: trimmed) {
+            applyResolvedDisplay(fromBlob)
+            return
+        }
+
+        // 3) Protected API path / absolute URL — fetch via the same loader TipTap uses.
         let cache = ResourceCache()
-        if let url = await TipTapWebView.Coordinator.loadResourceDataURL(
-            source: source,
+        // Prefer protected original path over display edgeever-res when both exist.
+        let fetchSource = trimmed.hasPrefix("edgeever-res:") ? trimmed : trimmed
+        if let resolved = await TipTapResourceLoader.loadResourceDataURL(
+            source: fetchSource,
             baseURL: baseURL,
             token: token,
             resourceCache: cache
         ) {
-            displayURL = url
-        } else {
-            failed = true
+            if resolved.hasPrefix("data:") {
+                applyResolvedDisplay(resolved)
+                return
+            }
+            if let fromBlob = await blobAsDisplay(fromEdgeEverURL: resolved) {
+                applyResolvedDisplay(fromBlob)
+                return
+            }
         }
+
+        // 4) Last chance: if the in-note image was already shown, original path may be
+        //    dataset.originalSrc; if we only got a dead edgeever-res id, try ResourceCache disk.
+        if let id = edgeEverResourceId(from: trimmed),
+           let cached = await cache.cachedData(for: id) {
+            let mime = TipTapResourceLoader.resolvedImageMime(header: nil, data: cached)
+            applyImageBytes(cached, mime: mime)
+            return
+        }
+
+        failed = true
+        failedMessage = "无法加载图片"
+    }
+
+    private func applyResolvedDisplay(_ display: String) {
+        if display.hasPrefix("data:image/svg") || display.contains("image/svg") {
+            svgDataURL = display
+            return
+        }
+        if let data = dataFromDataURL(display), let img = UIImage(data: data) {
+            uiImage = img
+            return
+        }
+        // Unknown data: still try SVG webview if it looks like data:
+        if display.hasPrefix("data:") {
+            svgDataURL = display
+            return
+        }
+        failed = true
+        failedMessage = "无法显示图片"
+    }
+
+    private func applyImageBytes(_ data: Data, mime: String) {
+        if mime.contains("svg") || TipTapResourceLoader.isSvgData(data) {
+            svgDataURL = "data:image/svg+xml;base64,\(data.base64EncodedString())"
+            return
+        }
+        if let img = UIImage(data: data) {
+            uiImage = img
+            return
+        }
+        // Fallback: feed as data URL into WKWebView.
+        svgDataURL = "data:\(mime);base64,\(data.base64EncodedString())"
+    }
+
+    /// Resolve `edgeever-res://local/<id>` → data: URL string for preview (never pass edgeever-res to WKWebView).
+    private func blobAsDisplay(fromEdgeEverURL urlString: String) async -> String? {
+        guard let id = edgeEverResourceId(from: urlString),
+              let entry = await ResourceBlobStore.shared.get(id: id)
+        else { return nil }
+        let mime = TipTapResourceLoader.resolvedImageMime(header: entry.mimeType, data: entry.data)
+        if mime.contains("svg") || TipTapResourceLoader.isSvgData(entry.data) {
+            return "data:image/svg+xml;base64,\(entry.data.base64EncodedString())"
+        }
+        return "data:\(mime);base64,\(entry.data.base64EncodedString())"
+    }
+
+    private func edgeEverResourceId(from urlString: String) -> String? {
+        guard urlString.hasPrefix("edgeever-res:"),
+              let url = URL(string: urlString)
+        else { return nil }
+        return EdgeEverResourceSchemeHandler.resourceId(from: url)
     }
 
     private func dataFromDataURL(_ url: String) -> Data? {

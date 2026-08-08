@@ -1,0 +1,41 @@
+# Build / DerivedData / local archives
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode user-specific state (never commit)
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+**/xcuserdata/**
+**/*.xcuserstate
+
+# Xcode scheme management that is machine-local (shared schemes stay under xcshareddata/)
+*.xcscheme/xcuserdata/
+
+# CocoaPods / Carthage / SPM local checkouts if present outside the project
+Pods/
+Carthage/Build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+
+# Fastlane local artifacts
+fastlane/report.xml
+fastlane/README.md
+fastlane/test_output/
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+!fastlane/screenshots/**/frame*.png
+
+# Code signing / secrets (local only)
+*.mobileprovision
+*.cer
+*.certSigningRequest
+AuthKey_*.p8
+*.p8
+
+# OS junk
+.DS_Store
+*.swp
+*~

@@ -20,6 +20,11 @@ final class WorkspaceStore {
     var showNotebookPicker = false
     var showActions = false
 
+    /// Memo id that should play a return-bounce when the list reappears after create/edit.
+    var bounceMemoId: String?
+    /// Bumped so the same memo can bounce again on a later return.
+    var bouncePulse: Int = 0
+
     private var searchTask: Task<Void, Never>?
 
     var activeNotebook: Notebook? {
@@ -110,6 +115,17 @@ final class WorkspaceStore {
 
     func toggleSelected(_ memoId: String) {
         selectedMemoIds = MobileUI.toggleMemoSelection(current: selectedMemoIds, memoId: memoId)
+    }
+
+    /// Request a rebound animation on a list card after create/edit returns to the list.
+    func requestMemoBounce(memoId: String?) {
+        guard let memoId, !memoId.isEmpty else { return }
+        bounceMemoId = memoId
+        bouncePulse &+= 1
+    }
+
+    func clearMemoBounce() {
+        bounceMemoId = nil
     }
 
     func softDelete(env: AppEnvironment, memoId: String) async {

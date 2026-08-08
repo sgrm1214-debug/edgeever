@@ -51,6 +51,10 @@ final class EditorBundleTests: XCTestCase {
             runtime.contains("lastEditorEmittedFingerprint"),
             "must ignore editor-originated updates so typing does not re-setContent"
         )
+        XCTAssertTrue(
+            runtime.contains("needsForcePushOnBind"),
+            "detach must force next bind to re-push so create does not keep previous body"
+        )
         // Viewer detail must prefer Markdown (setMarkdown), not flattened contentJson.
         XCTAssertTrue(
             runtime.contains("TipTapContentSource.resolve") || runtime.contains("contentDecision"),

@@ -14,11 +14,25 @@ enum TipTapContentSource: Sendable {
     static func resolve(mode: TipTapMode, documentJSON: String, markdown: String) -> Decision {
         let json = documentJSON.trimmingCharacters(in: .whitespacesAndNewlines)
         let mdTrim = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonUsable = !json.isEmpty && json != emptyStub
 
-        // Detail/viewer: always prefer contentMarkdown via setMarkdown.
-        // Local contentJson is often a flattened TipTap tree after edit/sync round-trips.
-        if mode == .viewer, !mdTrim.isEmpty {
-            return Decision(useJSON: false, payload: markdown, fingerprint: "md:\(markdown)")
+        // Detail/viewer: prefer JSON when it carries image width attrs (markdown drops them).
+        // Fall back to markdown for empty/stub JSON or when markdown encodes richer structure
+        // (tables / headings) that a flattened contentJson lost.
+        if mode == .viewer {
+            if jsonUsable {
+                if jsonHasImageWidth(json) {
+                    return Decision(useJSON: true, payload: documentJSON, fingerprint: "json:\(json)")
+                }
+                if !mdTrim.isEmpty, markdownIsStructurallyRicher(markdown, thanJSON: json) {
+                    return Decision(useJSON: false, payload: markdown, fingerprint: "md:\(markdown)")
+                }
+                // Non-empty JSON still preferred so image nodes keep nodeView + ⋯ chrome.
+                return Decision(useJSON: true, payload: documentJSON, fingerprint: "json:\(json)")
+            }
+            if !mdTrim.isEmpty {
+                return Decision(useJSON: false, payload: markdown, fingerprint: "md:\(markdown)")
+            }
         }
 
         // Editor: open from markdown when it encodes richer structure than JSON
@@ -27,11 +41,16 @@ enum TipTapContentSource: Sendable {
             return Decision(useJSON: false, payload: markdown, fingerprint: "md:\(markdown)")
         }
 
-        let useJSON = !json.isEmpty && json != emptyStub
-        if useJSON {
+        if jsonUsable {
             return Decision(useJSON: true, payload: documentJSON, fingerprint: "json:\(json)")
         }
         return Decision(useJSON: false, payload: markdown, fingerprint: "md:\(markdown)")
+    }
+
+    /// True when TipTap JSON stores at least one image `width` (25–100 display size).
+    static func jsonHasImageWidth(_ json: String) -> Bool {
+        // Match `"width":50` / `"width": 50` near image nodes without full parse.
+        json.range(of: #""width"\s*:\s*\d+"#, options: .regularExpression) != nil
     }
 
     static func markdownIsStructurallyRicher(_ markdown: String, thanJSON json: String) -> Bool {

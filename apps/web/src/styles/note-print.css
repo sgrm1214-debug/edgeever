@@ -104,6 +104,15 @@
   border-top: 0.3mm solid #cbd5e1;
 }
 
+.edgeever-print-content hr.edgeever-merge-divider,
+.edgeever-print-content hr[data-edgeever-merge-divider] {
+  margin: 8mm 0;
+  border: 0;
+  border-top: 0.5mm solid #66ca80;
+  background: transparent;
+  height: 0;
+}
+
 .edgeever-print-content a {
   color: #047857;
   text-decoration: underline;

@@ -6,7 +6,7 @@ Run from a clean `main` branch on macOS that matches `origin/main`:
 
 ```bash
 bun run release -- \
-  --bump minor \
+  --bump patch \
   --issue-title "Improve the release workflow" \
   --label enhancement \
   --change-en "Run required release checks in parallel." \
@@ -38,7 +38,9 @@ installed and launched after the Release.
 
 ## EdgeEver-Specific Behavior
 
-- Stable tags and Release titles use `vX.Y.Z`.
+- Stable tags and Release titles use `vX.Y.Z`. Pass `--bump` explicitly and
+  follow SemVer; do not compress user-visible new capabilities or new platforms
+  into `patch` for release cadence (see `AGENTS.md`).
 - The root version identifies the product Release. Native marketing versions
   change only when that native runtime is rebuilt. Android `versionCode` and
   iOS build numbers remain independent, monotonically increasing identifiers.

@@ -320,8 +320,8 @@ struct SettingsView: View {
                 preferenceBlock(
                     title: env.preferences.t("压缩笔记内图片", en: "Compress note images"),
                     description: env.preferences.t(
-                        "上传大图时在本地压缩，节省资源占用。",
-                        en: "Compress large images locally before upload to reduce storage use."
+                        "上传前将大图压缩为 WebP（最长边 2560），节省存储与流量。",
+                        en: "Compress large images to WebP (max edge 2560) before upload to save storage and bandwidth."
                     ),
                     showTopBorder: true
                 ) {

@@ -60,28 +60,56 @@ final class AppEnvironment {
     func bootstrap() async {
         await session.bootstrap()
         if session.isSignedIn {
+            // Surface first-sync progress before TipTap warm / network so the workspace
+            // never flashes an empty-notebook state on cold start.
+            if let scope = session.dataScope,
+               !((try? mirror.isInitialized(scope: scope)) ?? false)
+            {
+                bootstrapProgress = BootstrapProgress(loadedCount: 0, totalCount: 0)
+            }
             // Warm TipTap process + EditorBundle off the critical path of the first note open.
             await MainActor.run { TipTapWarmPool.warmIfNeeded() }
             await runSyncCycle()
         }
     }
 
-    func runSyncCycle() async {
+    /// - Parameter force: when true, clear outbox backoff and retry error/conflict items immediately
+    ///   (Android pull-to-refresh / "Sync now" parity).
+    func runSyncCycle(force: Bool = false) async {
         guard let scope = session.dataScope else { return }
         isSyncing = true
         lastSyncError = nil
         defer { isSyncing = false }
+
+        // Android parity: only surface bootstrap progress UI on the first mirror fill
+        // (cursor/identity missing). Incremental sync stays quiet.
+        let isInitialSync = !((try? mirror.isInitialized(scope: scope)) ?? false)
+        if isInitialSync {
+            bootstrapProgress = BootstrapProgress(loadedCount: 0, totalCount: 0)
+        }
+
         do {
-            _ = try await outboxFlusher.flush(scope: scope)
-            _ = try await syncEngine.sync(scope: scope) { [weak self] progress in
-                Task { @MainActor in
-                    self?.bootstrapProgress = progress
+            _ = try await outboxFlusher.flush(scope: scope, force: force)
+
+            let progressHandler: (@Sendable (BootstrapProgress) -> Void)?
+            if isInitialSync {
+                progressHandler = { [weak self] progress in
+                    DispatchQueue.main.async {
+                        self?.bootstrapProgress = progress
+                    }
                 }
+            } else {
+                progressHandler = nil
             }
-            lastOutboxResult = try await outboxFlusher.flush(scope: scope)
+
+            _ = try await syncEngine.sync(scope: scope, onBootstrapProgress: progressHandler)
+            lastOutboxResult = try await outboxFlusher.flush(scope: scope, force: force)
             bootstrapProgress = nil
         } catch {
             lastSyncError = error.localizedDescription
+            if isInitialSync {
+                bootstrapProgress = nil
+            }
         }
     }
 }

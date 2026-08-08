@@ -1,5 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { countMemoCharacters, docToMarkdown, docToText, markdownToDoc, resolveMemoContentDoc, resolveMemoContentMarkdown, resolveMergedMemoTitle } from "./content.ts";
+import {
+  countMemoCharacters,
+  docToMarkdown,
+  docToText,
+  markdownToDoc,
+  MERGE_DIVIDER_MARKDOWN_MARKER,
+  MERGE_DIVIDER_NODE_TYPE,
+  mergeMemoDocs,
+  resolveMemoContentDoc,
+  resolveMemoContentMarkdown,
+  resolveMergedMemoTitle,
+} from "./content.ts";
 
 describe("merged memo title", () => {
   test("prefers an explicit title, then the first custom source title", () => {
@@ -157,5 +168,58 @@ describe("Theme block compatibility", () => {
     const markdown = docToMarkdown(doc);
     expect(markdown).toContain("\\[intro\\]");
     expect(markdown).toContain("Read this first");
+  });
+});
+
+describe("merge divider", () => {
+  test("joins source docs with a semantic merge divider node", () => {
+    const merged = mergeMemoDocs([
+      markdownToDoc("first note"),
+      markdownToDoc("second note"),
+    ]);
+
+    expect(merged.content.map((node) => node.type)).toEqual([
+      "paragraph",
+      MERGE_DIVIDER_NODE_TYPE,
+      "paragraph",
+    ]);
+    expect(docToText(merged)).toContain("first note");
+    expect(docToText(merged)).toContain("second note");
+  });
+
+  test("round-trips merge dividers through Markdown without becoming a plain hr", () => {
+    const merged = mergeMemoDocs([markdownToDoc("alpha"), markdownToDoc("beta")]);
+    const markdown = docToMarkdown(merged);
+    const reparsed = markdownToDoc(markdown);
+
+    expect(markdown).toContain(MERGE_DIVIDER_MARKDOWN_MARKER);
+    expect(markdown).toContain("alpha");
+    expect(markdown).toContain("beta");
+    expect(reparsed.content.map((node) => node.type)).toEqual([
+      "paragraph",
+      MERGE_DIVIDER_NODE_TYPE,
+      "paragraph",
+    ]);
+    // Plain decorative rules still parse as horizontalRule.
+    expect(markdownToDoc("a\n\n---\n\nb").content.map((node) => node.type)).toEqual([
+      "paragraph",
+      "horizontalRule",
+      "paragraph",
+    ]);
+  });
+
+  test("recovers merge dividers when only the Markdown copy still has the marker", () => {
+    const markdown = docToMarkdown(mergeMemoDocs([markdownToDoc("left"), markdownToDoc("right")]));
+    const legacyDoc = {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "left" }] },
+        { type: "horizontalRule" },
+        { type: "paragraph", content: [{ type: "text", text: "right" }] },
+      ],
+    };
+
+    const resolved = resolveMemoContentDoc(legacyDoc, markdown);
+    expect(resolved.content.some((node) => node.type === MERGE_DIVIDER_NODE_TYPE)).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/Loca
 import { MobileResourceActions } from "../components/MobileResourceActions";
 import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import {
+  getMobileImageTarget,
   openMobileResource,
   parseMobileResourceTargetJson,
   saveMobileResourceAs,
@@ -771,15 +772,30 @@ export const MemoDetailModal = ({
         <Modal animationType="fade" onRequestClose={() => setImagePreview(null)} transparent visible={Boolean(imagePreview)}>
           <View style={resourceImageStyles.previewBackdrop}>
             {imagePreview ? (
-              <AuthenticatedResourceImage
-                alt={imagePreview.alt}
-                href={imagePreview.source}
-                loadResourceBlob={client?.getResourceBlob}
-                onLoadFailure={imageLoadFailureNotifier}
-                resizeMode="contain"
-                session={session}
-                style={resourceImageStyles.previewImage}
-              />
+              <Pressable
+                accessibilityHint={resolvedLocale === "en-US" ? "Long press for image actions" : "长按打开图片操作"}
+                accessibilityLabel={imagePreview.alt || (resolvedLocale === "en-US" ? "Image preview" : "图片预览")}
+                accessibilityRole="image"
+                delayLongPress={400}
+                onLongPress={() => {
+                  // Long-press fullscreen preview → same resource sheet as ⋯ in the note.
+                  const target = getMobileImageTarget(imagePreview.source, imagePreview.alt);
+                  if (target) {
+                    setResourceTarget(target);
+                  }
+                }}
+                style={resourceImageStyles.previewImagePressable}
+              >
+                <AuthenticatedResourceImage
+                  alt={imagePreview.alt}
+                  href={imagePreview.source}
+                  loadResourceBlob={client?.getResourceBlob}
+                  onLoadFailure={imageLoadFailureNotifier}
+                  resizeMode="contain"
+                  session={session}
+                  style={resourceImageStyles.previewImage}
+                />
+              </Pressable>
             ) : null}
             <Pressable
               accessibilityLabel={resolvedLocale === "en-US" ? "Close image preview" : "关闭图片预览"}
@@ -858,6 +874,11 @@ const resourceImageStyles = StyleSheet.create({
     width: 46,
   },
   previewImage: {
+    height: "100%",
+    width: "100%",
+  },
+  previewImagePressable: {
+    flex: 1,
     height: "100%",
     width: "100%",
   },

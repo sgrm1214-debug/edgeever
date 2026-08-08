@@ -4,6 +4,8 @@ Native SwiftUI client for EdgeEver. This replaces the React Native / Expo iOS ta
 
 **Design document:** [`docs/ios-swift-rewrite.md`](../../docs/ios-swift-rewrite.md)
 
+**App Store binaries on macOS beta:** use **Xcode Cloud (manual)** — [`docs/ios-xcode-cloud.md`](../../docs/ios-xcode-cloud.md).
+
 ## Status
 
 UI/interaction is aligned with the Android RN app (`apps/mobile`):
@@ -19,18 +21,21 @@ UI/interaction is aligned with the Android RN app (`apps/mobile`):
 - Share Extension (text/URL → App Group → new draft)
 - Locale (system/zh/en) + theme + list density
 
-Android remains Expo / React Native in `apps/mobile`. Do not retire EAS iOS builds until a shippable TestFlight build exists.
+Android remains Expo / React Native in `apps/mobile`. Store builds for iOS use this native tree (`Scripts/archive-app-store.sh`), not EAS.
 
 ## Motion / animations
 
-- **Native SwiftUI** springs for layout, search bar, filter chips, list content changes
-- **[Pow](https://github.com/EmergeTools/Pow)** (Emerge Tools) for polished micro-interactions:
-  - create button ping / jump on sync
-  - filter chip ping when activated
-  - selection / error haptics + shake
-  - pin shine, list card transitions
+Motion stack: **SwiftUI Animation** (timing / springs) + **[Pow](https://github.com/EmergeTools/Pow)** (Emerge).
 
-Shared curves live in `EdgeEver/DesignSystem/Motion.swift` (card press timing matches Android Reanimated: 0.985 @ 100ms / release 160ms).
+| Effect | Where |
+|--------|--------|
+| **Jump** (physics hop + squash) | First list open (whole list); create/edit return on that memo |
+| **Boing** (elastic drop-in) | Staggered first-paint cards |
+| **Ping** | Create button / returned memo highlight |
+| **Shine / Shake / Haptic** | Pin success, errors, selection |
+| SwiftUI scale press | Card / create / filter finger-down |
+
+Curves & wrappers: `EdgeEver/DesignSystem/Motion.swift`.
 
 ## Requirements
 
@@ -78,7 +83,52 @@ xcrun simctl launch booted org.edgeever.mobile \
 | Field | File | Notes |
 | --- | --- | --- |
 | `MARKETING_VERSION` | `Config/Version.xcconfig` | Align with monorepo release `X.Y.Z` on store submissions |
-| `CURRENT_PROJECT_VERSION` | `Config/Version.xcconfig` | Monotonic build number for every TestFlight / App Store upload |
+| `CURRENT_PROJECT_VERSION` | `Config/Version.xcconfig` | Local floor for build numbers |
+
+**Xcode Cloud** stamps `CFBundleVersion` from App Store Connect → Xcode Cloud → **Build Number** (not only this file). Before a Cloud store run, set that counter **above** the latest ASC build (`Scripts/ensure-xcode-cloud-build-number.sh` prints the recommended value).
+
+## App Store archive
+
+### Preferred: Xcode Cloud (manual only)
+
+If the Mac runs **macOS beta**, local archives are rejected by App Store Connect (**ITMS-90111**) even with release Xcode. Day-to-day development stays local; **only store / TestFlight binaries** should use **Xcode Cloud** (25 compute hours/month with Apple Developer Program).
+
+- Setup and workflow: **[`docs/ios-xcode-cloud.md`](../../docs/ios-xcode-cloud.md)**
+- Cloud hooks: `ci_scripts/ci_post_clone.sh` → `ci_pre_xcodebuild.sh` → `ci_post_xcodebuild.sh`
+- Workflow start condition must stay **Manual** so hours are not burned on every push
+- Put ASC API secrets in Xcode Cloud **shared environment variables** so `ci_post_xcodebuild.sh` auto-uploads the App Store IPA
+
+```sh
+# Before Start Build (optional but recommended)
+cd apps/ios
+bash Scripts/ensure-xcode-cloud-build-number.sh
+
+# If Cloud produced ARCHIVE_EXPORT but ASC has no build:
+bash Scripts/upload-app-store-ipa.sh /path/to/EdgeEver-*-app-store.zip
+```
+
+### Local archive (release macOS only)
+
+Use the stable Xcode app (not beta) on a **non-beta** host OS:
+
+```sh
+cd apps/ios
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer bash Scripts/archive-app-store.sh
+bash Scripts/upload-app-store-ipa.sh build/export/EdgeEver.ipa
+```
+
+On a beta host the script **exits** unless you set `EDGE_EVER_IOS_ALLOW_BETA_HOST=1` (upload will still likely fail ASC).
+
+Signing in the Xcode project is **Automatic** (Cloud-friendly). Local export still uses `ExportOptions.plist` with App Store profiles. Then submit the exact build with:
+
+```sh
+cd apps/ios
+APP_STORE_VERSION=X.Y.Z APP_STORE_BUILD_NUMBER=N \
+APP_STORE_CONNECT_API_KEY_ID=... \
+APP_STORE_CONNECT_API_ISSUER_ID=... \
+APP_STORE_CONNECT_API_KEY_P8_BASE64=... \
+fastlane ios submit_review
+```
 
 ## Regenerating the Xcode project
 

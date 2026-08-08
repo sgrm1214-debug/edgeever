@@ -157,7 +157,10 @@ describe("local mirror", () => {
     const second = await createLocalMemo(scope, { notebookId: "inbox", title: "Second", contentMarkdown: "two", tags: ["b"] });
     const merged = await mergeLocalMemos(scope, { memoIds: [first.id, second.id], title: "Merged" });
     expect(merged?.title).toBe("Merged");
-    expect(merged?.contentMarkdown).toContain("one\n\n---\n\ntwo");
+    expect(merged?.contentMarkdown).toContain("one");
+    expect(merged?.contentMarkdown).toContain("two");
+    expect(merged?.contentMarkdown).toContain("edgeever:merge-divider");
+    expect(merged?.contentJson?.content?.some((node) => node.type === "edgeeverMergeDivider")).toBe(true);
     expect(merged?.sourceMemoIds).toEqual([first.id, second.id]);
     expect((await getLocalMemo(scope, first.id))?.isDeleted).toBe(true);
     expect((await getLocalMemo(scope, second.id))?.mergedIntoMemoId).toBe(merged?.id);

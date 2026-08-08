@@ -88,11 +88,13 @@ explicitly requested.
 
 ### App Store Connect
 
-EAS Build creates the signed iOS archive from the selected tag and increments
-the remote iOS build number. EAS Submit uploads that exact build to App Store
-Connect, where it becomes available to TestFlight after Apple finishes
-processing it. Fastlane then selects the exact app version and build number,
-submits it to App Review with an App Store Connect API key, and configures
-automatic release after approval. Missing metadata, agreements, review
-information, or credentials cause the workflow to fail without submitting a
-different build.
+Native iOS store binaries come from **`apps/ios`** (SwiftUI), not Expo EAS.
+On macOS beta hosts, archives must go through **Xcode Cloud** (manual Archive
+workflow) so `BuildMachineOSBuild` is a release OS image — see
+[iOS Xcode Cloud](ios-xcode-cloud.md). Cloud stamps `CFBundleVersion` from the
+product’s next build number; `ci_post_xcodebuild.sh` uploads the App Store IPA
+with an App Store Connect API key when shared environment secrets are set.
+Fastlane (`apps/ios` `submit_review`) then selects the exact app version and
+build number, submits App Review, and configures automatic release after
+approval. Missing metadata, agreements, review information, or credentials
+cause the workflow to fail without submitting a different build.

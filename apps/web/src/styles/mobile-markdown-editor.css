@@ -404,6 +404,41 @@ input {
   white-space: pre-wrap;
 }
 
+/* External hyperlinks — match desktop default ProseMirror link styling. */
+.edgeever-mobile-tiptap-content a {
+  color: #00751f;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: rgb(0 117 31 / 0.45);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.edgeever-mobile-tiptap-content a:active,
+.edgeever-mobile-tiptap-content a:hover {
+  color: #00a82d;
+  text-decoration-color: #00a82d;
+}
+
+.edgeever-mobile-tiptap-content a.edgeever-attachment-link,
+.edgeever-mobile-tiptap-content a[href*="/api/v1/resources/"] {
+  text-decoration: none;
+}
+
+:root.dark .edgeever-mobile-tiptap-content a,
+html.dark .edgeever-mobile-tiptap-content a {
+  color: #86efac;
+  text-decoration-color: rgb(134 239 172 / 0.45);
+}
+
+:root.dark .edgeever-mobile-tiptap-content a:active,
+:root.dark .edgeever-mobile-tiptap-content a:hover,
+html.dark .edgeever-mobile-tiptap-content a:active,
+html.dark .edgeever-mobile-tiptap-content a:hover {
+  color: #4ade80;
+  text-decoration-color: #4ade80;
+}
+
 .edgeever-mobile-tiptap-content p {
   margin: 0 0 6px;
   padding: 0;
@@ -442,6 +477,15 @@ input {
   border: 0;
   border-top: 1px solid #e2e8f0;
   margin: 1.2rem 0;
+}
+
+.edgeever-mobile-tiptap-content hr.edgeever-merge-divider,
+.edgeever-mobile-tiptap-content hr[data-edgeever-merge-divider] {
+  border: 0;
+  border-top: 2px solid var(--memo-content-divider-color, #66ca80);
+  background: transparent;
+  height: 0;
+  margin: 1.5rem 0;
 }
 
 .edgeever-mobile-tiptap-content .edgeever-code-source {

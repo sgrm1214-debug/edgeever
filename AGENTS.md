@@ -10,7 +10,7 @@
 
 ## GitHub Release 约束与流程
 
-1. **版本号与基线**：使用 `vX.Y.Z` 格式（非 Draft/Prerelease）。递增根目录 `package.json`；若含移动端修改，同步更新 `apps/mobile/app.json` 的 `expo.version` 并递增 `android.versionCode`。上一个实际 Release 为审计基线。
+1. **版本号与基线**：`vX.Y.Z`（非 Draft/Prerelease）。发布须显式 `--bump patch|minor|major`（脚本不自动选级）；按 SemVer 选择，**禁止因发版节奏把用户可感知的新能力或新平台压成 patch**。递增根目录 `package.json`；含移动端修改时同步 `apps/mobile/app.json` 的 `expo.version` 并递增 `android.versionCode`。上一个正式 Release 为审计基线。
 2. **跨平台 Release 资产**：每个正式 Release 页面必须同时包含 macOS arm64 DMG、macOS x64 DMG 和 Android arm64 APK。若本次未修改对应原生运行时代码、依赖、配置或构建工具，直接复用上一个正式 Release 中已验证的原始资产，保留原文件名与校验和，禁止仅为匹配新版本号而重命名。
 3. **验证命令**：必须通过 `bun run typecheck`、`bun run typecheck:mobile` 和 `bun run build:web`。
 4. **原生资产构建与复用**：由 `scripts/plan-native-release.mjs` 决定重建或复用；桌面资产包含 `apps/web`。修改判定规则时同步更新测试。移动端重建使用 `bun run build:android:apk:local`，签名配置保存在仓库外。

@@ -6,7 +6,7 @@
 
 ```bash
 bun run release -- \
-  --bump minor \
+  --bump patch \
   --issue-title "Improve the release workflow" \
   --label enhancement \
   --change-en "Run required release checks in parallel." \
@@ -36,7 +36,8 @@ bun run release -- \
 
 ## EdgeEver 特有规则
 
-- 正式 Tag 和 Release 标题使用 `vX.Y.Z`。
+- 正式 Tag 和 Release 标题使用 `vX.Y.Z`。`--bump` 须显式指定，按 SemVer 选择；
+  禁止因发版节奏把用户可感知的新能力或新平台压成 patch（详见 `AGENTS.md`）。
 - 根版本表示整体产品 Release。只有对应原生运行时重建时，才更新原生展示版本。
   Android `versionCode` 和 iOS Build Number 是相互独立且严格递增的标识。
 - 每个正式 Release 包含 macOS arm64 与 x64 DMG、按架构区分的更新 ZIP，以及

@@ -1,7 +1,13 @@
-import { ChartNoAxesCombined, Image, Languages, Palette, RefreshCw } from "lucide-react";
+import { ChartNoAxesCombined, Image, Languages, MousePointerClick, Palette, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { writeSyncIntervalPreference, type ShortcutSettings, type SyncIntervalPreference } from "@/lib/app-helpers";
+import {
+  EDITOR_LINK_OPEN_MODE_CHANGED_EVENT,
+  getStoredEditorLinkOpenMode,
+  writeEditorLinkOpenMode,
+  type EditorLinkOpenMode,
+} from "@/lib/editor-link-click";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -53,6 +59,7 @@ export const PreferenceCard = ({
   const [editingTheme, setEditingTheme] = useState<CustomEditorTheme | null>(null);
   const [activeLocalePreference, setActiveLocalePreference] = useState<AppLocalePreference>(() => getAppLocalePreference());
   const [isMobile, setIsMobile] = useState(false);
+  const [linkOpenMode, setLinkOpenMode] = useState<EditorLinkOpenMode>(() => getStoredEditorLinkOpenMode());
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 640px)");
@@ -60,6 +67,24 @@ export const PreferenceCard = ({
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mediaQuery.addEventListener("change", handler);
     return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  useEffect(() => {
+    const syncMode = () => setLinkOpenMode(getStoredEditorLinkOpenMode());
+    const onPreferenceChanged = (event: Event) => {
+      const detail = (event as CustomEvent<EditorLinkOpenMode>).detail;
+      if (detail === "click" || detail === "modifier") {
+        setLinkOpenMode(detail);
+        return;
+      }
+      syncMode();
+    };
+    window.addEventListener(EDITOR_LINK_OPEN_MODE_CHANGED_EVENT, onPreferenceChanged);
+    window.addEventListener("storage", syncMode);
+    return () => {
+      window.removeEventListener(EDITOR_LINK_OPEN_MODE_CHANGED_EVENT, onPreferenceChanged);
+      window.removeEventListener("storage", syncMode);
+    };
   }, []);
 
   const activeCustom = customEditorThemes.find((t) => t.id === editorTheme);
@@ -275,6 +300,28 @@ export const PreferenceCard = ({
               checked={imageCompressionEnabled}
               onCheckedChange={onImageCompressionChange}
               aria-label={t("settings.imageCompressionAria")}
+            />
+          </div>
+        </div>
+
+        {/* Desktop only: mobile editors always open links on a plain tap. */}
+        <div className="hidden min-h-16 flex-col items-start gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 lg:flex">
+          <div className="flex min-w-0 items-start gap-3">
+            <MousePointerClick className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-900">{t("settings.linkOpenModifierTitle")}</div>
+              <div className="mt-0.5 text-xs leading-4 text-slate-500">{t("settings.linkOpenModifierDescription")}</div>
+            </div>
+          </div>
+          <div className="flex w-full shrink-0 justify-start sm:w-44 sm:justify-end">
+            <Switch
+              checked={linkOpenMode === "modifier"}
+              onCheckedChange={(enabled) => {
+                const next: EditorLinkOpenMode = enabled ? "modifier" : "click";
+                writeEditorLinkOpenMode(next);
+                setLinkOpenMode(next);
+              }}
+              aria-label={t("settings.linkOpenModifierAria")}
             />
           </div>
         </div>

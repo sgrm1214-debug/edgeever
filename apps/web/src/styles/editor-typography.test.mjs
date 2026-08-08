@@ -23,6 +23,17 @@ describe("editor typography contract", () => {
     expect(MEMO_CONTENT_STYLE.body.paragraphSpacing).toBe(6);
   });
 
+  test("styles default-theme external hyperlinks so they are distinct from body text", () => {
+    const globals = readStyle("./globals.css");
+    const linkRules = declarationsForSelector(globals, ".ProseMirror a");
+    const markdownLinkRules = declarationsForSelector(globals, ".markdown-content a");
+
+    expect(linkRules).toMatch(/color\s*:\s*var\(--brand-green-text\)/);
+    expect(linkRules).toMatch(/text-decoration\s*:\s*underline/);
+    expect(markdownLinkRules).toMatch(/color\s*:\s*var\(--brand-green-text\)/);
+    expect(markdownLinkRules).toMatch(/text-decoration\s*:\s*underline/);
+  });
+
   test("does not let preset themes override body rhythm", () => {
     for (const filename of PRESET_THEME_FILES) {
       const source = readStyle(`./editor-themes/${filename}`);

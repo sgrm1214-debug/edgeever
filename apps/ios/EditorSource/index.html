@@ -9,8 +9,15 @@
     <title>EdgeEver Editor</title>
   </head>
   <body>
-    <div id="toolbar"></div>
-    <div id="editor"></div>
+    <!--
+      Android-parity shell: toolbar is a non-scrolling flex child at the top.
+      Only #editor scrolls. Sticky/fixed toolbars break under WKWebView keyboard
+      (they jump to the bottom-right of the visual viewport).
+    -->
+    <div id="shell">
+      <div id="toolbar" role="toolbar" aria-label="格式"></div>
+      <div id="editor"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

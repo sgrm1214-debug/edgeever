@@ -49,7 +49,7 @@ export const RELEASE_VALIDATIONS = [
 
 const usage = `Usage:
   bun run release -- \\
-    --bump minor \\
+    --bump patch \\
     --issue-title "Release issue title" \\
     --label bug \\
     --change-en "English user-facing change" \\

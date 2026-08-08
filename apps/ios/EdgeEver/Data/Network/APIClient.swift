@@ -131,6 +131,7 @@ actor APIClient {
         title: String?,
         isPinned: Bool?,
         contentMarkdown: String?,
+        contentJson: JSONValue? = nil,
         tags: [String]?
     ) async throws -> MemoDetail {
         struct Body: Encodable {
@@ -141,6 +142,7 @@ actor APIClient {
             var title: String?
             var isPinned: Bool?
             var contentMarkdown: String?
+            var contentJson: JSONValue?
             var tags: [String]?
         }
         let response: MemoResponse = try await request(
@@ -154,6 +156,7 @@ actor APIClient {
                 title: title,
                 isPinned: isPinned,
                 contentMarkdown: contentMarkdown,
+                contentJson: contentJson,
                 tags: tags
             )
         )
@@ -477,6 +480,23 @@ struct APIError: Error, LocalizedError, Equatable, Sendable {
     var errorDescription: String? { message }
     var isUnauthorized: Bool { status == 401 }
     var isRevisionConflict: Bool { code == "revision_conflict" || status == 409 }
+    /// Server has no **memo** row for this id (update / edit-session).
+    /// Tight match only — never treat notebook/resource/workspace "not found" as memo 404.
+    var isMemoNotFound: Bool {
+        let lower = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // API: `notFound(c, "Memo not found")` → code not_found, message "Memo not found".
+        let messageIsMemo = lower == "memo not found"
+            || lower.hasPrefix("memo not found")
+            || (lower.contains("memo") && lower.contains("not found")
+                && !lower.contains("notebook")
+                && !lower.contains("resource")
+                && !lower.contains("revision")
+                && !lower.contains("workspace"))
+        if status == 404, code == "not_found" || code == nil {
+            return messageIsMemo
+        }
+        return code == "not_found" && messageIsMemo
+    }
 }
 
 private struct AnyEncodable: Encodable {

@@ -9,7 +9,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as Clipboard from "expo-clipboard";
-import { MEMO_CONTENT_STYLE, getImageReferrerPolicy, getResourceIdFromUrl, type TiptapDoc } from "@edgeever/shared";
+import { MEMO_CONTENT_STYLE, MergeDivider, getImageReferrerPolicy, getResourceIdFromUrl, type TiptapDoc } from "@edgeever/shared";
 import {
   DEFAULT_IMAGE_WIDTH_PERCENT,
   IMAGE_WIDTH_PRESETS,
@@ -401,6 +401,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     autofocus: autoFocus ? "end" : false,
     extensions: [
       StarterKit.configure({ codeBlock: false, link: { openOnClick: false } }),
+      MergeDivider,
       mermaidCodeBlockExtension,
       protectedImageExtension,
       TableKit.configure({
@@ -1773,6 +1774,19 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-editor-content pre { max-width: 100%; overflow-x: auto; border-radius: 10px; padding: 14px 90px 14px 14px; background: #0f172a; color: #e2e8f0; font-size: 0.9rem; }
   .edgeever-editor-content code { border-radius: 4px; padding: 2px 4px; background: ${theme === "dark" ? "#1e293b" : "#f1f5f9"}; font-size: 0.9em; }
   .edgeever-editor-content pre code { padding: 0; background: transparent; font-size: inherit; }
+  /* External hyperlinks (match Web default ProseMirror). Attachment chips override below. */
+  .edgeever-editor-content a {
+    color: ${theme === "dark" ? "#86efac" : "#00751f"};
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-color: ${theme === "dark" ? "rgba(134, 239, 172, 0.45)" : "rgba(0, 117, 31, 0.45)"};
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .edgeever-editor-content a:active {
+    color: ${theme === "dark" ? "#4ade80" : "#00a82d"};
+    text-decoration-color: ${theme === "dark" ? "#4ade80" : "#00a82d"};
+  }
   /* Compact attachment chips: still ≥48px touch height, less vertical bulk than 58px. */
   .edgeever-editor-content a.edgeever-attachment-link, .edgeever-editor-content a[href*="/api/v1/resources/"] {
     display: flex;

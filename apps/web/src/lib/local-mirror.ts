@@ -1,4 +1,4 @@
-import { createExcerpt, docToMarkdown, docToText, markdownToDoc, resolveMemoContentMarkdown, resolveMergedMemoTitle, type MemoDetail, type MemoRevision, type MemoSummary, type MemoTemplate, type Notebook, type ResourceListItem, type TagSummary, type TiptapDoc } from "@edgeever/shared";
+import { createExcerpt, docToMarkdown, docToText, markdownToDoc, mergeMemoDocs, resolveMemoContentDoc, resolveMergedMemoTitle, type MemoDetail, type MemoRevision, type MemoSummary, type MemoTemplate, type Notebook, type ResourceListItem, type TagSummary, type TiptapDoc } from "@edgeever/shared";
 import type { MemoFilterMode, MemoSortMode } from "@/lib/app-helpers";
 import { api, type SyncChangesResponse } from "@/lib/api";
 import { localDb, type LocalMemo, type LocalNotebook, type LocalResource, type LocalRevision } from "@/lib/local-db";
@@ -245,11 +245,19 @@ export const isLocalMemoId = (memoId: string) => memoId.startsWith("local_");
 
 export const createLocalMemo = async (
   scope: string,
-  input: { notebookId: string; title?: string; contentMarkdown?: string; tags?: string[]; createdAt?: string; updatedAt?: string },
+  input: {
+    notebookId: string;
+    title?: string;
+    contentMarkdown?: string;
+    contentJson?: TiptapDoc;
+    tags?: string[];
+    createdAt?: string;
+    updatedAt?: string;
+  },
 ) => {
   const now = new Date().toISOString();
-  const contentMarkdown = input.contentMarkdown ?? "";
-  const contentJson = markdownToDoc(contentMarkdown);
+  const contentJson = input.contentJson ?? markdownToDoc(input.contentMarkdown ?? "");
+  const contentMarkdown = input.contentMarkdown ?? docToMarkdown(contentJson);
   const contentText = docToText(contentJson);
   const memo: MemoDetail = {
     id: `local_${crypto.randomUUID()}`,
@@ -573,18 +581,20 @@ export const applyLocalEmptyTrash = async (scope: string) => {
 export const mergeLocalMemos = async (scope: string, input: { memoIds: string[]; notebookId?: string; title?: string }) => {
   const sources = (await Promise.all(input.memoIds.map((memoId) => getLocalMemo(scope, memoId)))).filter((memo): memo is MemoDetail => Boolean(memo));
   if (sources.length < 2) return null;
-  const sourceMarkdown = sources.map((memo) => {
-    const markdown = resolveMemoContentMarkdown(memo.contentJson, memo.contentMarkdown);
-    if (!markdown.trim() && memo.contentText.trim()) {
+  const sourceDocs = sources.map((memo) => {
+    const doc = resolveMemoContentDoc(memo.contentJson, memo.contentMarkdown);
+    if (!docToText(doc).trim() && memo.contentText.trim()) {
       throw new Error("Source note content could not be recovered safely. Merge was cancelled.");
     }
-    return markdown;
+    return doc;
   });
-  const contentMarkdown = sourceMarkdown.join("\n\n---\n\n");
+  const contentJson = mergeMemoDocs(sourceDocs);
+  const contentMarkdown = docToMarkdown(contentJson);
   const memo = await createLocalMemo(scope, {
     notebookId: input.notebookId ?? sources[0]!.notebookId,
     title: resolveMergedMemoTitle(input.title, sources),
     contentMarkdown,
+    contentJson,
     tags: [...new Set(sources.flatMap((source) => source.tags))],
   });
   const merged = {

@@ -82,8 +82,12 @@ Release。默认命令直接使用 Production；只有明确要求测试交付�
 
 ### App Store Connect
 
-EAS Build 从指定 tag 创建签名 iOS Archive，并递增远端 iOS Build Number。
-EAS Submit 将同一个构建上传到 App Store Connect；Apple 处理完成后，它会出现在
-TestFlight 中。随后 Fastlane 使用 App Store Connect API Key 精确选择相同的
-App Version 和 Build Number，提交 App Review，并设置为审核通过后自动发布。
-如果元数据、协议、审核信息或凭据不完整，工作流会失败，不会改为提交其他构建。
+原生 iOS 商店二进制来自 **`apps/ios`**（SwiftUI），不再走 Expo EAS。
+在 macOS beta 本机上，Archive 必须通过 **Xcode Cloud**（仅手动触发的 Archive
+工作流），保证 `BuildMachineOSBuild` 来自正式系统镜像——见
+[iOS Xcode Cloud](ios-xcode-cloud.md)。Cloud 用产品「下一个构建版本编号」写入
+`CFBundleVersion`；配置共享环境变量后，`ci_post_xcodebuild.sh` 会用
+App Store Connect API Key 上传 App Store IPA。随后 Fastlane（`apps/ios` 的
+`submit_review`）精确选择相同的 App Version 与 Build Number，提交 App Review，
+并设置为审核通过后自动发布。元数据、协议、审核信息或凭据不完整时工作流会失败，
+不会改为提交其他构建。

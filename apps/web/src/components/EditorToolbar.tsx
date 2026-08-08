@@ -15,6 +15,7 @@ import {
   ChartNoAxesCombined,
   Minus,
   Paperclip,
+  Link,
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -117,14 +118,19 @@ export const EditorToolbar = ({
   markdownMode = false,
   onMarkdownModeChange,
   onPickAttachment,
+  onPickExternalLink,
   onPickNoteLink,
+  externalLinkActive = false,
 }: {
   editor: Editor | null;
   readOnly: boolean;
   markdownMode?: boolean;
   onMarkdownModeChange?: () => void;
   onPickAttachment?: () => void;
+  /** Insert or edit an external hyperlink (not a note reference). */
+  onPickExternalLink?: () => void;
   onPickNoteLink?: () => void;
+  externalLinkActive?: boolean;
 }) => {
   const { t } = useTranslation();
   const editorReady = isToolbarEditorReady(editor);
@@ -236,6 +242,23 @@ export const EditorToolbar = ({
                 onClick={onPickAttachment}
               >
                 <Paperclip className="h-4 w-4" />
+              </EditorToolbarButton>
+              <ToolbarDivider />
+            </>
+          )}
+          {onPickExternalLink && (
+            <>
+              <EditorToolbarButton
+                title={
+                  externalLinkActive
+                    ? t("editorToolbar.externalLinkEdit")
+                    : t("editorToolbar.externalLinkShortcut")
+                }
+                active={externalLinkActive}
+                disabled={readOnly}
+                onClick={onPickExternalLink}
+              >
+                <Link className="h-4 w-4" />
               </EditorToolbarButton>
               <ToolbarDivider />
             </>

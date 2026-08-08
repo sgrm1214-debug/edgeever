@@ -298,6 +298,31 @@ textarea {
   padding: 0;
 }
 
+/* External hyperlinks (default theme).
+ * Tailwind preflight resets <a> to inherit color/decoration, so without this
+ * rule links are indistinguishable from body text. Note/attachment chips below
+ * use more specific selectors and keep their chip appearance. */
+.ProseMirror a {
+  color: var(--brand-green-text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-green-text) 45%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 150ms ease, text-decoration-color 150ms ease;
+}
+
+.ProseMirror a:hover {
+  color: var(--brand-green);
+  text-decoration-color: var(--brand-green);
+}
+
+.ProseMirror a:focus-visible {
+  outline: 2px solid var(--brand-green);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .ProseMirror a.edgeever-note-link,
 .ProseMirror a[href^="#memo="] {
   display: inline-flex;
@@ -610,6 +635,16 @@ textarea {
   margin: var(--memo-content-divider-spacing) 0;
   border: 0;
   border-top: 1px solid var(--memo-content-divider-color);
+}
+
+/* Semantic merge boundaries — stronger than decorative theme hairlines. */
+.ProseMirror hr.edgeever-merge-divider,
+.ProseMirror hr[data-edgeever-merge-divider] {
+  margin: var(--memo-content-divider-spacing) 0;
+  height: 0;
+  border: 0;
+  border-top: 2px solid var(--memo-content-divider-color);
+  background: transparent;
 }
 
 .ProseMirror img {

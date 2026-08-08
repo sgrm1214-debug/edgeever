@@ -1,4 +1,11 @@
 // Bump MARKETING_VERSION with monorepo release X.Y.Z when shipping App Store builds.
 // CURRENT_PROJECT_VERSION must increase for every store upload (TestFlight / App Store).
-MARKETING_VERSION = 1.0.0
-CURRENT_PROJECT_VERSION = 1
+// Build 30+ marks the native SwiftUI client (RN EAS builds ended at 29).
+//
+// Xcode Cloud overwrites CFBundleVersion with its managed "next build number"
+// (App Store Connect → Xcode Cloud → Settings → Build Number). Keep that value
+// ≥ this file and ≥ the latest ASC build. ci_pre_xcodebuild.sh also stamps
+// CI_BUILD_NUMBER into the archive when present.
+// Last ASC store build: 32 (2026-08-07, Cloud + altool). Floor for next Cloud run: 33+.
+MARKETING_VERSION = 1.12.6
+CURRENT_PROJECT_VERSION = 33

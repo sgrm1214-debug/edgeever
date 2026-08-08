@@ -57,6 +57,9 @@ final class SyncOutboxRepository: @unchecked Sendable {
                 )
                 createPayload.title = payload.title
                 createPayload.contentMarkdown = payload.contentMarkdown
+                if let contentJson = payload.contentJson {
+                    createPayload.contentJson = contentJson
+                }
                 createPayload.notebookId = payload.notebookId
                 createPayload.tags = payload.tags
                 let json = try String(data: EdgeEverJSON.encoder.encode(createPayload), encoding: .utf8) ?? "{}"
@@ -69,6 +72,39 @@ final class SyncOutboxRepository: @unchecked Sendable {
                     WHERE scope = ? AND id = ?
                     """,
                     arguments: [json, now, version + 1, scope, createId]
+                )
+                return
+            }
+
+            // Never enqueue a bare update for offline `local:` ids — server has no such memo.
+            // Without a pending create this would loop as "Memo not found".
+            if payload.memoId.hasPrefix("local:") {
+                let createPayload = MemoCreatePayload(
+                    memoId: payload.memoId,
+                    title: payload.title,
+                    contentMarkdown: payload.contentMarkdown,
+                    contentJson: payload.contentJson,
+                    notebookId: payload.notebookId,
+                    tags: payload.tags,
+                    createdAt: now
+                )
+                let json = try String(data: EdgeEverJSON.encoder.encode(createPayload), encoding: .utf8) ?? "{}"
+                let existingVersion = try Int.fetchOne(
+                    db,
+                    sql: "SELECT version FROM mobile_sync_outbox WHERE scope = ? AND id = ?",
+                    arguments: [scope, createId]
+                ) ?? 0
+                try db.execute(
+                    sql: """
+                    INSERT OR REPLACE INTO mobile_sync_outbox
+                      (scope, id, kind, memo_id, status, payload_json, attempt_count, last_error,
+                       next_attempt_at, created_at, updated_at, version)
+                    VALUES (?, ?, ?, ?, 'pending', ?, 0, NULL, NULL, ?, ?, ?)
+                    """,
+                    arguments: [
+                        scope, createId, OutboxKind.memoCreate.rawValue, payload.memoId, json,
+                        now, now, existingVersion + 1,
+                    ]
                 )
                 return
             }
@@ -99,6 +135,24 @@ final class SyncOutboxRepository: @unchecked Sendable {
                     scope, updateId, OutboxKind.memoUpdate.rawValue, payload.memoId, updateJSON,
                     attemptCount, createdAt, now, existingVersion + 1,
                 ]
+            )
+        }
+    }
+
+    /// Clear backoff so error/conflict items retry immediately (Android force flush).
+    func armImmediateRetry(scope: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                UPDATE mobile_sync_outbox
+                SET status = CASE WHEN status IN ('error', 'conflict', 'syncing') THEN 'pending' ELSE status END,
+                    next_attempt_at = NULL,
+                    last_error = CASE WHEN status IN ('error', 'conflict') THEN last_error ELSE last_error END,
+                    updated_at = ?
+                WHERE scope = ?
+                  AND status IN ('pending', 'error', 'syncing', 'conflict')
+                """,
+                arguments: [EdgeEverDate.nowString(), scope]
             )
         }
     }
@@ -221,6 +275,7 @@ final class SyncOutboxRepository: @unchecked Sendable {
                 expectedContentHash: memo.contentHash,
                 title: createPayload.title,
                 contentMarkdown: createPayload.contentMarkdown,
+                contentJson: createPayload.contentJson,
                 notebookId: createPayload.notebookId,
                 tags: createPayload.tags
             )

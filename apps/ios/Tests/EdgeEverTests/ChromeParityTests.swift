@@ -104,6 +104,11 @@ final class ChromeParityTests: XCTestCase {
         XCTAssertTrue(src.contains("commitCreate") || src.contains("persistDraftOrQueue"), "save path must remain")
         // Done must route through MemoCreateCommit (materialize-safe: update vs create)
         XCTAssertTrue(src.contains("MemoCreateCommit.commit"), "create Done must use MemoCreateCommit")
+        // Android CreateMemoModal.requestClose always runs createMutation — Back must commit, not draft-only dismiss.
+        XCTAssertTrue(
+            src.contains("handleBack") && src.range(of: #"func handleBack[\s\S]*?commitCreate\(\)"#, options: .regularExpression) != nil,
+            "create Back must call commitCreate (Android requestClose parity)"
+        )
         // Must NOT use Form as primary create chrome (nested picker sheets may use List/nav).
         XCTAssertFalse(src.contains("Form {"), "Form-based primary chrome is not Android parity")
         // Primary shell is createHeader / createMain, not NavigationStack+toolbar chrome.
@@ -136,7 +141,11 @@ final class ChromeParityTests: XCTestCase {
         let src = try readShippedSource("Features/Workspace/WorkspaceView.swift")
         XCTAssertTrue(src.contains("editingMemo"), "workspace holds editing route")
         XCTAssertTrue(src.contains("fullScreenCover(item: $editingMemo)"), "edit presented at workspace root")
-        XCTAssertTrue(src.contains("MemoEditView(mode: .edit(memoId:"), "edit cover builds MemoEditView")
+        // Multi-line call site: MemoEditView(\n mode: .edit(memoId: route.id)
+        XCTAssertTrue(
+            src.contains(".edit(memoId:") || src.contains("MemoEditView(mode: .edit(memoId:"),
+            "edit cover builds MemoEditView"
+        )
     }
 
     func testWorkspacePresentsCreateAsFullScreenCover() throws {

@@ -2,6 +2,15 @@ import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import { Markdown, MarkdownManager } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
+import { MergeDivider, MERGE_DIVIDER_NODE_TYPE } from "./merge-divider";
+
+export {
+  MergeDivider,
+  MERGE_DIVIDER_MARKDOWN_MARKER,
+  MERGE_DIVIDER_NODE_TYPE,
+  mergeMemoDocs,
+  createMergeDividerNode,
+} from "./merge-divider";
 
 export type TiptapTextNode = {
   type: "text";
@@ -53,6 +62,7 @@ const markdownManager = new MarkdownManager({
     StarterKit,
     TableKit,
     Image,
+    MergeDivider,
     Markdown.configure({
       markedOptions: { gfm: true },
     }),
@@ -88,7 +98,12 @@ export const resolveMemoContentDoc = (
   const currentDoc = contentJson && Array.isArray(contentJson.content)
     ? upgradeLegacyAttachmentLinks(contentJson)
     : emptyDoc();
-  if (!contentMarkdown?.trim() || docContainsNodeType(currentDoc, "table") || docContainsNodeType(currentDoc, "edgeeverThemeBlock")) {
+  if (
+    !contentMarkdown?.trim() ||
+    docContainsNodeType(currentDoc, "table") ||
+    docContainsNodeType(currentDoc, "edgeeverThemeBlock") ||
+    docContainsNodeType(currentDoc, MERGE_DIVIDER_NODE_TYPE)
+  ) {
     return currentDoc;
   }
 
@@ -96,8 +111,12 @@ export const resolveMemoContentDoc = (
   // Some older saves left an empty JSON document behind while retaining the
   // real body in Markdown. Treat that as a compatibility case too; otherwise
   // the editor can show the Markdown body while list excerpts see an empty
-  // JSON document.
-  return docContainsNodeType(markdownDoc, "table") || !docToText(currentDoc) ? markdownDoc : currentDoc;
+  // JSON document. Also recover merge dividers when only Markdown still has them.
+  return docContainsNodeType(markdownDoc, "table")
+    || docContainsNodeType(markdownDoc, MERGE_DIVIDER_NODE_TYPE)
+    || !docToText(currentDoc)
+    ? markdownDoc
+    : currentDoc;
 };
 
 const LEGACY_ATTACHMENT_PATTERN = /^(附件：|Attachment:\s*)(.+?)\s+(\/api\/v1\/resources\/\S+|https?:\/\/\S+)$/;

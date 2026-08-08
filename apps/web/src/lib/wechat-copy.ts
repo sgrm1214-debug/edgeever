@@ -74,8 +74,12 @@ const applyInlineStyles = (
   root.querySelectorAll<HTMLElement>("*").forEach((element) => {
     const tagName = element.tagName.toLowerCase();
     let style = WECHAT_STYLES[tagName] || "";
+    const isMergeDivider =
+      tagName === "hr" && element.matches("[data-edgeever-merge-divider], .edgeever-merge-divider");
 
-    if (customColors) {
+    if (isMergeDivider) {
+      style = `margin: 1.75em 0; border: 0; border-top: 2px solid ${accent};`;
+    } else if (customColors) {
       if (tagName === "p") {
         style = `margin: 0 0 ${PARAGRAPH_SPACING}; padding: 0; line-height: ${BODY_LINE_HEIGHT}; font-size: ${BODY_FONT_SIZE}; color: ${textColor};`;
       } else if (tagName === "h1" || tagName === "h2" || tagName === "h3") {

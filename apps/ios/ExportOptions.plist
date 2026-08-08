@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>destination</key>
+	<string>export</string>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>teamID</key>
+	<string>9KA3NM38B6</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>org.edgeever.mobile</key>
+		<string>*[expo] org.edgeever.mobile AppStore 2026-08-01T04:08:38.265Z</string>
+		<key>org.edgeever.mobile.expo-sharing-extension</key>
+		<string>*[expo] org.edgeever.mobile.expo-sharing-extension AppStore 2026-08-01T04:09:04.014Z</string>
+	</dict>
+</dict>
+</plist>

@@ -279,6 +279,8 @@ struct MemoCreatePayload: Codable, Equatable, Sendable {
     var memoId: String
     var title: String
     var contentMarkdown: String
+    /// TipTap JSON when available (preserves image width attrs markdown drops).
+    var contentJson: String? = nil
     var notebookId: String
     var tags: [String]
     var createdAt: String
@@ -290,6 +292,8 @@ struct MemoUpdatePayload: Codable, Equatable, Sendable {
     var expectedContentHash: String
     var title: String
     var contentMarkdown: String
+    /// TipTap JSON when available (preserves image width attrs markdown drops).
+    var contentJson: String? = nil
     var notebookId: String
     var tags: [String]
 }

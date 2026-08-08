@@ -4,7 +4,7 @@ import type { MemoSummary, Notebook } from "@edgeever/shared";
 import { MOBILE_UI_METRICS, toggleMobileMemoFilterMode } from "@edgeever/shared/mobile-ui";
 import { ActivityIndicator, FlatList, Platform, RefreshControl, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { Check, ChevronDown, ChevronLeft, MoreHorizontal, Plus, RotateCcw, Search, Sparkles, Tag, X } from "../components/icons";
+import { Check, ChevronDown, ChevronLeft, LayoutTemplate, MoreHorizontal, Plus, RotateCcw, Search, Sparkles, Tag, X } from "../components/icons";
 import { Pressable, Text, TextInput } from "../components/LocalizedText";
 import type { MobileBootstrapProgress } from "../lib/local-mirror";
 import { useMobileLocale } from "../lib/mobile-locale";
@@ -30,6 +30,7 @@ export const NotesView = ({
   memos,
   notebooks,
   onCreate,
+  onCreateFromTemplate,
   onClearSelection,
   onFilterModeChange,
   onOpenActions,
@@ -59,6 +60,7 @@ export const NotesView = ({
   memos: MemoSummary[];
   notebooks: Notebook[];
   onCreate: () => void;
+  onCreateFromTemplate?: () => void;
   onClearSelection: () => void;
   onFilterModeChange: (filterMode: MemoFilterMode) => void;
   onOpenActions: () => void;
@@ -186,7 +188,14 @@ export const NotesView = ({
       </View>
 
     <MemoList
-      emptyAction={memoView === "notebook" && notebooks.length > 0 ? { label: "新建笔记", onPress: onCreate } : undefined}
+      emptyActions={memoView === "notebook" && notebooks.length > 0 && !searchActive && memoFilterMode === "all"
+        ? [
+          { label: "新建笔记", onPress: onCreate, variant: "primary" as const },
+          ...(onCreateFromTemplate
+            ? [{ label: "从模板新建", onPress: onCreateFromTemplate, variant: "secondary" as const }]
+            : []),
+        ]
+        : undefined}
       emptyDescription={searchActive ? "换个关键词再试" : memoFilterMode !== "all" ? "试试切换筛选条件，或调整搜索关键词。" : memoView === "trash" ? "删除的笔记会显示在这里。" : "先创建一条笔记，之后可以在这里快速预览、搜索和批量整理。"}
       emptyTitle={searchActive ? "没有找到匹配笔记" : memoFilterMode !== "all" ? "没有符合筛选的笔记" : memoView === "trash" ? "回收站为空" : "暂无笔记"}
       error={error}
@@ -211,7 +220,7 @@ export const NotesView = ({
 
 
 const MemoList = ({
-  emptyAction,
+  emptyActions,
   emptyDescription,
   emptyTitle,
   error,
@@ -230,7 +239,7 @@ const MemoList = ({
   selectionMode = false,
   selectedMemoIds = new Set(),
 }: {
-  emptyAction?: { label: string; onPress: () => void };
+  emptyActions?: Array<{ label: string; onPress: () => void; variant?: "primary" | "secondary" }>;
   emptyDescription: string;
   emptyTitle: string;
   error?: unknown;
@@ -323,11 +332,27 @@ const MemoList = ({
         <View style={styles.memoListEmptyCard}>
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
           <Text style={styles.mutedText}>{emptyDescription}</Text>
-          {emptyAction ? (
-            <Pressable accessibilityRole="button" onPress={emptyAction.onPress} style={styles.emptyActionButton}>
-              <Plus color="#ffffff" size={18} />
-              <Text style={styles.emptyActionButtonText}>{emptyAction.label}</Text>
-            </Pressable>
+          {emptyActions && emptyActions.length > 0 ? (
+            <View style={styles.emptyActionRow}>
+              {emptyActions.map((action) => {
+                const isSecondary = action.variant === "secondary";
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={action.label}
+                    onPress={action.onPress}
+                    style={isSecondary ? styles.emptyActionSecondaryButton : styles.emptyActionButton}
+                  >
+                    {isSecondary
+                      ? <LayoutTemplate color="#0f172a" size={16} />
+                      : <Plus color="#ffffff" size={18} />}
+                    <Text style={isSecondary ? styles.emptyActionSecondaryButtonText : styles.emptyActionButtonText}>
+                      {action.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           ) : null}
         </View>
       }

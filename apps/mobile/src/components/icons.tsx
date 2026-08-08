@@ -43,6 +43,7 @@ export const ImagePlus = createIcon("plus-square");
 export const Info = createIcon("info");
 export const Italic = createIcon("italic");
 export const KeyRound = createIcon("key");
+export const LayoutTemplate = createIcon("layout");
 export const Link = createIcon("link");
 export const List = createIcon("list");
 export const LockKeyhole = createIcon("lock");

@@ -13,6 +13,7 @@ import type {
   MemoRevision,
   MemoSummary,
   MemoShare,
+  MemoTemplate,
   Notebook,
   Resource,
   ResourceListItem,
@@ -74,6 +75,14 @@ export type ListLoginDeviceSessionsResponse = {
 
 export type MemoResponse = {
   memo: MemoDetail;
+};
+
+export type ListTemplatesResponse = {
+  templates: MemoTemplate[];
+};
+
+export type TemplateResponse = {
+  template: MemoTemplate;
 };
 
 export type MemoShareResponse = {
@@ -341,6 +350,14 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
       request<MemoResponse>("/api/v1/memos", {
         method: "POST",
         body: JSON.stringify(payload),
+      }),
+
+    listTemplates: () => request<ListTemplatesResponse>("/api/v1/templates"),
+
+    useTemplate: (templateId: string, notebookId: string) =>
+      request<MemoResponse>(`/api/v1/templates/${templateId}/use`, {
+        method: "POST",
+        body: JSON.stringify({ notebookId }),
       }),
 
     moveMemos: (payload: { memoIds: string[]; notebookId: string }) =>

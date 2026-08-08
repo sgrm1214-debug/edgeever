@@ -116,8 +116,10 @@ import { showEdgeEverKeyboard } from "../../modules/edgeever-keyboard";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
 import { MobileResourceActions } from "../components/MobileResourceActions";
+import { MobileCreateChoiceModal, MobileTemplatePickerModal } from "../components/MobileTemplatePicker";
 import { resolveMobileThemeStyles, useMobileTheme } from "../lib/mobile-theme";
 import { useMobileUpdate } from "../lib/mobile-update";
+import { createMemoSeedHasContent, type MobileCreateMemoSeed } from "../lib/mobile-templates";
 import { MobileMermaidDiagram, MobileMermaidProvider } from "../components/MobileMermaid";
 import { getMobileMarkdownFenceLanguage, trimMobileMarkdownFenceContent } from "../lib/mobile-mermaid";
 import {
@@ -236,6 +238,9 @@ export const WorkspaceScreen = ({
   const [selectedMemoId, setSelectedMemoId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createSeed, setCreateSeed] = useState<MobileCreateMemoSeed | null>(null);
+  const [createChoiceOpen, setCreateChoiceOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [incomingClipDraft, setIncomingClipDraft] = useState<MobileWebClipDraft | null>(null);
   const [incomingClipCaptureUrl, setIncomingClipCaptureUrl] = useState<string | null>(null);
   const [isImportingShare, setIsImportingShare] = useState(false);
@@ -593,14 +598,23 @@ export const WorkspaceScreen = ({
       ? activeNotebookId
       : defaultMemoNotebookId;
   const canCreateMemo = memoView !== "trash" && Boolean(createMemoNotebookId);
-  const openCreateMemo = () => {
+  const openCreateMemo = useCallback((seed: MobileCreateMemoSeed | null = null) => {
     beginEditorStartup();
     setIncomingClipDraft(null);
+    setCreateSeed(seed);
     setCreateOpen(true);
-  };
+  }, []);
+
+  const openCreateFromTemplate = useCallback(() => {
+    if (!canCreateMemo) {
+      return;
+    }
+    setTemplatePickerOpen(true);
+  }, [canCreateMemo]);
 
   const openIncomingClipDraft = useCallback((draft: MobileWebClipDraft) => {
     beginEditorStartup();
+    setCreateSeed(null);
     setIncomingClipDraft(draft);
     setActiveView("notes");
     setMemoView("notebook");
@@ -1155,7 +1169,8 @@ export const WorkspaceScreen = ({
           memoView={memoView}
           memos={visibleMemos}
           notebooks={notebooks}
-          onCreate={openCreateMemo}
+          onCreate={() => openCreateMemo()}
+          onCreateFromTemplate={canCreateMemo ? openCreateFromTemplate : undefined}
           onClearSelection={clearSelection}
           onFilterModeChange={setMemoFilterMode}
           onOpenActions={() => setNotesActionsOpen(true)}
@@ -1257,14 +1272,16 @@ export const WorkspaceScreen = ({
 
       <CreateMemoModal
         baseUrl={session?.baseUrl ?? ""}
+        client={client}
         dataScope={dataScope}
         defaultNotebookId={createMemoNotebookId}
         imageCompressionEnabled={imageCompressionEnabled}
-        initialDraft={incomingClipDraft}
+        initialDraft={incomingClipDraft ?? createSeed}
         notebooks={notebooks}
         onCreated={() => {
           setCreateOpen(false);
           setIncomingClipDraft(null);
+          setCreateSeed(null);
           setActiveView("notes");
           setMemoView("notebook");
           setSelectedMemoId(null);
@@ -1272,6 +1289,23 @@ export const WorkspaceScreen = ({
         onQueued={runForcedSync}
         syncQueueScope={syncQueueScope}
         visible={createOpen}
+      />
+
+      <MobileCreateChoiceModal
+        bottomOffset={58 + safeAreaInsets.bottom}
+        canCreate={canCreateMemo}
+        onBlank={() => openCreateMemo()}
+        onClose={() => setCreateChoiceOpen(false)}
+        onTemplate={openCreateFromTemplate}
+        visible={createChoiceOpen}
+      />
+
+      <MobileTemplatePickerModal
+        bottomOffset={58 + safeAreaInsets.bottom}
+        client={client}
+        onClose={() => setTemplatePickerOpen(false)}
+        onSelect={(seed) => openCreateMemo(seed)}
+        visible={templatePickerOpen}
       />
 
       <Modal animationType="fade" statusBarTranslucent transparent visible={isImportingShare}>
@@ -1367,7 +1401,14 @@ export const WorkspaceScreen = ({
           accessibilityLabel="新建笔记"
           accessibilityRole="button"
           disabled={!canCreateMemo}
-          onPress={openCreateMemo}
+          onLongPress={() => {
+            if (!canCreateMemo) {
+              return;
+            }
+            Vibration.vibrate(8);
+            setCreateChoiceOpen(true);
+          }}
+          onPress={() => openCreateMemo()}
           style={[styles.bottomCreateButton, !canCreateMemo && styles.bottomCreateButtonDisabled]}
         >
           <Plus color={canCreateMemo ? "#ffffff" : "#e2e8f0"} size={28} />
@@ -1686,6 +1727,7 @@ const ActionSheetItem = ({ compact = false, danger = false, disabled = false, ic
 
 const CreateMemoModal = ({
   baseUrl,
+  client: clientProp,
   dataScope,
   defaultNotebookId,
   imageCompressionEnabled,
@@ -1697,19 +1739,22 @@ const CreateMemoModal = ({
   visible,
 }: {
   baseUrl: string;
+  client?: ReturnType<typeof useSession>["client"];
   dataScope: string;
   defaultNotebookId: string;
   imageCompressionEnabled: boolean;
-  initialDraft?: MobileWebClipDraft | null;
+  initialDraft?: MobileCreateMemoSeed | MobileWebClipDraft | null;
   notebooks: Notebook[];
   onCreated: (memo: MemoDetail) => void;
   onQueued: () => void | Promise<void>;
   syncQueueScope: string;
   visible: boolean;
 }) => {
-  const { client, session } = useSession();
+  const sessionState = useSession();
+  const client = clientProp ?? sessionState.client;
+  const session = sessionState.session;
   const queryClient = useQueryClient();
-  const { resolvedLocale } = useMobileLocale();
+  const { resolvedLocale, translate } = useMobileLocale();
   const { resolvedTheme } = useMobileTheme();
   const fallbackNotebookId = defaultNotebookId;
   const editorRef = useRef<LocalTiptapEditorRef>(null);
@@ -1731,6 +1776,8 @@ const CreateMemoModal = ({
   const [tagsText, setTagsText] = useState("");
   const [contentMarkdown, setContentMarkdown] = useState("");
   const [notebookPickerOpen, setNotebookPickerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [editorSeed, setEditorSeed] = useState(0);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
@@ -1747,11 +1794,13 @@ const CreateMemoModal = ({
 
   useEffect(() => {
     if (!visible) {
+      setTemplatePickerOpen(false);
       return;
     }
     let active = true;
     setDraftLoaded(false);
     setEditorReady(false);
+    setTemplatePickerOpen(false);
     if (initialDraft) {
       const markdown = initialDraft.contentMarkdown;
       contentMarkdownRef.current = markdown;
@@ -1762,6 +1811,7 @@ const CreateMemoModal = ({
       setContentMarkdown(markdown);
       setNotebookId(fallbackNotebookId);
       setDirty(false);
+      setEditorSeed((current) => current + 1);
       setDraftLoaded(true);
       return () => {
         active = false;
@@ -1783,6 +1833,7 @@ const CreateMemoModal = ({
       setContentMarkdown(markdown);
       setNotebookId(restoredNotebookId);
       setDirty(false);
+      setEditorSeed((current) => current + 1);
       setDraftLoaded(true);
     });
     return () => {
@@ -1790,8 +1841,41 @@ const CreateMemoModal = ({
     };
   }, [dataScope, fallbackNotebookId, initialDraft, visible]);
 
+  const isWebClipDraft = Boolean(
+    initialDraft && "sourceUrl" in initialDraft && typeof initialDraft.sourceUrl === "string" && initialDraft.sourceUrl.length > 0
+  );
+
+  const applyTemplateSeed = useCallback((seed: MobileCreateMemoSeed) => {
+    const markdown = seed.contentMarkdown;
+    contentMarkdownRef.current = markdown;
+    contentJsonRef.current = markdownToDoc(markdown);
+    setTitle(seed.title);
+    setTagsText(seed.tagsText);
+    setContentMarkdown(markdown);
+    setEditorReady(false);
+    setEditorSeed((current) => current + 1);
+    draftVersionRef.current += 1;
+    setDirty(true);
+  }, []);
+
+  const requestApplyTemplateSeed = useCallback((seed: MobileCreateMemoSeed) => {
+    const current = {
+      title: titleRef.current,
+      contentMarkdown: contentMarkdownRef.current,
+      tagsText: tagsTextRef.current,
+    };
+    if (createMemoSeedHasContent(current)) {
+      Alert.alert(translate("应用模板？"), translate("当前内容将被模板内容替换。"), [
+        { text: translate("取消"), style: "cancel" },
+        { text: translate("替换"), style: "destructive", onPress: () => applyTemplateSeed(seed) },
+      ]);
+      return;
+    }
+    applyTemplateSeed(seed);
+  }, [applyTemplateSeed, translate]);
+
   useEffect(() => {
-    if (!visible || !draftLoaded || !dirty || initialDraft) {
+    if (!visible || !draftLoaded || !dirty || isWebClipDraft) {
       return;
     }
     const draftVersion = draftVersionRef.current;
@@ -1821,7 +1905,7 @@ const CreateMemoModal = ({
       });
     }, 350);
     return () => clearTimeout(timeout);
-  }, [dataScope, dirty, draftLoaded, initialDraft, tagsText, targetNotebookId, title, visible, contentMarkdown]);
+  }, [contentMarkdown, dataScope, dirty, draftLoaded, isWebClipDraft, tagsText, targetNotebookId, title, visible]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -1900,7 +1984,7 @@ const CreateMemoModal = ({
       materializedMemoRef.current = null;
       draftVersionRef.current += 1;
       setDirty(false);
-      if (!initialDraft) {
+      if (!isWebClipDraft) {
         await clearMobileNewMemoDraft(dataScope);
       }
       if (materializedMemoId) {
@@ -1911,6 +1995,7 @@ const CreateMemoModal = ({
     },
   });
   const canSubmitCreateMemo = Boolean(targetNotebookId) && !createMutation.isPending && imageOperation === "idle";
+  const canUseTemplate = imageOperation === "idle" && !createMutation.isPending;
 
   const materializeMemoForImage = async () => {
     if (materializedMemoRef.current) {
@@ -1928,7 +2013,7 @@ const CreateMemoModal = ({
     });
     materializedMemoRef.current = response.memo;
     await upsertLocalMemo(dataScope, response.memo);
-    if (!initialDraft) {
+    if (!isWebClipDraft) {
       await clearMobileNewMemoDraft(dataScope);
     }
     await Promise.all([
@@ -2063,6 +2148,7 @@ const CreateMemoModal = ({
 
   const editorElement = useMemo(() => draftLoaded && baseUrl ? (
     <LocalTiptapEditor
+      key={`create-editor-${editorSeed}`}
       autoFocus
       baseUrl={baseUrl}
       content={contentJsonRef.current}
@@ -2097,7 +2183,7 @@ const CreateMemoModal = ({
       locale={resolvedLocale}
       theme={resolvedTheme}
     />
-  ) : null, [baseUrl, draftLoaded, loadEditorResource, resolvedLocale, resolvedTheme, selectResource]);
+  ) : null, [baseUrl, draftLoaded, editorSeed, loadEditorResource, resolvedLocale, resolvedTheme, selectResource]);
 
   return (
     <Modal animationType="slide" onRequestClose={() => void requestClose()} presentationStyle="fullScreen" visible={visible}>
@@ -2110,6 +2196,15 @@ const CreateMemoModal = ({
             <Text style={[styles.createMemoStatus, createMutation.isPending && styles.createMemoStatusActive]}>
               {imageOperation === "creating" ? "正在创建" : imageOperation === "uploading" ? "正在上传" : createMutation.isPending || dirty ? "保存中" : editorReady ? "已保存" : "正在启动"}
             </Text>
+            <Pressable
+              accessibilityLabel={translate("模板")}
+              accessibilityRole="button"
+              disabled={!canUseTemplate}
+              onPress={() => setTemplatePickerOpen(true)}
+              style={[styles.createMemoTemplateButton, !canUseTemplate && styles.createMemoDoneButtonDisabled]}
+            >
+              <Text style={[styles.createMemoTemplateButtonText, !canUseTemplate && styles.createMemoDoneTextDisabled]}>{translate("模板")}</Text>
+            </Pressable>
             <Pressable
               accessibilityLabel="完成新建笔记"
               disabled={!canSubmitCreateMemo}
@@ -2187,6 +2282,12 @@ const CreateMemoModal = ({
           onRename={renameResource}
           onSaveAs={saveResourceAs}
           target={resourceTarget}
+        />
+        <MobileTemplatePickerModal
+          client={client}
+          onClose={() => setTemplatePickerOpen(false)}
+          onSelect={requestApplyTemplateSeed}
+          visible={templatePickerOpen}
         />
       </SafeAreaView>
     </Modal>

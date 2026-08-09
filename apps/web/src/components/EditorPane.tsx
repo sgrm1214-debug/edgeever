@@ -109,7 +109,7 @@ import {
   getMemoSaveConflictInfoFromQueueItem,
 } from "@/lib/memo-save-conflict";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import { isLocalMemoId } from "@/lib/local-mirror";
+import { isLocalMemoId, remapLocalDraftMemoId } from "@/lib/local-mirror";
 import { shouldAcceptRemoteMemoDetail } from "@/lib/memo-detail-freshness";
 import type { EdgeEverRepository } from "@/lib/repository";
 import {
@@ -840,11 +840,7 @@ const RichEditorPane = ({
       // A draft may already have been persisted during image processing.
       // Move it to the durable server id so a reload cannot orphan it under
       // the temporary id.
-      void localDb.drafts.get(previousMemoId).then(async (draft) => {
-        if (!draft) return;
-        await localDb.drafts.put({ ...draft, memoId: nextMemoId });
-        await localDb.drafts.delete(previousMemoId);
-      }).catch(() => {
+      void remapLocalDraftMemoId(previousMemoId, nextMemoId).catch(() => {
         // The live editor content remains authoritative; draft persistence can
         // retry on the next editor update.
       });

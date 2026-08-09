@@ -66,7 +66,7 @@ export const useWorkspaceQueuedSync = ({
         scope: localDataScope,
         onSynced: async (memo, item) => {
           if (item.kind === "memo.create") {
-            await replaceLocalMemoId(localDataScope, item.memoId, memo);
+            const remappedMemo = await replaceLocalMemoId(localDataScope, item.memoId, memo);
             const remappedSelection = resolveCreatedMemoSelection(
               selectedMemoIdRef.current,
               pendingCreatedMemoIdRef.current,
@@ -79,10 +79,11 @@ export const useWorkspaceQueuedSync = ({
               setCreatedMemoEditId(memo.id);
               pendingCreatedMemoIdRef.current = memo.id;
             }
+            queryClient.setQueryData(["memo", memo.id, memo.isDeleted ? "trash" : "notebook"], { memo: remappedMemo });
           } else {
             await putLocalMemo(localDataScope, memo);
+            queryClient.setQueryData(["memo", memo.id, memo.isDeleted ? "trash" : "notebook"], { memo });
           }
-          queryClient.setQueryData(["memo", memo.id, memo.isDeleted ? "trash" : "notebook"], { memo });
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ["memos"] }),
             queryClient.invalidateQueries({ queryKey: ["memo", memo.id] }),

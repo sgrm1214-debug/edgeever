@@ -17,6 +17,7 @@ import { liveQuery } from "dexie";
 import { ApiRequestError, api } from "@/lib/api";
 import {
   localDb,
+  selectNewestLocalDraft,
   type MemoCreateSyncPayload,
   type MemoDeleteSyncPayload,
   type MemoRestoreSyncPayload,
@@ -144,14 +145,19 @@ export const queueMemoRestore = async (scope: string, payload: MemoRestoreSyncPa
   });
 };
 
-const remapQueuedMemoId = async (scope: string, temporaryId: string, remoteId: string) => {
+const remapQueuedMemoId = async (scope: string, temporaryId: string, remoteMemo: MemoDetail) => {
+  const remoteId = remoteMemo.id;
   const items = (await localDb.syncQueue.toArray()).filter(
     (item) => item.scope === scope && item.memoId === temporaryId && item.kind !== "memo.create"
   );
-  await localDb.transaction("rw", localDb.syncQueue, async () => {
+  await localDb.transaction("rw", [localDb.syncQueue, localDb.drafts], async () => {
     for (const item of items) {
       const payload = { ...item.payload } as Record<string, unknown>;
       if ("memoId" in payload) payload.memoId = remoteId;
+      if (item.kind === "memo.update") {
+        payload.expectedRevision = remoteMemo.revision;
+        payload.expectedContentHash = remoteMemo.contentHash;
+      }
       const nextId = item.kind === "memo.update"
         ? getMemoUpdateQueueId(remoteId)
         : item.kind === "memo.delete"
@@ -166,6 +172,14 @@ const remapQueuedMemoId = async (scope: string, temporaryId: string, remoteId: s
         memoId: remoteId,
         payload: payload as SyncQueueItem["payload"],
       });
+    }
+
+    const temporaryDraft = await localDb.drafts.get(temporaryId);
+    if (temporaryDraft) {
+      const remoteDraft = await localDb.drafts.get(remoteId);
+      const newestDraft = selectNewestLocalDraft(temporaryDraft, remoteDraft);
+      if (newestDraft) await localDb.drafts.put({ ...newestDraft, memoId: remoteId });
+      await localDb.drafts.delete(temporaryId);
     }
   });
 };
@@ -318,11 +332,11 @@ const runQueuedChanges = async (options: {
     try {
       const memo = await syncQueueItem(item);
       if (item.kind === "memo.create" && memo && item.scope) {
-        await remapQueuedMemoId(item.scope, item.memoId, memo.id);
+        await remapQueuedMemoId(item.scope, item.memoId, memo as MemoDetail);
       }
       const removed = await removeClaimedQueueItem(item);
       if (removed) {
-        await localDb.drafts.delete(item.memoId);
+        if (item.kind !== "memo.create") await localDb.drafts.delete(item.memoId);
         if (memo && (item.kind === "memo.create" || item.kind === "memo.update" || item.kind === "memo.restore" || item.kind === "memo.delete")) {
           await options.onSynced?.(memo as MemoDetail, item);
         }

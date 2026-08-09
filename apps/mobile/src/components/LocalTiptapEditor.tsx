@@ -47,6 +47,8 @@ export interface LocalTiptapEditorRef extends DOMImperativeFactory {
   appendAttachment: (attachmentUrl: DOMValue, filename: DOMValue) => void;
   removeResource: (targetJson: DOMValue) => void;
   renameResource: (targetJson: DOMValue, filename: DOMValue) => void;
+  /** Replace body without remounting the DomWebView (JSON string of TipTap doc). */
+  setContent: (contentJsonSerialized: DOMValue) => void;
   flush: () => void;
   focusEnd: () => void;
   replaceAll: (query: DOMValue, replacement: DOMValue) => void;
@@ -457,6 +459,21 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     void onChangeRef.current(getPersistableEditorDoc(editor.getJSON() as EditorDoc, props.baseUrl));
   }, [editor, isViewer, props.baseUrl]);
 
+  const setContent = useCallback((contentJsonSerialized: DOMValue) => {
+    if (!editor || editor.isDestroyed || typeof contentJsonSerialized !== "string") {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(contentJsonSerialized) as EditorDoc;
+      const next = resolveImageSources(parsed, props.baseUrl);
+      // Do not focus while replacing content. Callers decide when the editor should
+      // take focus and place the caret via focusEnd().
+      editor.commands.setContent(next, { emitUpdate: !isViewer });
+    } catch {
+      // Ignore malformed payloads from the native bridge.
+    }
+  }, [editor, isViewer, props.baseUrl]);
+
   const search = useCallback((query: DOMValue, requestedIndex: DOMValue) => {
     const matches = getEditorSearchMatches(editor, typeof query === "string" ? query : "");
     const requestedMatchIndex = typeof requestedIndex === "number" ? requestedIndex : 0;
@@ -607,6 +624,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       cancelImageUpload,
       completeImageUpload,
       appendAttachment,
+      setContent,
       flush,
       focusEnd: () => {
         if (!isViewer) editor?.commands.focus("end");
@@ -616,7 +634,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       replaceAll,
       search,
     }),
-    [appendAttachment, beginImageUpload, cancelImageUpload, completeImageUpload, editor, flush, isViewer, removeResource, renameResource, replaceAll, search]
+    [appendAttachment, beginImageUpload, cancelImageUpload, completeImageUpload, editor, flush, isViewer, removeResource, renameResource, replaceAll, search, setContent]
   );
 
   useEffect(() => {
@@ -1932,4 +1950,3 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-editor-content hr { margin: 24px 0; border: 0; border-top: 1px solid #cbd5e1; }
 `;
 };
-

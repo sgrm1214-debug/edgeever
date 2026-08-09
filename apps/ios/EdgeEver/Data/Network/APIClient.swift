@@ -185,6 +185,25 @@ actor APIClient {
         return response.editSession
     }
 
+    // MARK: - Templates
+
+    func listTemplates() async throws -> [MemoTemplate] {
+        let response: TemplatesResponse = try await request(path: "/api/v1/templates")
+        return response.templates
+    }
+
+    func useTemplate(templateId: String, notebookId: String) async throws -> MemoDetail {
+        struct Body: Encodable {
+            var notebookId: String
+        }
+        let response: MemoResponse = try await request(
+            path: "/api/v1/templates/\(templateId)/use",
+            method: "POST",
+            body: Body(notebookId: notebookId)
+        )
+        return response.memo
+    }
+
     // MARK: - Resources / tokens / tags
 
     func uploadMemoResource(memoId: String, filename: String, mimeType: String, data: Data) async throws -> Resource {

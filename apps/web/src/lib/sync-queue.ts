@@ -1,7 +1,9 @@
 import {
   createEmptySyncQueueSummary,
   createEmptySyncRunResult,
+  getMemoSyncBaseConflictDetails,
   getSyncRetryAt,
+  isMemoSyncBaseCurrent,
   summarizeSyncQueue,
   type MemoDetail,
   type MemoTemplate,
@@ -605,17 +607,14 @@ const syncQueueItem = async (item: SyncQueueItem): Promise<SyncQueueResult> => {
 
   const payload = item.payload as MemoUpdateSyncPayload;
   const { editSession } = await api.createMemoEditSession(item.memoId);
-  if (
-    editSession.baseRevision !== payload.expectedRevision ||
-    editSession.baseContentHash !== payload.expectedContentHash
-  ) {
-    throw new ApiRequestError("Note changed before the offline draft could sync.", 409, "revision_conflict", {
-      expectedRevision: payload.expectedRevision,
-      currentRevision: editSession.baseRevision,
-      expectedContentHash: payload.expectedContentHash,
-      currentContentHash: editSession.baseContentHash,
-      source: "offline_sync",
-    });
+  const currentBase = { revision: editSession.baseRevision, contentHash: editSession.baseContentHash };
+  if (!isMemoSyncBaseCurrent(currentBase, payload)) {
+    throw new ApiRequestError(
+      "Note changed before the offline draft could sync.",
+      409,
+      "revision_conflict",
+      getMemoSyncBaseConflictDetails(currentBase, payload),
+    );
   }
 
   const data = await api.updateMemo(item.memoId, {

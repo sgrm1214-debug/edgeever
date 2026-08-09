@@ -1,4 +1,13 @@
-import type { DesktopOutboxItem, DesktopRpcParams, DesktopRpcResponses, SyncBootstrapResponse, SyncChangesResponse, TiptapDoc } from "@edgeever/shared";
+import {
+  getMemoSyncBaseConflictDetails,
+  isMemoSyncBaseCurrent,
+  type DesktopOutboxItem,
+  type DesktopRpcParams,
+  type DesktopRpcResponses,
+  type SyncBootstrapResponse,
+  type SyncChangesResponse,
+  type TiptapDoc,
+} from "@edgeever/shared";
 import { api, ApiRequestError } from "@/lib/api";
 import { isDesktopResourceRuntime } from "@/lib/desktop-resources";
 
@@ -187,14 +196,18 @@ const syncOutboxItem = async (item: DesktopOutboxItem, stagedRewrites: StagedRes
     const memoId = String(payload.memoId ?? item.entityId);
     const editSessionResponse = await api.createMemoEditSession(memoId);
     const editSession = editSessionResponse.editSession;
-    if (editSession.baseRevision !== Number(payload.expectedRevision) || editSession.baseContentHash !== String(payload.expectedContentHash ?? "")) {
-      throw new ApiRequestError("Note changed before the offline draft could sync.", 409, "revision_conflict", {
-        expectedRevision: Number(payload.expectedRevision),
-        currentRevision: editSession.baseRevision,
-        expectedContentHash: String(payload.expectedContentHash ?? ""),
-        currentContentHash: editSession.baseContentHash,
-        source: "offline_sync",
-      });
+    const expectedBase = {
+      expectedRevision: Number(payload.expectedRevision),
+      expectedContentHash: String(payload.expectedContentHash ?? ""),
+    };
+    const currentBase = { revision: editSession.baseRevision, contentHash: editSession.baseContentHash };
+    if (!isMemoSyncBaseCurrent(currentBase, expectedBase)) {
+      throw new ApiRequestError(
+        "Note changed before the offline draft could sync.",
+        409,
+        "revision_conflict",
+        getMemoSyncBaseConflictDetails(currentBase, expectedBase),
+      );
     }
     const data = await api.updateMemo(memoId, {
       expectedRevision: Number(payload.expectedRevision),

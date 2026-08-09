@@ -187,8 +187,16 @@ final class MobileUIParityTests: XCTestCase {
             token: nil,
             resourceCache: cache
         )
-        XCTAssertTrue(out.contains("data:image/svg+xml"), out)
-        XCTAssertFalse(out.contains("/api/v1/resources/\(testId)/blob"), "protected path must be rewritten before setContent")
+        let data = try XCTUnwrap(out.data(using: .utf8))
+        let document = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let content = try XCTUnwrap(document["content"] as? [[String: Any]])
+        let attrs = try XCTUnwrap(content.first?["attrs"] as? [String: Any])
+        let hydratedSource = try XCTUnwrap(attrs["src"] as? String)
+        XCTAssertTrue(hydratedSource.hasPrefix("data:image/svg+xml"), hydratedSource)
+        XCTAssertFalse(
+            hydratedSource.contains("/api/v1/resources/\(testId)/blob"),
+            "protected path must be rewritten before setContent"
+        )
         let stale = await cache.fileURL(for: testId)
         try? FileManager.default.removeItem(at: stale)
     }

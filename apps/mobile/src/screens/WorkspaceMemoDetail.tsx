@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { resolveMemoContentDoc, type MemoDetail, type TiptapDoc } from "@edgeever/shared";
+import { DEFAULT_MEMO_TITLE, resolveMemoContentDoc, type MemoDetail, type TiptapDoc } from "@edgeever/shared";
 import { ActivityIndicator, Image as RNImage, Platform, StyleSheet, View, type ImageStyle, type StyleProp } from "react-native";
 import { Modal } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,6 +9,7 @@ import { Alert, Pressable, Text, TextInput } from "../components/LocalizedText";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { MobileResourceActions } from "../components/MobileResourceActions";
 import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
+import { safeDomCall } from "../lib/safe-dom-call";
 import {
   getMobileImageTarget,
   openMobileResource,
@@ -30,7 +31,6 @@ import type { MobileSyncQueueItem } from "../lib/sync-queue";
 import { styles } from "./workspace-styles";
 
 const ANDROID_SYSTEM_NAVIGATION_FALLBACK = 48;
-const DEFAULT_MEMO_TITLE = "无标题笔记";
 const RESOURCE_DATA_URL_CACHE_LIMIT = 32;
 
 type SessionLike = { baseUrl: string; token: string } | null;
@@ -476,7 +476,7 @@ export const MemoDetailModal = ({
     if (!viewerReady || !searchOpen) {
       return;
     }
-    viewerRef.current?.search(searchQuery, activeMatchIndex);
+    safeDomCall(() => viewerRef.current?.search(searchQuery, activeMatchIndex));
   }, [activeMatchIndex, searchOpen, searchQuery, viewerReady]);
 
   const moveSearchMatch = (direction: 1 | -1) => {
@@ -683,7 +683,7 @@ export const MemoDetailModal = ({
                       setSearchQuery("");
                       setSearchMatchCount(0);
                       setActiveMatchIndex(0);
-                      viewerRef.current?.search("", 0);
+                      safeDomCall(() => viewerRef.current?.search("", 0));
                     }}>
                       <X color="#0f172a" size={16} />
                     </DetailActionButton>

@@ -3,6 +3,56 @@ import XCTest
 @testable import EdgeEver
 
 final class TipTapContentSourceTests: XCTestCase {
+    func testEditorMarkdownRemainsAuthoritativeForRichStructures() {
+        let markdown = """
+        1. first
+           1. nested
+
+        ```swift
+        let value = 1
+        ```
+        """
+        let json = """
+        {"type":"doc","content":[{"type":"orderedList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"first"}]}]}]},{"type":"codeBlock","attrs":{"language":"swift"},"content":[{"type":"text","text":"let value = 1"}]}]}
+        """
+
+        XCTAssertEqual(
+            EditorContentCodec.preferredMarkdown(
+                editorMarkdown: markdown,
+                documentJSON: json,
+                fallback: ""
+            ),
+            markdown
+        )
+    }
+
+    func testEditorMarkdownFallbackDoesNotReplaceExistingCompatibilityCopy() {
+        let fallback = "| A | B |\n| --- | --- |\n| 1 | 2 |\n"
+        let json = """
+        {"type":"doc","content":[{"type":"table","content":[]}]}
+        """
+
+        XCTAssertEqual(
+            EditorContentCodec.preferredMarkdown(
+                editorMarkdown: nil,
+                documentJSON: json,
+                fallback: fallback
+            ),
+            fallback
+        )
+    }
+
+    func testEmptyEditorMarkdownRemainsAuthoritative() {
+        XCTAssertEqual(
+            EditorContentCodec.preferredMarkdown(
+                editorMarkdown: "",
+                documentJSON: #"{"type":"doc","content":[]}"#,
+                fallback: "previous content"
+            ),
+            ""
+        )
+    }
+
     /// Flattened JSON + rich markdown must NOT drive the detail viewer (regression).
     func testViewerAlwaysPrefersMarkdownWhenPresent() {
         let richMD = """

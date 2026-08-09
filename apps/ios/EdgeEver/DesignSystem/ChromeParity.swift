@@ -8,6 +8,7 @@ enum CreateMemoChrome {
     static let header = "createMemoHeader"
     static let back = "createMemoBackButton"
     static let status = "createMemoStatus"
+    static let template = "createMemoTemplateButton"
     static let done = "createMemoDoneButton"
     static let title = "createMemoTitleInput"
     static let metaRow = "createMemoMetaRow"

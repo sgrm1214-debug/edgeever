@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Pow
 
 /// Wrapper so `fullScreenCover(item:)` can present edit for a memo id.
@@ -12,6 +13,10 @@ struct WorkspaceView: View {
     @State private var path = NavigationPath()
     @State private var showSettings = false
     @State private var showNewNote = false
+    @State private var createSeed: CreateMemoSeed?
+    @State private var showCreateChoice = false
+    @State private var showTemplatePicker = false
+    @State private var createLongPressConsumed = false
     @State private var showMoveSheet = false
     @State private var conflictItem: OutboxItem?
     @State private var createTapCount = 0
@@ -39,7 +44,12 @@ struct WorkspaceView: View {
                 VStack(spacing: 0) {
                     syncBanner
                     listHeader
-                    NotesListView(store: store, path: $path)
+                    NotesListView(
+                        store: store,
+                        path: $path,
+                        onCreateNote: { openCreateNote() },
+                        onCreateFromTemplate: { openCreateFromTemplate() }
+                    )
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .background(AppTheme.background)
@@ -75,7 +85,10 @@ struct WorkspaceView: View {
             // Android CreateMemoModal is fullScreen — not a half sheet / Form.
             .fullScreenCover(isPresented: $showNewNote) {
                 MemoEditView(
-                    mode: .create(notebookId: store.selectedNotebookId ?? store.notebooks.first?.id ?? ""),
+                    mode: .create(
+                        notebookId: store.selectedNotebookId ?? store.notebooks.first?.id ?? "",
+                        seed: createSeed
+                    ),
                     onCreateFinished: { memoId in
                         // Prime list + bounce **before** dismiss so settle runs under/with the cover,
                         // not half a second after the list is already static.
@@ -85,8 +98,21 @@ struct WorkspaceView: View {
                     }
                 )
                 .onDisappear {
+                    createSeed = nil
                     // Safety refresh if create finished without callback (e.g. swipe-dismiss empty).
                     store.reload(env: env)
+                }
+            }
+            .sheet(isPresented: $showCreateChoice) {
+                CreateChoiceSheet(
+                    canCreate: !store.notebooks.isEmpty,
+                    onBlank: { openCreateNote() },
+                    onTemplate: { openCreateFromTemplate() }
+                )
+            }
+            .sheet(isPresented: $showTemplatePicker) {
+                TemplatePickerSheet { seed in
+                    openCreateNote(seed: seed)
                 }
             }
             // Edit cover on workspace root; underlay is list (detail popped once cover is presented).
@@ -437,8 +463,12 @@ struct WorkspaceView: View {
                 }
 
                 Button {
+                    if createLongPressConsumed {
+                        createLongPressConsumed = false
+                        return
+                    }
                     createTapCount += 1
-                    showNewNote = true
+                    openCreateNote()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 22, weight: .semibold))
@@ -455,9 +485,19 @@ struct WorkspaceView: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(CreateButtonPressStyle())
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .onEnded { _ in
+                            guard canCreate else { return }
+                            createLongPressConsumed = true
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            showCreateChoice = true
+                        }
+                )
                 .edgeEverCreatePing(count: createTapCount)
                 .disabled(!canCreate)
                 .accessibilityLabel(env.preferences.t("新建笔记", en: "New note"))
+                .accessibilityHint(env.preferences.t("长按可从模板新建", en: "Long-press to create from a template"))
                 .accessibilityIdentifier("bottomCreateButton")
                 .frame(maxWidth: .infinity)
 
@@ -568,6 +608,17 @@ struct WorkspaceView: View {
         .animation(Motion.search, value: env.bootstrapProgress != nil)
     }
 
+    private func openCreateNote(seed: CreateMemoSeed? = nil) {
+        guard !store.notebooks.isEmpty else { return }
+        createSeed = seed
+        showNewNote = true
+    }
+
+    private func openCreateFromTemplate() {
+        guard !store.notebooks.isEmpty else { return }
+        showTemplatePicker = true
+    }
+
     private func consumeShare() {
         let payloads = env.shareHandoff.consumePending()
         guard let first = payloads.first, let scope = env.session.dataScope else { return }
@@ -589,7 +640,7 @@ struct WorkspaceView: View {
                 updatedAt: EdgeEverDate.nowString()
             )
         )
-        showNewNote = true
+        openCreateNote()
     }
 
     private func detectConflicts() {

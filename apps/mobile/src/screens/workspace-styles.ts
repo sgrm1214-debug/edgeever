@@ -918,6 +918,15 @@ const baseWorkspaceStyles = StyleSheet.create({
   templatePickerSheet: {
     maxHeight: "84%",
   },
+  /** Absolute fill when nested inside CreateMemoModal (avoid second RN Modal). */
+  templatePickerOverlayRoot: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 40,
+  },
   templatePickerLoading: {
     alignItems: "center",
     flexDirection: "row",
@@ -931,6 +940,29 @@ const baseWorkspaceStyles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 8,
     paddingVertical: 8,
+  },
+  templatePickerErrorBlock: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  templatePickerErrorDetail: {
+    color: "#b91c1c",
+    fontSize: 11,
+    lineHeight: 16,
+    paddingHorizontal: 8,
+  },
+  templatePickerRetryButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 8,
+    marginHorizontal: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  templatePickerRetryText: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "700",
   },
   templateRow: {
     alignItems: "flex-start",

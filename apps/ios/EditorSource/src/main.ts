@@ -10,6 +10,10 @@ import { NodeSelection } from "@tiptap/pm/state";
 import mermaid from "mermaid";
 
 /** Keep in sync with packages/shared MergeDivider (iOS bundle cannot import monorepo shared). */
+const MERGE_DIVIDER_MARKDOWN_MARKER = "<!-- edgeever:merge-divider -->";
+const MERGE_DIVIDER_TOKENIZER =
+  /^<!--\s*edgeever:merge-divider\s*-->\s*(?:\n+---[ \t]*(?:\n+|$)|(?:\n+|$))/;
+
 const MergeDivider = Node.create({
   name: "edgeeverMergeDivider",
   group: "block",
@@ -27,6 +31,28 @@ const MergeDivider = Node.create({
         class: "edgeever-merge-divider",
       }),
     ];
+  },
+  renderMarkdown() {
+    return `${MERGE_DIVIDER_MARKDOWN_MARKER}\n\n---`;
+  },
+  parseMarkdown(_token, helpers) {
+    return helpers.createNode("edgeeverMergeDivider");
+  },
+  markdownTokenizer: {
+    name: "edgeeverMergeDivider",
+    level: "block",
+    start(source: string) {
+      return source.indexOf(MERGE_DIVIDER_MARKDOWN_MARKER);
+    },
+    tokenize(source: string) {
+      const match = MERGE_DIVIDER_TOKENIZER.exec(source);
+      if (!match) return undefined;
+      return {
+        type: "edgeeverMergeDivider",
+        raw: match[0],
+        text: "",
+      };
+    },
   },
 });
 

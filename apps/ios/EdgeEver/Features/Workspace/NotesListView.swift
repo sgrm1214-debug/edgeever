@@ -5,6 +5,8 @@ struct NotesListView: View {
     @Environment(AppEnvironment.self) private var env
     @Bindable var store: WorkspaceStore
     @Binding var path: NavigationPath
+    var onCreateNote: (() -> Void)? = nil
+    var onCreateFromTemplate: (() -> Void)? = nil
 
     /// Whole-list settle + Pow jump once when data first becomes available this session.
     @State private var listEntranceSettled = false
@@ -410,7 +412,7 @@ struct NotesListView: View {
         )
     }
 
-    /// Android `memoListEmptyCard` + `emptyTitle` / `mutedText`.
+    /// Android `memoListEmptyCard` + `emptyTitle` / `mutedText` + dual create actions.
     private func emptyCard(title: String, description: String, showCreate: Bool) -> some View {
         VStack(spacing: 10) {
             Text(title)
@@ -420,8 +422,48 @@ struct NotesListView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(AppTheme.secondary)
                 .multilineTextAlignment(.center)
-            if showCreate {
-                // Create is primarily the bottom-nav center button (Android parity).
+            if showCreate, !store.notebooks.isEmpty {
+                HStack(spacing: 8) {
+                    if let onCreateNote {
+                        Button(action: onCreateNote) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .bold))
+                                Text(env.preferences.t("新建笔记", en: "New note"))
+                                    .font(.system(size: 13, weight: .heavy))
+                            }
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 38)
+                            .background(AppTheme.title)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("emptyCreateNote")
+                    }
+                    if let onCreateFromTemplate {
+                        Button(action: onCreateFromTemplate) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text(env.preferences.t("从模板新建", en: "New from template"))
+                                    .font(.system(size: 13, weight: .heavy))
+                            }
+                            .foregroundStyle(AppTheme.title)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 38)
+                            .background(Color.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Color(hex: 0xCBD5E1), lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("emptyCreateFromTemplate")
+                    }
+                }
+                .padding(.top, 0)
             }
         }
         .frame(maxWidth: .infinity)

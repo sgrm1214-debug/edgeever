@@ -151,7 +151,10 @@ final class ChromeParityTests: XCTestCase {
     func testWorkspacePresentsCreateAsFullScreenCover() throws {
         let src = try readShippedSource("Features/Workspace/WorkspaceView.swift")
         XCTAssertTrue(src.contains("fullScreenCover(isPresented: $showNewNote)"), src)
-        XCTAssertTrue(src.contains("MemoEditView(mode: .create"), "create wiring")
+        XCTAssertTrue(
+            src.contains("mode: .create(") || src.contains("MemoEditView(mode: .create"),
+            "create wiring"
+        )
         XCTAssertTrue(src.contains("fullScreenCover(isPresented: $showSettings)"), "Me full screen")
     }
 

@@ -17,7 +17,11 @@ class EdgeEverKeyboardModule : Module() {
     Function("show") {
       val activity = appContext.currentActivity ?: return@Function false
       activity.runOnUiThread {
-        val focusedView = findLargestVisibleWebView(activity.window.decorView)
+        // Prefer the already-focused WebView (TipTap just focused it). Only fall back to
+        // the largest visible WebView when nothing editable is focused — avoids attaching
+        // the IME to a read-only detail WebView that happens to be larger.
+        val focusedView = (activity.currentFocus as? WebView)?.takeIf { it.isShown && it.width > 0 && it.height > 0 }
+          ?: findLargestVisibleWebView(activity.window.decorView)
           ?: activity.currentFocus
           ?: return@runOnUiThread
         val inputMethodManager = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager

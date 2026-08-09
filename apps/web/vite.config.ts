@@ -163,6 +163,9 @@ export default defineConfig({
         ],
         globIgnores: [
           "index.html",
+          // Noto Sans SC is used only by the on-demand print entry. Precaching every
+          // CJK unicode-range shard adds ~4.5 MiB to every PWA installation.
+          "**/noto-sans-sc-*.woff2",
           "**/*beautiful-mermaid*.js",
           "**/*mermaid.core-*.js",
           "**/vendor-mermaid-*.js",

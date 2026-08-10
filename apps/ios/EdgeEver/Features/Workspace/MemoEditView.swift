@@ -10,6 +10,7 @@ enum MemoEditMode: Equatable {
 struct MemoEditView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     let mode: MemoEditMode
     /// When set (edit-from-detail), close by popping to the list under the cover first —
@@ -79,7 +80,7 @@ struct MemoEditView: View {
                 .accessibilityIdentifier("createMemoUploadOverlay")
             }
         }
-        .background(Color.white.ignoresSafeArea())
+        .background(AppTheme.card.ignoresSafeArea())
         .accessibilityIdentifier(CreateMemoChrome.root)
         .sheet(isPresented: $showNotebookPicker) {
             EditNotebookPickerSheet(
@@ -242,7 +243,7 @@ struct MemoEditView: View {
                     }
                     .frame(minWidth: 58, minHeight: 36)
                     .padding(.horizontal, 12)
-                    .background(canSubmitDone ? AppTheme.title : Color(hex: 0xE2E8F0))
+                    .background(canSubmitDone ? AppTheme.title : AppTheme.disabledFill)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -255,7 +256,7 @@ struct MemoEditView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(minHeight: 52)
-        .background(Color.white)
+        .background(AppTheme.card)
         .overlay(alignment: .bottom) {
             Rectangle().fill(AppTheme.cardBorder).frame(height: 1)
         }
@@ -319,27 +320,6 @@ struct MemoEditView: View {
                 .accessibilityLabel(env.preferences.t("笔记标签", en: "Tags"))
                 .accessibilityIdentifier(CreateMemoChrome.tags)
 
-                Button {
-                    // Resign WebView first responder so the picker sheet is not blocked.
-                    UIApplication.shared.sendAction(
-                        #selector(UIResponder.resignFirstResponder),
-                        to: nil,
-                        from: nil,
-                        for: nil
-                    )
-                    error = nil
-                    showImagePicker = true
-                } label: {
-                    Image(systemName: "photo")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(isUploading ? AppTheme.muted : AppTheme.slate)
-                        .frame(width: 36, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(isUploading)
-                .accessibilityLabel(env.preferences.t("插入图片", en: "Insert image"))
-                .accessibilityIdentifier(CreateMemoChrome.imageTool)
             }
             .frame(minHeight: 40)
             .accessibilityIdentifier(CreateMemoChrome.metaRow)
@@ -354,6 +334,9 @@ struct MemoEditView: View {
                         markdown: contentMarkdown,
                         baseURL: env.session.session.map { URL(string: $0.baseUrl) } ?? nil,
                         token: env.session.session?.token,
+                        locale: env.preferences.isEnglish ? "en-US" : "zh-CN",
+                        theme: colorScheme == .dark ? "dark" : "light",
+                        placeholder: env.preferences.t("开始输入…", en: "Start writing…"),
                         onChange: { md, json in
                             guard contentHydrated, !suppressPersistence else { return }
                             // Accept the JSON and Markdown emitted by the same TipTap transaction.
@@ -370,6 +353,18 @@ struct MemoEditView: View {
                             resourceTarget = target
                         },
                         onImagePreview: nil,
+                        onPickImage: {
+                            guard !isUploading else { return }
+                            UIApplication.shared.sendAction(
+                                #selector(UIResponder.resignFirstResponder),
+                                to: nil,
+                                from: nil,
+                                for: nil
+                            )
+                            error = nil
+                            showImagePicker = true
+                        },
+                        onSearchResult: nil,
                         onBodyReady: {
                             // Do not focusEnd here — bodyReady also fires on typing re-binds.
                             // Open-edit focus is owned by SharedTipTapRuntime (once per document).
@@ -388,12 +383,12 @@ struct MemoEditView: View {
                             .foregroundStyle(AppTheme.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.white)
+                    .background(AppTheme.card)
                     .allowsHitTesting(false)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.white)
+            .background(AppTheme.card)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -694,7 +689,7 @@ struct MemoEditView: View {
             NSLog("MemoEditView persist: mirror miss for \(memoId)")
             return
         }
-        memo.title = title.isEmpty ? "无标题笔记" : title
+        memo.title = title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note") : title
         memo.contentMarkdown = contentMarkdown
         memo.contentText = contentMarkdown
         memo.tags = tags
@@ -766,6 +761,7 @@ struct MemoEditView: View {
                 expectedContentHash: expectedContentHash,
                 notebookId: notebookId,
                 title: title,
+                untitledTitle: env.preferences.t("无标题笔记", en: "Untitled note"),
                 contentMarkdown: contentMarkdown,
                 contentJSON: contentJSON,
                 tags: tags,
@@ -845,7 +841,7 @@ struct MemoEditView: View {
         viewModel.reconcileMarkdownWithJSON()
         let memo = try await env.session.client.createMemo(
             notebookId: notebookId.isEmpty ? (availableNotebooks.first?.id ?? "") : notebookId,
-            title: title.isEmpty ? "无标题笔记" : title,
+            title: title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note") : title,
             contentMarkdown: contentMarkdown,
             tags: tags
         )
@@ -981,7 +977,7 @@ private struct EditNotebookPickerSheet: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color.white)
+            .background(AppTheme.card)
             .overlay(alignment: .bottom) {
                 Rectangle().fill(AppTheme.border).frame(height: 1)
             }
@@ -1006,6 +1002,6 @@ private struct EditNotebookPickerSheet: View {
             }
             .listStyle(.plain)
         }
-        .background(Color.white)
+        .background(AppTheme.card)
     }
 }

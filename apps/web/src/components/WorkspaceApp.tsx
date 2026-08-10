@@ -2847,9 +2847,12 @@ export const WorkspaceApp = ({
                     demoMode={demoMode}
                     isOwner={authRequired && user?.role === "owner"}
                     user={user}
+                    refreshWorkspaceAfterImport={async () => {
+                      await refreshWorkspaceFromServer("manual");
+                    }}
                   />
                   ) : rightView === "assets" ? (
-                    <AssetsPane onClose={handleCloseAssets} activeMemo={selectedMemo} repository={repository} />
+                    <AssetsPane onClose={handleCloseAssets} repository={repository} />
                   ) : rightView === "tags" ? (
                     <TagsPane onClose={handleCloseAssets} repository={repository} />
                   ) : rightView === "templates" ? (

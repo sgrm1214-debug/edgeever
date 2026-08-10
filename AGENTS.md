@@ -40,7 +40,13 @@ Related Issue: #<issue-number>
 ## 环境、部署与组件约束
 
 - **Cloudflare 部署**：严格按 `docs/agent-deploy-cloudflare.md` 执行。
+- **跨运行时架构**：项目未来将正式支持 Docker 自托管；实现新功能时必须保持业务逻辑与 Cloudflare 解耦，并为其他运行时预留扩展边界。Cloudflare 与 Docker 必须共用同一套业务代码，仅允许保留薄且稳定、不包含业务判断的运行入口和基础设施驱动适配器。
 - **数据库 Migration**：数据库或种子变化时，在 `migrations/` 下新增递增编号 SQL，禁止修改已执行的旧 Migration。
 - **本地启动**：默认 `bun run dev`（纯本地环境）；指定远程实例用 `EDGE_EVER_INSTANCE=<实例名> bun run dev:remote`；纯前端用 `bun run dev:web`。
 - **Demo 示例同步**：修改示例笔记后，在 `main` 分支干净状态下执行 `bun run demo:sync` 重置公开 Demo。
 - **组件复用**：优先复用 `shadcn/ui` 与已成熟依赖，禁止无意义造轮子；复杂或重复模块封装为独立组件。
+
+## 品牌视觉规范 / Brand Identity
+
+- **品牌色**：主绿色 `#16A06E`，Logo 图形色 `#07130B`。
+- 修改 Logo 后执行 `bun run prepare:brand:icons` 同步各平台资源。

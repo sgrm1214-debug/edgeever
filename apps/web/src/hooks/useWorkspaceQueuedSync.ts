@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { MemoDetail, MemoTemplate, Notebook, Resource } from "@edgeever/shared";
 import { isBrowserOffline } from "@/lib/network-status";
 import { emptySyncQueueSummary, type SyncQueueSummary } from "@/lib/sync-queue";
-import { notifyMemoIdRemapped } from "@/lib/sync-events";
+import { notifyMemoIdRemapped, notifyMemoSyncAcknowledged } from "@/lib/sync-events";
 import { putLocalMemo, replaceLocalMemoId } from "@/lib/local-mirror";
 import { resolveCreatedMemoSelection, resolveSyncedMemoId } from "@/lib/workspace-refresh";
 
@@ -64,6 +64,12 @@ export const useWorkspaceQueuedSync = ({
       const { syncQueuedChanges } = await import("@/lib/sync-queue");
       const result = await syncQueuedChanges({
         scope: localDataScope,
+        onMemoAcknowledged: async (memo) => {
+          // Advance the live editor's concurrency base before the acknowledged
+          // server snapshot reaches React Query. This keeps a self-sync from
+          // being mistaken for new document content and moving the caret.
+          notifyMemoSyncAcknowledged(memo);
+        },
         onSynced: async (memo, item) => {
           if (item.kind === "memo.create") {
             const remappedMemo = await replaceLocalMemoId(localDataScope, item.memoId, memo);

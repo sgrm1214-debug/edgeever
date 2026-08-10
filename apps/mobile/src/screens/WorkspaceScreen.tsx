@@ -5,6 +5,7 @@ import Constants from "expo-constants";
 import { File as ExpoFile } from "expo-file-system";
 import type { MemoFilterMode, MemoSortMode } from "@edgeever/client";
 import {
+  ActivityIndicator,
   BookOpen,
   Check,
   ChevronDown,
@@ -40,7 +41,6 @@ import {
   X,
 } from "../components/icons";
 import {
-  ActivityIndicator,
   BackHandler,
   FlatList,
   Image as RNImage,
@@ -917,6 +917,20 @@ export const WorkspaceScreen = ({
     },
   });
 
+  const applyAiDraftToMemo = async (memo: MemoDetail, draft: string, mode: "append" | "replace") => {
+    const normalizedDraft = draft.trim();
+    const contentMarkdown = mode === "append"
+      ? [memo.contentMarkdown.trimEnd(), normalizedDraft].filter(Boolean).join("\n\n")
+      : normalizedDraft;
+    await localUpdateMemoMutation.mutateAsync({
+      memo,
+      payload: {
+        contentMarkdown,
+        contentJson: markdownToDoc(contentMarkdown),
+      },
+    });
+  };
+
   const deleteMemoMutation = useMutation({
     mutationFn: async ({ memo, permanent }: { memo: MemoDetail; permanent: boolean }) => {
       await deleteMobileMemos({
@@ -1271,6 +1285,7 @@ export const WorkspaceScreen = ({
         onOpenRevisions={setRevisionMemo}
         onRenameResource={handleRenameResource}
         onAdoptCloudVersion={(memo) => void handleAdoptCloudVersion(memo)}
+        onApplyAiDraft={applyAiDraftToMemo}
         onCopyLocalDraft={(memo) => void handleCopyConflictDraft(memo)}
         onResolveSyncConflict={handleMemoSyncConflict}
         onRetrySync={() => {

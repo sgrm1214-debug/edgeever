@@ -113,6 +113,7 @@ import { registerTemplateRoutes } from "./template-routes";
 import { registerAuthRoutes, type UserRow } from "./auth-routes";
 import { registerApiTokenRoutes, type ApiTokenRow } from "./api-token-routes";
 import { registerObjectStorageRoutes } from "./object-storage-routes";
+import { registerAiRoutes } from "./ai-routes";
 import { registerResourceRoutes } from "./resource-routes";
 import { registerSyncRoutes } from "./sync-routes";
 import { registerMemoRoutes } from "./memo-routes";
@@ -321,6 +322,9 @@ app.use("/api/v1/*", async (c, next) => {
 });
 
 registerObjectStorageRoutes(app, {
+  isDemoMode: (...args) => isDemoMode(...args),
+});
+registerAiRoutes(app, {
   isDemoMode: (...args) => isDemoMode(...args),
 });
 

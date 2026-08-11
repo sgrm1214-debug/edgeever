@@ -9,9 +9,29 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { tmpdir } from "node:os";
+import {
+  deploymentPrompts,
+  manualDeploymentCopy,
+} from "../apps/site/src/deployment-prompts";
+import { decideUpstreamSync } from "../scripts/upstream-sync-plan.mjs";
 
 const repositoryRoot = resolve(import.meta.dir, "..");
 const readRepositoryFile = (path: string) => readFileSync(resolve(repositoryRoot, path), "utf8");
+const extractTextPrompt = (document: string, sectionHeading: string) => {
+  const sectionStart = document.indexOf(sectionHeading);
+  if (sectionStart === -1) throw new Error(`Missing deployment section: ${sectionHeading}`);
+  const match = document.slice(sectionStart).match(/```text\n([\s\S]*?)\n```/);
+  if (!match?.[1]) throw new Error(`Missing deployment prompt after: ${sectionHeading}`);
+  return match[1];
+};
+const extractSection = (document: string, sectionHeading: string) => {
+  const sectionStart = document.indexOf(sectionHeading);
+  if (sectionStart === -1) throw new Error(`Missing section: ${sectionHeading}`);
+  const sectionEnd = document.indexOf("\n---", sectionStart);
+  return document.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd);
+};
+const normalizeMarkdownCopy = (value: string) =>
+  value.replace(/[`*]/g, "").replace(/\s+/g, " ").trim();
 
 describe("Cloudflare deployment entrypoints", () => {
   test("all entrypoints converge on the common deployment pipeline", () => {
@@ -157,6 +177,8 @@ describe("Cloudflare deployment entrypoints", () => {
 
   test("deployed repositories receive guarded daily upstream updates", () => {
     const workflow = readRepositoryFile(".github/workflows/sync-edgeever-upstream.yml");
+    const packageJson = JSON.parse(readRepositoryFile("package.json"));
+    const scripts = packageJson.scripts as Record<string, string>;
 
     expect(workflow).toContain("github.repository != 'tianma-if/edgeever'");
     expect(workflow).toContain("UPSTREAM_REPOSITORY: tianma-if/edgeever");
@@ -167,17 +189,97 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(workflow).toContain("edge)");
     expect(workflow).toContain("force_redeploy");
     expect(workflow).toContain("bun run db:migrate:local");
-    expect(workflow).toContain("bun test");
+    expect(scripts.test).toBe("bun test --path-ignore-patterns='tests/e2e/**'");
+    expect(workflow).toContain(scripts.test);
+    expect(workflow.match(/if: steps\.upstream\.outputs\.align_mode == 'merge'/g)).toHaveLength(2);
     expect(workflow).toContain("git push origin HEAD:main");
     expect(workflow).toContain("git push --force-with-lease origin HEAD:main");
+    expect(workflow).toContain('if [ "${REASON}" = "behind_target" ]');
+    expect(workflow).toContain("mode=fast_forward");
     expect(workflow).toContain("git reset --hard");
-    expect(workflow).toContain("source repo import");
     expect(workflow).toContain("content_matches_target");
     expect(workflow).toContain("already_on_target");
+    expect(workflow).toContain("fork_mode=mirror");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("EDGE_EVER_CLOUDFLARE_DEPLOY_HOOK_URL");
-    expect(workflow).toContain("non_workflow_changes");
+    expect(workflow).toContain("EDGE_EVER_PRESERVE_FORK_CHANGES");
+    expect(workflow).toContain("PRESERVE_FORK_CHANGES");
+    expect(workflow).not.toContain("upstream_merge_base");
+    expect(workflow).not.toContain("local_app_changes");
+    expect(workflow).toContain("scripts/upstream-sync-plan.mjs");
     expect(workflow).toContain("Prefer this workflow over GitHub **Sync fork**");
+  });
+
+  test("keeps a forced-redeploy commit on the deploy-mirror update path", () => {
+    expect(
+      decideUpstreamSync({
+        contentMatchesTarget: false,
+        forceRedeploy: false,
+        headEqualsTarget: false,
+        headIsAncestorOfTarget: false,
+        preserveForkChanges: false,
+        targetIsAncestorOfHead: false,
+      }),
+    ).toEqual({
+      alignMode: "reset",
+      reason: "deploy_mirror_reset",
+      republishOnly: false,
+      updateRequired: true,
+    });
+  });
+
+  test("resets a deploy mirror that moved ahead of the stable release", () => {
+    expect(
+      decideUpstreamSync({
+        contentMatchesTarget: false,
+        forceRedeploy: false,
+        headEqualsTarget: false,
+        headIsAncestorOfTarget: false,
+        preserveForkChanges: false,
+        targetIsAncestorOfHead: true,
+      }),
+    ).toEqual({
+      alignMode: "reset",
+      reason: "deploy_mirror_ahead",
+      republishOnly: false,
+      updateRequired: true,
+    });
+  });
+
+  test("preserves changes only when a customized fork explicitly opts in", () => {
+    expect(
+      decideUpstreamSync({
+        contentMatchesTarget: false,
+        forceRedeploy: false,
+        headEqualsTarget: false,
+        headIsAncestorOfTarget: false,
+        preserveForkChanges: true,
+        targetIsAncestorOfHead: true,
+      }),
+    ).toEqual({
+      alignMode: "none",
+      reason: "customized_contains_target",
+      republishOnly: false,
+      updateRequired: false,
+    });
+  });
+
+  test("merges a diverged customized fork only after explicit opt-in", () => {
+    expect(
+      decideUpstreamSync({
+        contentMatchesTarget: false,
+        forceRedeploy: false,
+        headEqualsTarget: false,
+        headIsAncestorOfTarget: false,
+        preserveForkChanges: true,
+        targetIsAncestorOfHead: false,
+      }),
+    ).toEqual({
+      alignMode: "merge",
+      reason: "customized_merge",
+      republishOnly: false,
+      updateRequired: true,
+    });
   });
 
   test("public deployment documentation exposes only Fork and Agent paths", () => {
@@ -192,16 +294,53 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(chineseReadme).toContain("Fork https://github.com/tianma-if/edgeever");
   });
 
+  test("product site deployment prompts mirror the root READMEs", () => {
+    const englishReadme = readRepositoryFile("README.md");
+    const chineseReadme = readRepositoryFile("README.zh-CN.md");
+    const siteDeploymentComponent = readRepositoryFile(
+      "apps/site/src/components/agent-install-tabs.astro",
+    );
+
+    expect(deploymentPrompts["en-US"]).toBe(
+      extractTextPrompt(englishReadme, "### Option A: Deploy with an AI Agent (Recommended)"),
+    );
+    expect(deploymentPrompts["zh-CN"]).toBe(
+      extractTextPrompt(chineseReadme, "### 方案一：AI Agent 一键部署（推荐）"),
+    );
+    expect(siteDeploymentComponent).toContain('deploymentPrompts["en-US"]');
+    expect(siteDeploymentComponent).toContain('deploymentPrompts["zh-CN"]');
+    expect(siteDeploymentComponent).toContain('manualDeploymentCopy["en-US"]');
+    expect(siteDeploymentComponent).toContain('manualDeploymentCopy["zh-CN"]');
+
+    for (const [locale, readme, heading, separator] of [
+      ["en-US", englishReadme, "### Option B: Manual Online Deployment", ": "],
+      ["zh-CN", chineseReadme, "### 方案二：手动在线部署", "："],
+    ] as const) {
+      const section = normalizeMarkdownCopy(extractSection(readme, heading));
+      const manualCopy = manualDeploymentCopy[locale];
+      expect(section).toContain(manualCopy.intro);
+      manualCopy.steps.forEach((step, index) => {
+        expect(section).toContain(
+          normalizeMarkdownCopy(`${index + 1}. ${step.title}${separator}${step.body}`),
+        );
+      });
+    }
+  });
+
   test("AI Agent deployment remains fully online", () => {
     const englishAgentDoc = readRepositoryFile("docs/agent-deploy-cloudflare.md");
     const chineseAgentDoc = readRepositoryFile("docs/agent-deploy-cloudflare.zh-CN.md");
 
     expect(englishAgentDoc).toContain("Workers & Pages");
     expect(englishAgentDoc).toContain("Update deployed EdgeEver");
+    expect(englishAgentDoc).toContain("deployment mirror by default");
+    expect(englishAgentDoc).toContain("EDGE_EVER_PRESERVE_FORK_CHANGES");
     expect(englishAgentDoc).not.toContain("bun run deploy:manual");
     expect(englishAgentDoc).not.toContain("deploy:setup");
     expect(englishAgentDoc).not.toContain(".env.local");
     expect(chineseAgentDoc).toContain("Workers & Pages");
+    expect(chineseAgentDoc).toContain("默认作为部署镜像");
+    expect(chineseAgentDoc).toContain("EDGE_EVER_PRESERVE_FORK_CHANGES");
     expect(chineseAgentDoc).not.toContain("bun run deploy:manual");
     expect(chineseAgentDoc).not.toContain("bun run deploy:manual");
   });

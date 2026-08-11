@@ -80,19 +80,34 @@ sqlite.run(
   ["nb_other", "ws_other", "Private", 10],
 );
 
-const token = "edgeever_mcp_test_token";
-const tokenHash = new Bun.CryptoHasher("sha256").update(token).digest("hex");
+// Simulate a token created before migration 0007 began retaining token plaintext.
+// Upgraded rows have a valid hash and their original granular scopes, while
+// token_value remains NULL and therefore cannot be copied again from the UI.
+const legacyToken = "edgeever_mcp_test_token";
+const legacyTokenHash = new Bun.CryptoHasher("sha256").update(legacyToken).digest("hex");
+const legacyScopes = [
+  "read:notebooks",
+  "write:notebooks",
+  "read:memos",
+  "write:memos",
+  "read:resources",
+  "read:tags",
+];
 sqlite.run(
-  "INSERT INTO api_tokens (id, workspace_id, name, token_hash, token_value, scopes_json) VALUES (?, ?, ?, ?, ?, ?)",
+  "INSERT INTO api_tokens (id, workspace_id, name, token_hash, scopes_json) VALUES (?, ?, ?, ?, ?)",
   [
     "tok_test",
     "ws_default",
-    "MCP regression",
-    tokenHash,
-    token,
-    JSON.stringify(["read:notebooks", "read:memos", "write:memos", "read:resources", "read:tags"]),
+    "MCP Token 1",
+    legacyTokenHash,
+    JSON.stringify(legacyScopes),
   ],
 );
+const storedLegacyToken = sqlite
+  .query("SELECT token_value, scopes_json FROM api_tokens WHERE id = ?")
+  .get("tok_test");
+assert.equal(storedLegacyToken.token_value, null);
+assert.deepEqual(JSON.parse(storedLegacyToken.scopes_json), legacyScopes);
 
 const env = {
   DB: new SqliteD1Database(sqlite),
@@ -105,7 +120,7 @@ const fetchMcp = (payload, options = {}) =>
     new Request("https://edgeever.test/mcp", {
       method: options.method ?? "POST",
       headers: {
-        ...(options.auth === false ? {} : { Authorization: `Bearer ${token}` }),
+        ...(options.auth === false ? {} : { Authorization: `Bearer ${legacyToken}` }),
         Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
         ...(options.headers ?? {}),
@@ -155,6 +170,9 @@ assert.equal(tools.get("trash_memos").annotations.destructiveHint, true);
 assert.equal(tools.get("create_memo").annotations.destructiveHint, false);
 assert.equal(tools.get("import_memos").annotations.idempotentHint, true);
 assert.equal(tools.get("import_memos").annotations.destructiveHint, false);
+assert.equal(tools.get("rename_notebook").annotations.readOnlyHint, false);
+assert.equal(tools.get("rename_notebook").annotations.destructiveHint, false);
+assert.equal(tools.get("rename_notebook").annotations.idempotentHint, true);
 
 body = await callTool(4, "get_current_user");
 assert.equal(body.result.structuredContent.user.username, "zack42");
@@ -180,6 +198,15 @@ assert.equal(body.result.structuredContent.error.code, "not_found");
 
 body = await callTool(10, "list_notebooks");
 assert.ok(!body.result.structuredContent.notebooks.some((notebook) => notebook.id === "nb_other"));
+
+body = await callTool(101, "rename_notebook", { notebookId: "nb_flomo", name: "Flomo Archive" });
+assert.equal(body.result.isError, false);
+assert.equal(body.result.structuredContent.notebook.name, "Flomo Archive");
+assert.equal(sqlite.query("SELECT name FROM notebooks WHERE id = ?").get("nb_flomo").name, "Flomo Archive");
+
+body = await callTool(102, "rename_notebook", { notebookId: "nb_other", name: "Leaked" });
+assert.equal(body.result.isError, true);
+assert.equal(body.result.structuredContent.error.code, "not_found");
 
 body = await callTool(11, "import_memos", {
   source: "Flomo",
@@ -259,4 +286,4 @@ assert.equal(response.status, 202);
 response = await fetchMcp(null, { method: "GET" });
 assert.equal(response.status, 405);
 
-console.log("MCP protocol, identity, notebook lookup, and idempotent import regression passed");
+console.log("MCP protocol, identity, notebook lookup and rename, and idempotent import regression passed");

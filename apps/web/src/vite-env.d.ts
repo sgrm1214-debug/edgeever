@@ -7,6 +7,7 @@ declare const __EDGEEVER_APP_VERSION__: string;
 declare const __EDGEEVER_RELEASED_AT__: string;
 declare const __EDGEEVER_DEPLOYMENT_TRIGGER__: string;
 declare const __EDGEEVER_DEPLOYMENT_METHOD__: string;
+declare const __EDGEEVER_DEVELOPMENT_PROFILE__: "" | "local" | "demo";
 
 interface EdgeEverDesktopBridge {
   isAvailable: boolean;

@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Copy, KeyRound, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Copy, KeyRound, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import type { ApiToken } from "@edgeever/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn, formatDateTime } from "@/lib/utils";
 import { AppConfirmDialog } from "@/components/dialogs/ConfirmDialogs";
@@ -16,74 +15,14 @@ import {
   ALL_TOKEN_SCOPES,
   buildMcpRemoteConfig,
   copyTextToClipboard,
+  createDefaultTokenName,
+  DEFAULT_TOKEN_ACCESS_LEVEL,
   getEdgeEverBaseUrl,
+  getStoredTokenAccessLevel,
+  getTokenScopesForAccessLevel,
   getTokenScopeLabel,
+  type TokenAccessLevel,
 } from "./settings-utils";
-
-interface CreatedTokenNoticeProps {
-  token: string;
-}
-
-const getNextTokenName = (tokens: ApiToken[]) => {
-  const highestNumber = tokens.reduce((highest, token) => {
-    const match = token.name.match(/^MCP Token (\d+)$/i);
-    return match ? Math.max(highest, Number(match[1])) : highest;
-  }, 0);
-
-  return `MCP Token ${highestNumber + 1}`;
-};
-
-const CreatedTokenNotice = ({ token }: CreatedTokenNoticeProps) => {
-  const { t } = useTranslation();
-  const [copiedAction, setCopiedAction] = useState<"token" | "config" | null>(null);
-
-  const handleCopy = async (action: "token" | "config") => {
-    const value = action === "token" ? token : buildMcpRemoteConfig(token);
-    if (!(await copyTextToClipboard(value))) {
-      return;
-    }
-
-    setCopiedAction(action);
-    window.setTimeout(() => {
-      setCopiedAction((current) => (current === action ? null : current));
-    }, 1600);
-  };
-
-  return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-3">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-emerald-900">
-        <ShieldCheck className="h-4 w-4 text-emerald-700" />
-        {t("mcp.createdTitle")}
-      </div>
-      <div className="flex flex-col gap-2 xl:flex-row">
-        <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-emerald-200 bg-white px-3 font-mono text-xs text-slate-900">
-          <span className="min-w-0 truncate">{token}</span>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-          <Button
-            size="sm"
-            variant="solid"
-            className="w-full whitespace-nowrap bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
-            type="button"
-            onClick={() => void handleCopy("token")}
-          >
-            {copiedAction === "token" ? t("common.copied") : t("mcp.copyToken")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full whitespace-nowrap border-emerald-200 bg-white text-emerald-800 hover:bg-emerald-50 sm:w-auto"
-            type="button"
-            onClick={() => void handleCopy("config")}
-          >
-            {copiedAction === "config" ? t("common.copied") : t("mcp.copyConfig")}
-          </Button>
-        </div>
-      </div>
-      <p className="mt-2 text-xs font-medium leading-4 text-emerald-800">{t("mcp.securityWarning")}</p>
-    </div>
-  );
-};
 
 const McpTitleWithHelp = () => {
   const { t } = useTranslation();
@@ -150,75 +89,80 @@ const McpTitleWithHelp = () => {
   );
 };
 
-interface ScopePickerProps {
-  availableScopes: string[];
-  selectedScopes: Set<string>;
-  onToggleScope: (scope: string) => void;
+interface AccessLevelPickerProps {
+  value: TokenAccessLevel;
+  onChange: (accessLevel: TokenAccessLevel) => void;
 }
 
-const ScopePicker = ({ availableScopes, selectedScopes, onToggleScope }: ScopePickerProps) => {
+const AccessLevelPicker = ({ value, onChange }: AccessLevelPickerProps) => {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+  const options: TokenAccessLevel[] = ["full", "read-only"];
 
   return (
-    <Collapsible className="border-y border-slate-100" open={expanded} onOpenChange={setExpanded}>
-      <CollapsibleTrigger asChild>
-        <button className="flex min-h-11 w-full items-center justify-between gap-3 py-2 text-left" type="button">
-          <span className="min-w-0">
-            <span className="block text-xs font-semibold text-slate-700">{t("mcp.scopeTitle")}</span>
-            <span className="mt-0.5 block text-[11px] font-medium text-slate-400">
-              {t("mcp.selectedScopes", { selected: selectedScopes.size, total: availableScopes.length })}
-            </span>
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 shrink-0 text-slate-400 transition-transform",
-              expanded ? "rotate-180" : "rotate-0"
-            )}
-          />
-        </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="grid gap-1 border-t border-slate-100 py-2 sm:grid-cols-2">
-        {availableScopes.map((scope) => {
-          const checked = selectedScopes.has(scope);
-          const checkboxId = `token-scope-${scope.replace(/[^a-z0-9]+/gi, "-")}`;
+    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-y border-slate-100 py-2">
+      <span id="token-access-level-label" className="text-xs font-semibold text-slate-700">
+        {t("mcp.accessLevelTitle")}
+      </span>
+      <TooltipProvider>
+        <div
+          role="radiogroup"
+          aria-labelledby="token-access-level-label"
+          className="inline-flex rounded-lg bg-slate-100 p-1"
+        >
+          {options.map((option) => {
+            const checked = value === option;
+            const inputId = `token-access-${option}`;
 
-          return (
-            <label
-              key={scope}
-              htmlFor={checkboxId}
-              className={cn(
-                "flex min-h-10 cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors",
-                checked
-                  ? "bg-emerald-50/70 text-emerald-800"
-                  : "text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              <Checkbox
-                id={checkboxId}
-                checked={checked}
-                onCheckedChange={() => onToggleScope(scope)}
-                className="border-emerald-300"
-              />
-              <span className="min-w-0 truncate text-xs font-semibold" title={scope}>
-                {getTokenScopeLabel(scope, t)}
-              </span>
-            </label>
-          );
-        })}
-      </CollapsibleContent>
-    </Collapsible>
+            return (
+              <Tooltip key={option}>
+                <TooltipTrigger asChild>
+                  <label
+                    htmlFor={inputId}
+                    className={cn(
+                      "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors focus-within:ring-2 focus-within:ring-emerald-500/40",
+                      checked
+                        ? "bg-white text-emerald-700 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700",
+                    )}
+                  >
+                    <input
+                      id={inputId}
+                      className="sr-only"
+                      type="radio"
+                      name="token-access-level"
+                      value={option}
+                      checked={checked}
+                      onChange={() => onChange(option)}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-emerald-500" : "bg-slate-300")}
+                    />
+                    {t(`mcp.accessLevels.${option}.label`)}
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-72 leading-4">
+                  {t(`mcp.accessLevels.${option}.description`)}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+    </div>
   );
 };
 
 interface TokenListProps {
   tokens: ApiToken[];
+  availableScopes: string[];
+  newlyCreatedTokenId: string | null;
   isLoading: boolean;
   isDeleting: boolean;
   onDelete: (token: ApiToken) => void;
 }
 
-const TokenList = ({ tokens, isLoading, isDeleting, onDelete }: TokenListProps) => {
+const TokenList = ({ tokens, availableScopes, newlyCreatedTokenId, isLoading, isDeleting, onDelete }: TokenListProps) => {
   const { t } = useTranslation();
   const [copiedAction, setCopiedAction] = useState<{ tokenId: string; action: "token" | "config" } | null>(null);
 
@@ -250,22 +194,44 @@ const TokenList = ({ tokens, isLoading, isDeleting, onDelete }: TokenListProps) 
 
   return (
     <div className="divide-y divide-slate-100 border-t border-slate-100">
-      {tokens.map((token) => (
-        <div
-          key={token.id}
-          className={cn(
-            "flex min-h-16 flex-col items-stretch gap-3 py-3 transition-colors sm:py-4 lg:flex-row lg:items-center",
-            token.isRevoked ? "bg-slate-50/50 opacity-60" : "hover:bg-slate-50/50"
-          )}
-        >
+      {tokens.map((token) => {
+        const accessLevel = getStoredTokenAccessLevel(token.scopes, availableScopes);
+        const accessLabel = accessLevel === "legacy-custom"
+          ? t("mcp.accessLevels.legacy-custom.label")
+          : t(`mcp.accessLevels.${accessLevel}.label`);
+
+        return (
+          <div
+            key={token.id}
+            className={cn(
+              "flex min-h-16 flex-col items-stretch gap-3 py-3 transition-colors sm:py-4 lg:flex-row lg:items-center",
+              token.isRevoked ? "bg-slate-50/50 opacity-60" : "hover:bg-slate-50/50",
+              token.id === newlyCreatedTokenId && "edgeever-token-created",
+            )}
+          >
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-bold leading-tight text-slate-900">{token.name}</span>
-            <span
-              className="mt-2 block w-fit max-w-full truncate rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500"
-              title={token.scopes.join(", ")}
-            >
-              {token.scopes.map((scope) => getTokenScopeLabel(scope, t)).join("、") || t("mcp.noScope")}
-            </span>
+            {accessLevel === "legacy-custom" ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="mt-2 block w-fit max-w-full truncate rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                      tabIndex={0}
+                    >
+                      {accessLabel}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {token.scopes.map((scope) => getTokenScopeLabel(scope, t)).join(", ")}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="mt-2 block w-fit max-w-full truncate rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
+                {accessLabel}
+              </span>
+            )}
             <span className="mt-2 block text-[11px] font-medium text-slate-400">
               {token.lastUsedAt ? t("mcp.lastUsedAt", { time: formatDateTime(token.lastUsedAt) }) : t("mcp.neverUsed")}
               {!token.token ? ` · ${t("mcp.legacyTokenHint")}` : ""}
@@ -316,8 +282,9 @@ const TokenList = ({ tokens, isLoading, isDeleting, onDelete }: TokenListProps) 
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -325,12 +292,9 @@ const TokenList = ({ tokens, isLoading, isDeleting, onDelete }: TokenListProps) 
 export const McpConfigCard = () => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("MCP Token 1");
-  const [isNameCustomized, setIsNameCustomized] = useState(false);
-  const nameInitialized = useRef(false);
-  const [selectedScopes, setSelectedScopes] = useState<Set<string>>(() => new Set(ALL_TOKEN_SCOPES));
-  const [scopeDefaultsSynced, setScopeDefaultsSynced] = useState(false);
-  const [createdToken, setCreatedToken] = useState<{ token: string; apiToken: ApiToken } | null>(null);
+  const [name, setName] = useState(() => createDefaultTokenName());
+  const [accessLevel, setAccessLevel] = useState<TokenAccessLevel>(DEFAULT_TOKEN_ACCESS_LEVEL);
+  const [newlyCreatedTokenId, setNewlyCreatedTokenId] = useState<string | null>(null);
   const [tokenDeleteConfirmation, setTokenDeleteConfirmation] = useState<ApiToken | null>(null);
 
   const tokensQuery = useQuery({
@@ -341,29 +305,12 @@ export const McpConfigCard = () => {
   const availableScopes = tokensQuery.data?.availableScopes ?? ALL_TOKEN_SCOPES;
   const tokens = tokensQuery.data?.apiTokens ?? [];
 
-  useEffect(() => {
-    if (scopeDefaultsSynced || !tokensQuery.data?.availableScopes) {
-      return;
-    }
-
-    setSelectedScopes(new Set(tokensQuery.data.availableScopes));
-    setScopeDefaultsSynced(true);
-  }, [scopeDefaultsSynced, tokensQuery.data?.availableScopes]);
-
-  useEffect(() => {
-    if (!nameInitialized.current && !isNameCustomized && tokensQuery.data?.apiTokens) {
-      setName(getNextTokenName(tokensQuery.data.apiTokens));
-      nameInitialized.current = true;
-    }
-  }, [isNameCustomized, tokensQuery.data?.apiTokens]);
-
   const createMutation = useMutation({
     mutationFn: api.createApiToken,
     onSuccess: async (data) => {
-      setCreatedToken(data);
-      setName(getNextTokenName([...tokens, data.apiToken]));
-      setIsNameCustomized(true);
-      setSelectedScopes(new Set(availableScopes));
+      setNewlyCreatedTokenId(data.apiToken.id);
+      setName(createDefaultTokenName());
+      setAccessLevel(DEFAULT_TOKEN_ACCESS_LEVEL);
       await queryClient.invalidateQueries({ queryKey: ["api-tokens"] });
     },
   });
@@ -375,23 +322,11 @@ export const McpConfigCard = () => {
     },
   });
 
-  const toggleScope = (scope: string) => {
-    setSelectedScopes((current) => {
-      const next = new Set(current);
-      if (next.has(scope)) {
-        next.delete(scope);
-      } else {
-        next.add(scope);
-      }
-      return next;
-    });
-  };
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const scopes = Array.from(selectedScopes);
+    const scopes = getTokenScopesForAccessLevel(accessLevel, availableScopes);
 
-    if (!name.trim() || scopes.length === 0) {
+    if (!name.trim()) {
       return;
     }
 
@@ -406,17 +341,12 @@ export const McpConfigCard = () => {
           <CardDescription className="text-xs leading-4">{t("mcp.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 p-4 pt-0">
-          {createdToken && <CreatedTokenNotice token={createdToken.token} />}
-
           <form className="min-w-0 space-y-3" onSubmit={handleSubmit}>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input
                 className="h-9 min-w-0 flex-1 text-xs focus-visible:ring-4 focus-visible:ring-emerald-500/10"
                 value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setIsNameCustomized(true);
-                }}
+                onChange={(event) => setName(event.target.value)}
                 placeholder={t("mcp.namePlaceholder")}
               />
               <Button
@@ -431,10 +361,9 @@ export const McpConfigCard = () => {
               </Button>
             </div>
 
-            <ScopePicker
-              availableScopes={availableScopes}
-              selectedScopes={selectedScopes}
-              onToggleScope={toggleScope}
+            <AccessLevelPicker
+              value={accessLevel}
+              onChange={setAccessLevel}
             />
           </form>
 
@@ -442,6 +371,8 @@ export const McpConfigCard = () => {
             <span className="block text-xs font-semibold text-slate-500">{t("mcp.activeTokens")}</span>
             <TokenList
               tokens={tokens}
+              availableScopes={availableScopes}
+              newlyCreatedTokenId={newlyCreatedTokenId}
               isLoading={tokensQuery.isLoading}
               isDeleting={deleteTokenMutation.isPending}
               onDelete={setTokenDeleteConfirmation}

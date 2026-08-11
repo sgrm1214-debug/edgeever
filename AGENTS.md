@@ -45,6 +45,7 @@ Related Issue: #<issue-number>
 - **本地启动**：默认 `bun run dev`（纯本地环境）；指定远程实例用 `EDGE_EVER_INSTANCE=<实例名> bun run dev:remote`；纯前端用 `bun run dev:web`。
 - **Demo 示例同步**：修改示例笔记后，在 `main` 分支干净状态下执行 `bun run demo:sync` 重置公开 Demo。
 - **组件复用**：优先复用 `shadcn/ui` 与已成熟依赖，禁止无意义造轮子；复杂或重复模块封装为独立组件。
+- **悬停提示**：所有悬停或聚焦提示严禁使用 HTML 原生 `title`；Web 端必须统一使用 shadcn/ui 的 Tooltip 组件，并确保键盘聚焦时同样可见。
 
 ## 品牌视觉规范 / Brand Identity
 

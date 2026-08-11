@@ -963,6 +963,24 @@ const callMcpTool = async (
 
       return { notebook };
     }
+    case "rename_notebook": {
+      assertScope(auth, "write:notebooks");
+      const name = getRequiredString(args.name, "name");
+
+      if (name.length > 80) {
+        throw new AppError("invalid_params", "name must be at most 80 characters", 400);
+      }
+
+      const notebook = await updateNotebookRecord(
+        c.env.storage.db,
+        auth.workspaceId,
+        getRequiredString(args.notebookId, "notebookId"),
+        { name },
+        getAuditActor(c)
+      );
+
+      return { notebook };
+    }
     case "get_notebook": {
       assertScope(auth, "read:notebooks");
       const notebook = await getNotebook(c.env.storage.db, auth.workspaceId, getRequiredString(args.notebookId, "notebookId"));

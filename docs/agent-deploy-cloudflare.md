@@ -13,6 +13,8 @@ This document defines the standard operating specifications and conventions for 
 
 2. **Enable Workflow**
    - In the **Actions** tab of the Forked repository, enable the **Update deployed EdgeEver** automatic update workflow (required on public forks: scheduled workflows are disabled by default).
+   - An ordinary Fork is a deployment mirror by default. No update variable is required: the workflow owns `main` and may reset it to the selected upstream Release before triggering Cloudflare.
+   - Only a Fork that intentionally maintains application-code changes should create the Actions repository variable `EDGE_EVER_PRESERVE_FORK_CHANGES=true`. This opts into merges and requires the owner to resolve future conflicts; it is not needed for normal deployments.
 
 3. **Cloudflare Project Import**
    - Log into the Cloudflare **Workers & Pages** console and import the Fork repository.
@@ -43,6 +45,6 @@ This document defines the standard operating specifications and conventions for 
 
 7. **Verify Upstream Update Channel**
    - Manually trigger **Update deployed EdgeEver** once in the Fork's **Actions** tab.
-   - Open the job **Summary** and confirm it reports the upstream target (stable Release or edge `main`) and either an update publish or an explicit *already aligned* result.
+   - Open the job **Summary** and confirm it reports Fork mode `mirror`, the upstream target (stable Release or edge `main`), and either an update publish or an explicit *already aligned* result.
    - Confirm Cloudflare **Deployments** builds the published `main` commit when a push occurred.
-   - Do not rely on GitHub **Sync fork** for routine upgrades; use this workflow as the deploy-mirror path.
+   - Do not edit deployment files or rely on GitHub **Sync fork** for routine upgrades; the workflow is the only synchronization path needed by a normal deployment Fork.

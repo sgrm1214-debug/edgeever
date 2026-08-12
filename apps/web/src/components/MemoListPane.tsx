@@ -41,8 +41,10 @@ import {
   TagX,
   Link2,
   FileDown,
+  FileCode2,
   Printer,
   Pencil,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -70,6 +72,7 @@ import type {
 import { contentEnterMotion, paneEnterMotion } from "@/lib/motion";
 import type { SyncQueueSummary } from "@/lib/sync-queue";
 import { isLocalMemoId } from "@/lib/local-mirror";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   getMemoFilterOptions,
   getMemoSortOptions,
@@ -464,6 +467,7 @@ export const MemoListPane = ({
   const [listDensity, setListDensity] = useState<MemoListDensity>(() => readMemoListDensityPreference());
   const [lastSelectedMemoId, setLastSelectedMemoId] = useState<string | null>(null);
   const [moveTargetNotebookId, setMoveTargetNotebookId] = useState("");
+  const [memoIdCopyNotice, setMemoIdCopyNotice] = useState<{ status: "copied" | "error"; id: string } | null>(null);
 
   const filterOptions = useMemo(() => getMemoFilterOptions(t), [t]);
   const memoSortOptions = useMemo(() => getMemoSortOptions(t), [t]);
@@ -541,6 +545,15 @@ export const MemoListPane = ({
     const printWindow = action === "export-pdf" ? window.open("about:blank", "_blank") : undefined;
     setMemoContextMenu(null);
     onRequestDocumentAction(memo.id, action, printWindow);
+  };
+
+  const handleCopyContextMemoId = async () => {
+    const memo = memoContextMenu?.memo;
+    if (!memo || isLocalMemoId(memo.id)) return;
+    setMemoContextMenu(null);
+    const copied = await copyTextToClipboard(memo.id);
+    setMemoIdCopyNotice({ status: copied ? "copied" : "error", id: memo.id });
+    window.setTimeout(() => setMemoIdCopyNotice(null), copied ? 2200 : 3000);
   };
 
   useEffect(() => {
@@ -759,7 +772,7 @@ export const MemoListPane = ({
     // Keep enough room for the full action list. Radix can still adjust the
     // final position, but this prevents the initial placement from starting
     // below the viewport on short or zoomed desktop viewports.
-    const menuHeight = view === "trash" ? 180 : 320;
+    const menuHeight = view === "trash" ? 216 : 356;
     const x = Math.min(clientX, Math.max(12, window.innerWidth - menuWidth - 12));
     const y = Math.min(clientY, Math.max(12, window.innerHeight - menuHeight - 12));
 
@@ -1460,6 +1473,14 @@ export const MemoListPane = ({
                   {memoContextMenu.memo.isPinned ? t("memoList.unpin") : t("memoList.pinMemo")}
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem
+                className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm text-slate-700 hover:bg-slate-50 cursor-pointer outline-none"
+                disabled={isLocalMemoId(memoContextMenu.memo.id)}
+                onClick={() => void handleCopyContextMemoId()}
+              >
+                <Copy className="h-4 w-4 text-slate-500" />
+                {t(isLocalMemoId(memoContextMenu.memo.id) ? "editor.copyNoteIdAfterSync" : "editor.copyNoteId")}
+              </DropdownMenuItem>
               <DropdownMenuSeparator className="my-1 h-px bg-slate-100" />
               {view === "trash" ? (
                 <>
@@ -1540,6 +1561,13 @@ export const MemoListPane = ({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm text-slate-700 hover:bg-slate-50 cursor-pointer outline-none"
+                    onClick={() => requestContextDocumentAction("export-html")}
+                  >
+                    <FileCode2 className="h-4 w-4 text-slate-500" />
+                    {t("editor.exportHtml")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm text-slate-700 hover:bg-slate-50 cursor-pointer outline-none"
                     onClick={() => requestContextDocumentAction("export-pdf")}
                   >
                     <Printer className="h-4 w-4 text-slate-500" />
@@ -1568,6 +1596,18 @@ export const MemoListPane = ({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+      )}
+
+      {memoIdCopyNotice && (
+        <div
+          className={cn(
+            "fixed bottom-5 left-1/2 z-[120] max-w-[calc(100vw-2rem)] -translate-x-1/2 truncate rounded-md px-3 py-2 text-sm font-medium text-white shadow-lg",
+            memoIdCopyNotice.status === "copied" ? "bg-emerald-700" : "bg-rose-600",
+          )}
+          role={memoIdCopyNotice.status === "copied" ? "status" : "alert"}
+        >
+          {t(memoIdCopyNotice.status === "copied" ? "editor.noteIdCopied" : "editor.noteIdCopyFailed", { id: memoIdCopyNotice.id })}
         </div>
       )}
 

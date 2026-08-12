@@ -24,7 +24,7 @@ import {
   type TokenAccessLevel,
 } from "./settings-utils";
 
-const McpTitleWithHelp = () => {
+const McpExampleDialog = () => {
   const { t } = useTranslation();
   const baseUrl = getEdgeEverBaseUrl();
   const [copied, setCopied] = useState(false);
@@ -53,39 +53,33 @@ const McpTitleWithHelp = () => {
   };
 
   return (
-    <div className="w-fit max-w-full">
-      <CardTitle className="flex items-center gap-2 text-sm">
-        <KeyRound className="h-4 w-4 text-emerald-700" />
-        {t("mcp.title")}
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button size="sm" variant="outline" className="h-7 bg-white px-2.5 text-xs" type="button">
-              {t("mcp.example")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl gap-3 p-4 sm:p-5">
-            <DialogHeader>
-              <DialogTitle className="text-base">{t("mcp.exampleTitle")}</DialogTitle>
-            </DialogHeader>
-            <pre className="max-h-[55vh] overflow-auto rounded-md border border-slate-100 bg-slate-950 p-3 text-left text-[11px] leading-5 text-slate-100 sm:text-xs">
-              <code>{remoteExample}</code>
-            </pre>
-            <div className="flex justify-end">
-              <Button
-                size="md"
-                variant="solid"
-                className="bg-emerald-600 text-white hover:bg-emerald-700"
-                type="button"
-                onClick={() => void handleCopy()}
-              >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? t("common.copied") : t("mcp.copyExample")}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </CardTitle>
-    </div>
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7 bg-white px-2.5 text-xs" type="button">
+          {t("mcp.example")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl gap-3 p-4 sm:p-5">
+        <DialogHeader>
+          <DialogTitle className="text-base">{t("mcp.exampleTitle")}</DialogTitle>
+        </DialogHeader>
+        <pre className="max-h-[55vh] overflow-auto rounded-md border border-slate-100 bg-slate-950 p-3 text-left text-[11px] leading-5 text-slate-100 sm:text-xs">
+          <code>{remoteExample}</code>
+        </pre>
+        <div className="flex justify-end">
+          <Button
+            size="md"
+            variant="solid"
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+            type="button"
+            onClick={() => void handleCopy()}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            {copied ? t("common.copied") : t("mcp.copyExample")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 
@@ -99,57 +93,52 @@ const AccessLevelPicker = ({ value, onChange }: AccessLevelPickerProps) => {
   const options: TokenAccessLevel[] = ["full", "read-only"];
 
   return (
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-y border-slate-100 py-2">
-      <span id="token-access-level-label" className="text-xs font-semibold text-slate-700">
-        {t("mcp.accessLevelTitle")}
-      </span>
-      <TooltipProvider>
-        <div
-          role="radiogroup"
-          aria-labelledby="token-access-level-label"
-          className="inline-flex rounded-lg bg-slate-100 p-1"
-        >
-          {options.map((option) => {
-            const checked = value === option;
-            const inputId = `token-access-${option}`;
+    <TooltipProvider>
+      <div
+        role="radiogroup"
+        aria-label={t("mcp.accessLevelTitle")}
+        className="inline-flex h-9 shrink-0 items-center rounded-md bg-slate-200/70 p-0.5"
+      >
+        {options.map((option) => {
+          const checked = value === option;
+          const inputId = `token-access-${option}`;
 
-            return (
-              <Tooltip key={option}>
-                <TooltipTrigger asChild>
-                  <label
-                    htmlFor={inputId}
-                    className={cn(
-                      "flex h-7 cursor-pointer items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition-colors focus-within:ring-2 focus-within:ring-emerald-500/40",
-                      checked
-                        ? "bg-white text-emerald-700 shadow-sm"
-                        : "text-slate-500 hover:text-slate-700",
-                    )}
-                  >
-                    <input
-                      id={inputId}
-                      className="sr-only"
-                      type="radio"
-                      name="token-access-level"
-                      value={option}
-                      checked={checked}
-                      onChange={() => onChange(option)}
-                    />
-                    <span
-                      aria-hidden="true"
-                      className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-emerald-500" : "bg-slate-300")}
-                    />
-                    {t(`mcp.accessLevels.${option}.label`)}
-                  </label>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-72 leading-4">
-                  {t(`mcp.accessLevels.${option}.description`)}
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </TooltipProvider>
-    </div>
+          return (
+            <Tooltip key={option}>
+              <TooltipTrigger asChild>
+                <label
+                  htmlFor={inputId}
+                  className={cn(
+                    "flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-all focus-within:ring-2 focus-within:ring-emerald-500/40",
+                    checked
+                      ? "bg-white font-semibold text-emerald-800 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  )}
+                >
+                  <input
+                    id={inputId}
+                    className="sr-only"
+                    type="radio"
+                    name="token-access-level"
+                    value={option}
+                    checked={checked}
+                    onChange={() => onChange(option)}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-emerald-600" : "bg-slate-400")}
+                  />
+                  {t(`mcp.accessLevels.${option}.label`)}
+                </label>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-72 leading-4 text-xs">
+                {t(`mcp.accessLevels.${option}.description`)}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 };
 
@@ -184,16 +173,20 @@ const TokenList = ({ tokens, availableScopes, newlyCreatedTokenId, isLoading, is
 
   if (isLoading) {
     return (
-      <p className="py-4 text-sm text-slate-400">{t("mcp.loadingTokens")}</p>
+      <p className="py-4 text-center text-xs text-slate-400">{t("mcp.loadingTokens")}</p>
     );
   }
 
   if (tokens.length === 0) {
-    return <p className="py-4 text-sm text-slate-400">{t("mcp.emptyTokens")}</p>;
+    return (
+      <p className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">
+        {t("mcp.emptyTokens")}
+      </p>
+    );
   }
 
   return (
-    <div className="divide-y divide-slate-100 border-t border-slate-100">
+    <div className="overflow-hidden rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
       {tokens.map((token) => {
         const accessLevel = getStoredTokenAccessLevel(token.scopes, availableScopes);
         const accessLabel = accessLevel === "legacy-custom"
@@ -204,84 +197,124 @@ const TokenList = ({ tokens, availableScopes, newlyCreatedTokenId, isLoading, is
           <div
             key={token.id}
             className={cn(
-              "flex min-h-16 flex-col items-stretch gap-3 py-3 transition-colors sm:py-4 lg:flex-row lg:items-center",
-              token.isRevoked ? "bg-slate-50/50 opacity-60" : "hover:bg-slate-50/50",
+              "flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between transition-colors sm:p-4",
+              token.isRevoked ? "bg-slate-50/50 opacity-60" : "hover:bg-slate-50/40",
               token.id === newlyCreatedTokenId && "edgeever-token-created",
             )}
           >
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold leading-tight text-slate-900">{token.name}</span>
-            {accessLevel === "legacy-custom" ? (
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-xs font-semibold text-slate-900">{token.name}</span>
+                {accessLevel === "legacy-custom" ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="cursor-help rounded-md border border-slate-200/80 bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                          tabIndex={0}
+                        >
+                          {accessLabel}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        {token.scopes.map((scope) => getTokenScopeLabel(scope, t)).join(", ")}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <span
+                    className={cn(
+                      "rounded-md px-2 py-0.5 text-xs font-normal",
+                      accessLevel === "full"
+                        ? "border border-emerald-200/60 bg-emerald-50 text-emerald-700"
+                        : "border border-slate-200/80 bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {accessLabel}
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                <span>
+                  {token.lastUsedAt ? t("mcp.lastUsedAt", { time: formatDateTime(token.lastUsedAt) }) : t("mcp.neverUsed")}
+                </span>
+                {!token.token ? (
+                  <span className="text-amber-600">· {t("mcp.legacyTokenHint")}</span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span
-                      className="mt-2 block w-fit max-w-full truncate rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-                      tabIndex={0}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      aria-label={token.token ? t("mcp.copyToken") : t("mcp.legacyTokenCannotCopy")}
+                      disabled={token.isRevoked || !token.token}
+                      onClick={() => void handleCopy(token, "token")}
                     >
-                      {accessLabel}
-                    </span>
+                      {copiedAction?.tokenId === token.id && copiedAction.action === "token" ? (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="font-medium text-emerald-700">{t("common.copied")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-slate-500" />
+                          <span>{t("mcp.copyToken")}</span>
+                        </>
+                      )}
+                    </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {token.scopes.map((scope) => getTokenScopeLabel(scope, t)).join(", ")}
-                  </TooltipContent>
+                  <TooltipContent side="bottom">{token.token ? t("mcp.copyToken") : t("mcp.legacyTokenCannotCopy")}</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 border-slate-200 bg-white px-2.5 text-xs font-normal text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      aria-label={token.token ? t("mcp.copyConfig") : t("mcp.legacyConfigCannotCopy")}
+                      disabled={token.isRevoked || !token.token}
+                      onClick={() => void handleCopy(token, "config")}
+                    >
+                      {copiedAction?.tokenId === token.id && copiedAction.action === "config" ? (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="font-medium text-emerald-700">{t("common.copied")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5 text-slate-500" />
+                          <span>{t("mcp.copyConfig")}</span>
+                        </>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{token.token ? t("mcp.copyConfig") : t("mcp.legacyConfigCannotCopy")}</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label={t("mcp.deleteToken")}
+                      disabled={isDeleting}
+                      onClick={() => onDelete(token)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{t("mcp.deleteToken")}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            ) : (
-              <span className="mt-2 block w-fit max-w-full truncate rounded-md border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
-                {accessLabel}
-              </span>
-            )}
-            <span className="mt-2 block text-[11px] font-medium text-slate-400">
-              {token.lastUsedAt ? t("mcp.lastUsedAt", { time: formatDateTime(token.lastUsedAt) }) : t("mcp.neverUsed")}
-              {!token.token ? ` · ${t("mcp.legacyTokenHint")}` : ""}
-            </span>
-          </span>
-          <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:items-center">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 justify-center whitespace-nowrap bg-white px-3 text-xs"
-              title={token.token ? t("mcp.copyToken") : t("mcp.legacyTokenCannotCopy")}
-              aria-label={token.token ? t("mcp.copyToken") : t("mcp.legacyTokenCannotCopy")}
-              disabled={token.isRevoked || !token.token}
-              onClick={() => void handleCopy(token, "token")}
-            >
-              {copiedAction?.tokenId === token.id && copiedAction.action === "token" ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-              {copiedAction?.tokenId === token.id && copiedAction.action === "token" ? t("common.copied") : t("mcp.copyToken")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 justify-center whitespace-nowrap bg-white px-3 text-xs"
-              title={token.token ? t("mcp.copyConfig") : t("mcp.legacyConfigCannotCopy")}
-              aria-label={token.token ? t("mcp.copyConfig") : t("mcp.legacyConfigCannotCopy")}
-              disabled={token.isRevoked || !token.token}
-              onClick={() => void handleCopy(token, "config")}
-            >
-              {copiedAction?.tokenId === token.id && copiedAction.action === "config" ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-              {copiedAction?.tokenId === token.id && copiedAction.action === "config" ? t("common.copied") : t("mcp.copyConfig")}
-            </Button>
-            <Button
-              size="icon"
-              variant="danger"
-              className="h-9 w-full shrink-0 sm:w-9"
-              title={t("mcp.deleteToken")}
-              aria-label={t("mcp.deleteToken")}
-              disabled={isDeleting}
-              onClick={() => onDelete(token)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+            </div>
           </div>
         );
       })}
@@ -336,39 +369,57 @@ export const McpConfigCard = () => {
   return (
     <>
       <Card className="w-full min-w-0 overflow-hidden shadow-none">
-        <CardHeader className="p-4">
-          <McpTitleWithHelp />
-          <CardDescription className="text-xs leading-4">{t("mcp.description")}</CardDescription>
+        <CardHeader className="p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <KeyRound className="h-4 w-4 text-emerald-700" />
+                {t("mcp.title")}
+              </CardTitle>
+              <CardDescription className="mt-1 text-xs text-slate-500">{t("mcp.description")}</CardDescription>
+            </div>
+            <McpExampleDialog />
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4 p-4 pt-0">
-          <form className="min-w-0 space-y-3" onSubmit={handleSubmit}>
-            <div className="flex flex-col gap-3 sm:flex-row">
+        <CardContent className="grid gap-5 p-4 pt-0 sm:px-5 sm:pb-5">
+          <div className="rounded-lg border border-slate-200/70 bg-slate-50/50 p-3 sm:p-3.5">
+            <form className="flex flex-col gap-2.5 sm:flex-row sm:items-center" onSubmit={handleSubmit}>
               <Input
-                className="h-9 min-w-0 flex-1 text-xs focus-visible:ring-4 focus-visible:ring-emerald-500/10"
+                className="h-9 min-w-0 flex-1 bg-white text-xs"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder={t("mcp.namePlaceholder")}
               />
-              <Button
-                size="md"
-                variant="solid"
-                className="h-9 w-full whitespace-nowrap bg-emerald-500 text-white hover:bg-emerald-600 sm:w-32"
-                type="submit"
-                disabled={createMutation.isPending}
-              >
-                <Plus className="h-4 w-4" />
-                {t("mcp.createToken")}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <AccessLevelPicker
+                  value={accessLevel}
+                  onChange={setAccessLevel}
+                />
+                <Button
+                  size="sm"
+                  variant="solid"
+                  className="h-9 shrink-0 gap-1 bg-emerald-600 px-3.5 text-xs text-white hover:bg-emerald-700"
+                  type="submit"
+                  disabled={createMutation.isPending || !name.trim()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("mcp.createToken")}
+                </Button>
+              </div>
+            </form>
+          </div>
+
+          <section className="grid gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {t("mcp.activeTokens")}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                  {tokens.length}
+                </span>
+              </div>
             </div>
-
-            <AccessLevelPicker
-              value={accessLevel}
-              onChange={setAccessLevel}
-            />
-          </form>
-
-          <div className="space-y-3">
-            <span className="block text-xs font-semibold text-slate-500">{t("mcp.activeTokens")}</span>
             <TokenList
               tokens={tokens}
               availableScopes={availableScopes}
@@ -377,7 +428,7 @@ export const McpConfigCard = () => {
               isDeleting={deleteTokenMutation.isPending}
               onDelete={setTokenDeleteConfirmation}
             />
-          </div>
+          </section>
         </CardContent>
       </Card>
 

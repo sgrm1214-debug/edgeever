@@ -317,6 +317,7 @@ jobs:
     if: >-
       ${{
         always() &&
+        github.repository == 'tianma-if/edgeever' &&
         needs.desktop.result == 'success' &&
         (
           (github.event_name == 'workflow_dispatch' && inputs.release_tag == '') ||

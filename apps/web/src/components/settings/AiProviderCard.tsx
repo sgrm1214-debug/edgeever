@@ -25,6 +25,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 export const AiProviderCard = ({ provider: saved, defaultDisplayName, defaultModelId, readOnly, onChanged }: {
   provider: AiProviderConfig;
   defaultDisplayName: string;
@@ -157,95 +159,125 @@ export const AiProviderCard = ({ provider: saved, defaultDisplayName, defaultMod
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-white">
-      <div className="flex items-start justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-slate-900">{effectiveDisplayName}</h3>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">{providerLabel}</span>
-            <span className="max-w-full truncate">{formatBaseUrl(saved.baseUrl)}</span>
-            <span aria-hidden="true">·</span>
-            <span>{t("aiModel.modelCount", { count: saved.models.length })}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden text-xs text-slate-500 sm:inline">
-            {saved.isEnabled ? t("aiModel.serviceEnabledStatus") : t("aiModel.serviceDisabledStatus")}
-          </span>
-          <Switch
-            checked={saved.isEnabled}
-            disabled={readOnly || toggleMutation.isPending}
-            aria-label={t("aiModel.serviceEnabled")}
-            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" disabled={cardBusy}>
-                <MoreHorizontal className="h-4 w-4" />
-                <span className="sr-only">{t("aiModel.serviceActions")}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem disabled={readOnly} onSelect={openConnection}>
-                <Pencil className="mr-2 h-4 w-4" />{t("aiModel.editConnection")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-rose-600 focus:text-rose-700" disabled={readOnly} onSelect={deleteProvider}>
-                <Trash2 className="mr-2 h-4 w-4" />{t("common.delete")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="grid gap-3 border-t bg-slate-50/40 p-4">
+    <section>
+      <div className="flex flex-col gap-2.5 p-3.5 sm:p-4">
         <div className="flex items-center justify-between gap-3">
-          <h4 className="text-sm font-semibold text-slate-900">{t("aiModel.modelsTitle")}</h4>
-          <Button type="button" variant="outline" size="sm" disabled={readOnly} onClick={() => setShowAddModel(true)}>
-            <Plus className="h-4 w-4" />{t("aiModel.addModel")}
-          </Button>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="truncate text-xs font-semibold text-slate-900">{effectiveDisplayName}</span>
+            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
+              {providerLabel}
+            </span>
+            <span className="max-w-full truncate font-mono text-xs text-slate-400">
+              {formatBaseUrl(saved.baseUrl)}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span className="hidden text-xs text-slate-400 sm:inline">
+              {saved.isEnabled ? t("aiModel.serviceEnabledStatus") : t("aiModel.serviceDisabledStatus")}
+            </span>
+            <Switch
+              checked={saved.isEnabled}
+              disabled={readOnly || toggleMutation.isPending}
+              aria-label={t("aiModel.serviceEnabled")}
+              onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+            />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-500 hover:text-slate-900"
+                    disabled={readOnly}
+                    onClick={() => setShowAddModel(true)}
+                    aria-label={t("aiModel.addModel")}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t("aiModel.addModel")}</TooltipContent>
+              </Tooltip>
+
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-slate-500 hover:text-slate-900"
+                        disabled={cardBusy}
+                        aria-label={t("aiModel.serviceActions")}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{t("aiModel.serviceActions")}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem disabled={readOnly} onSelect={openConnection}>
+                    <Pencil className="mr-2 h-4 w-4" />{t("aiModel.editConnection")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-rose-600 focus:text-rose-700" disabled={readOnly} onSelect={deleteProvider}>
+                    <Trash2 className="mr-2 h-4 w-4" />{t("common.delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TooltipProvider>
+          </div>
         </div>
 
-        {saved.models.length ? (
-          <div className="divide-y overflow-hidden rounded-md border bg-white">
-            {saved.models.map((model) => (
-              <div key={model.id} className="group flex min-w-0 items-center justify-between gap-3 px-3 py-2.5">
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="truncate text-sm text-slate-800">{model.displayName}</p>
-                    {model.id === defaultModelId ? (
-                      <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                        {t("aiModel.defaultBadge")}
-                      </span>
-                    ) : null}
-                  </div>
-                  {model.modelId !== model.displayName ? <p className="mt-0.5 truncate text-xs text-slate-500">{model.modelId}</p> : null}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-slate-400 hover:text-rose-600"
-                  disabled={readOnly || deleteModelMutation.isPending}
-                  onClick={() => deleteModel(model)}
-                  aria-label={t("aiModel.removeModel")}
-                  title={t("aiModel.removeModel")}
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+          <TooltipProvider>
+            {saved.models.length ? (
+              saved.models.map((model) => (
+                <span
+                  key={model.id}
+                  className="inline-flex h-6.5 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50/80 pl-2 pr-1 text-xs text-slate-700"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="rounded-md border border-dashed bg-white p-4 text-center text-xs text-slate-500">{t("aiModel.noModels")}</p>
-        )}
-
-        {cardError ? (
-          <p className="text-xs font-medium text-rose-600" role="alert">
-            {aiErrorMessage(cardError, t("aiModel.failed"), t("aiModel.encryptionKeyMissing"))}
-          </p>
-        ) : null}
+                  <span className="min-w-0 truncate font-medium">{model.displayName}</span>
+                  {model.modelId !== model.displayName ? (
+                    <span className="min-w-0 truncate font-mono text-[11px] text-slate-400">({model.modelId})</span>
+                  ) : null}
+                  {model.id === defaultModelId ? (
+                    <span className="shrink-0 rounded border border-emerald-200/60 bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-700">
+                      {t("aiModel.defaultBadge")}
+                    </span>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 shrink-0 text-slate-400 hover:bg-white hover:text-rose-600"
+                        disabled={readOnly || deleteModelMutation.isPending}
+                        onClick={() => deleteModel(model)}
+                        aria-label={`${t("aiModel.removeModel")}: ${model.displayName}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">{t("aiModel.removeModel")}</TooltipContent>
+                  </Tooltip>
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-slate-400">{t("aiModel.noModels")}</span>
+            )}
+          </TooltipProvider>
+        </div>
       </div>
+
+      {cardError ? (
+        <p className="border-t px-4 py-3 text-xs font-medium text-rose-600" role="alert">
+          {aiErrorMessage(cardError, t("aiModel.failed"), t("aiModel.encryptionKeyMissing"))}
+        </p>
+      ) : null}
 
       <Dialog open={showConnection} onOpenChange={handleConnectionChange}>
         <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">

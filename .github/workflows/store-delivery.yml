@@ -102,7 +102,11 @@ jobs:
 
   android:
     needs: plan
-    if: inputs.platform == 'android' || inputs.platform == 'both'
+    if: >-
+      ${{
+        github.repository == 'tianma-if/edgeever' &&
+        (inputs.platform == 'android' || inputs.platform == 'both')
+      }}
     name: Deliver Google Play
     runs-on: [self-hosted, macOS, ARM64, edgeever-mobile]
     timeout-minutes: 60
@@ -176,7 +180,11 @@ jobs:
 
   ios:
     needs: plan
-    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    if: >-
+      ${{
+        github.repository == 'tianma-if/edgeever' &&
+        (inputs.platform == 'ios' || inputs.platform == 'both')
+      }}
     name: Deliver App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 90

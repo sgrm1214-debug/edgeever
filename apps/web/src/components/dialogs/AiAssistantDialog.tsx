@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -154,7 +153,6 @@ export const AiAssistantDialog = ({
       <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-emerald-600" />{t("aiAssistant.title")}</DialogTitle>
-          <DialogDescription>{t("aiAssistant.description")}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -162,7 +160,7 @@ export const AiAssistantDialog = ({
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
                 {t(hasSelection ? "aiAssistant.selectedScope" : "aiAssistant.noteScope")}
               </span>
-              {t(hasSelection ? "aiAssistant.selectedScopeHint" : "aiAssistant.noteScopeHint")}
+              {hasSelection ? null : t("aiAssistant.noteScopeHint")}
             </div>
             {hasSelection ? (
               <p className="mt-2 max-h-16 overflow-hidden whitespace-pre-wrap border-l-2 border-emerald-200 pl-3 text-xs leading-5 text-slate-500">

@@ -15,6 +15,26 @@ export type MobileSelectionAiRequest = {
   instruction?: string;
 };
 
+export type MobileAiSourceRange = {
+  from: number;
+  to: number;
+  wholeNote: boolean;
+};
+
+export const getMobileAiSourceRange = (
+  selection: { from: number; to: number; empty: boolean },
+  documentSize: number,
+): MobileAiSourceRange | null => {
+  if (!Number.isInteger(documentSize) || documentSize <= 0) return null;
+  if (selection.empty || selection.from >= selection.to) {
+    return { from: 0, to: documentSize, wholeNote: true };
+  }
+  const from = Math.max(0, Math.min(selection.from, documentSize));
+  const to = Math.max(from, Math.min(selection.to, documentSize));
+  if (from >= to) return null;
+  return { from, to, wholeNote: from === 0 && to === documentSize };
+};
+
 export const parseMobileSelectionAiRequest = (requestJson: string): MobileSelectionAiRequest | null => {
   try {
     const raw = JSON.parse(requestJson) as Record<string, unknown>;

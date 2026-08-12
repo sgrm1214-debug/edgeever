@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { simulateReadableStream } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import {
   aiActionInstructions,
   buildAiGenerationPrompt,
@@ -9,6 +11,7 @@ import {
   decryptAiCredential,
   resolveAiCredentialEncryptionKeys,
   resolveCredentialEncryptionKey,
+  streamAiGeneration,
 } from "./ai-service.ts";
 import { encryptSecret } from "./secret-encryption.ts";
 
@@ -26,9 +29,14 @@ describe("AI model service", () => {
       "simplify-language",
       "summarize",
     ]);
+    expect(aiActionInstructions.summarize).toContain("genuinely condensed summary");
+    expect(aiActionInstructions.summarize).toContain("20–30% of the source length");
+    expect(aiActionInstructions.summarize).toContain("Do not reproduce long passages verbatim");
     expect(aiActionInstructions["extract-todos"]).toContain("- [ ]");
     expect(resolveAiGenerationSystemInstruction({ action: "change-tone", tone: "friendly" }))
       .toContain("friendly tone");
+    expect(resolveAiGenerationSystemInstruction({ action: "improve-writing" }))
+      .toContain("Never include 'User instruction:'");
   });
 
   test("supports bounded custom and follow-up editing instructions", () => {
@@ -44,6 +52,47 @@ describe("AI model service", () => {
       "Note title:\nPlan",
       "Note content:\nShip on Friday.",
     ].join("\n\n"));
+  });
+
+  test("uses a schema-validated result tool instead of exposing model wrappers", async () => {
+    const result = streamAiGeneration({
+      model: new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              {
+                type: "tool-call",
+                toolCallId: "call-1",
+                toolName: "submitNoteResult",
+                input: '{"contentMarkdown":"*在线模式下*"}',
+              },
+              {
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: undefined },
+                logprobs: undefined,
+                usage: {
+                  inputTokens: { total: 12, noCache: 12, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 8, text: 8, reasoning: undefined },
+                },
+              },
+            ],
+          }),
+        }),
+      }),
+      action: "improve-writing",
+      title: "富文本测试",
+      contentMarkdown: "*在线模式下*",
+    });
+
+    let submittedContent = "";
+    for await (const part of result.stream) {
+      if (part.type === "tool-call" && part.toolName === "submitNoteResult") {
+        submittedContent = part.input.contentMarkdown;
+      }
+    }
+
+    expect(submittedContent).toBe("*在线模式下*");
+    expect(await result.finishReason).toBe("tool-calls");
   });
 
   test("normalizes only trailing separators from a custom Base URL", () => {

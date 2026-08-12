@@ -22,7 +22,7 @@ export type ShortcutBinding = {
 export type ShortcutSettings = Record<ShortcutAction, ShortcutBinding>;
 export type MobileBottomNavItem = "home" | "search" | "templates" | "settings";
 export type MemoContextMenuState = { memo: MemoSummary; x: number; y: number };
-export type MemoDocumentAction = "share" | "export-markdown" | "export-pdf" | "save-as-template";
+export type MemoDocumentAction = "share" | "export-markdown" | "export-html" | "export-pdf" | "save-as-template";
 export type MemoDocumentActionRequest = {
   id: number;
   memoId: string;

@@ -108,7 +108,7 @@ export const AiModelCard = () => {
                   <Sparkles className="h-4 w-4 text-emerald-700" />
                   {t("aiModel.title")}
                 </CardTitle>
-                <CardDescription className="mt-1">{t("aiModel.description")}</CardDescription>
+                <CardDescription className="mt-1 text-xs text-slate-500">{t("aiModel.description")}</CardDescription>
               </span>
               <ChevronDown className={cn("mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform", expanded && "rotate-180")} />
             </button>
@@ -126,18 +126,15 @@ export const AiModelCard = () => {
                   </p>
                 ) : null}
 
-                <section className="grid gap-3 rounded-lg bg-slate-50/80 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(16rem,1.25fr)] sm:items-center">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">{t("aiModel.defaultSettingsTitle")}</h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{t("aiModel.defaultModelHint")}</p>
-                  </div>
-                  <Field label={t("aiModel.defaultModel")}>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200/70 bg-slate-50/50 px-3.5 py-2">
+                  <span className="text-xs font-medium text-slate-700">{t("aiModel.defaultModel")}</span>
+                  <div className="w-56 max-w-[60%] shrink-0 sm:w-72">
                     <Select
                       value={settings?.defaultModelId ?? "none"}
                       onValueChange={(value) => defaultMutation.mutate(value === "none" ? null : value)}
                       disabled={readOnly || defaultMutation.isPending}
                     >
-                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 bg-white text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">{t("aiModel.noDefaultModel")}</SelectItem>
                         {allModels.map((model) => (
@@ -147,42 +144,46 @@ export const AiModelCard = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                  </Field>
-                  {!defaultModelAvailable ? (
-                    <p className="flex items-center gap-2 text-xs text-amber-700 sm:col-start-2"><TriangleAlert className="h-4 w-4 shrink-0" />{t("aiModel.defaultUnavailable")}</p>
-                  ) : null}
-                </section>
+                  </div>
+                </div>
+                {!defaultModelAvailable ? (
+                  <p className="flex items-center gap-1.5 text-xs text-amber-700">
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                    {t("aiModel.defaultUnavailable")}
+                  </p>
+                ) : null}
 
                 <section className="grid gap-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                        <Server className="h-4 w-4 text-slate-500" />{t("aiModel.servicesTitle")}
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {t("aiModel.serviceCount", { count: settings?.providers.length ?? 0 })}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        {t("aiModel.servicesTitle")}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {settings?.providers.length ?? 0}
+                      </span>
                     </div>
-                    <Button type="button" variant="outline" size="sm" disabled={readOnly} onClick={openAddDialog}>
-                      <Plus className="h-4 w-4" />{t("aiModel.addProvider")}
+                    <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 bg-white text-xs" disabled={readOnly} onClick={openAddDialog}>
+                      <Plus className="h-3.5 w-3.5" />{t("aiModel.addProvider")}
                     </Button>
                   </div>
 
-                  <div className="grid gap-3">
-                    {settings?.providers.map((item, index) => (
-                      <AiProviderCard
-                        key={item.id}
-                        provider={item}
-                        defaultDisplayName={getDefaultProviderName(index)}
-                        defaultModelId={settings.defaultModelId}
-                        readOnly={readOnly}
-                        onChanged={refresh}
-                      />
-                    ))}
-                    {!settings?.providers.length ? (
-                      <p className="rounded-lg border border-dashed p-5 text-center text-sm text-slate-500">{t("aiModel.noProviders")}</p>
-                    ) : null}
-                  </div>
+                  {settings?.providers.length ? (
+                    <div className="overflow-hidden rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
+                      {settings.providers.map((item, index) => (
+                        <AiProviderCard
+                          key={item.id}
+                          provider={item}
+                          defaultDisplayName={getDefaultProviderName(index)}
+                          defaultModelId={settings.defaultModelId}
+                          readOnly={readOnly}
+                          onChanged={refresh}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">{t("aiModel.noProviders")}</p>
+                  )}
                 </section>
 
                 <Dialog open={showAdd} onOpenChange={handleAddDialogChange}>

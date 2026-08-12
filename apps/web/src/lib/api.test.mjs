@@ -62,6 +62,7 @@ afterAll(() => {
 });
 
 const {
+  ApiRequestError,
   DESKTOP_API_BASE_URL_STORAGE_KEY,
   api,
   cacheDesktopSession,
@@ -314,5 +315,31 @@ describe("desktop instance setup", () => {
       url: "https://notes.example.com/api/v1/sync/bootstrap?limit=200",
       authorization: "Bearer replacement-session-token",
     });
+  });
+
+  test("preserves Cloudflare response diagnostics for login failures", async () => {
+    globalThis.fetch = async () => new Response("<html>challenge</html>", {
+      status: 403,
+      headers: {
+        "CF-Mitigated": "challenge",
+        "CF-Ray": "abc123-SJC",
+        "Content-Type": "text/html",
+      },
+    });
+
+    try {
+      await api.login({ username: "admin", password: "secret" });
+      throw new Error("Expected login to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiRequestError);
+      expect(error).toMatchObject({
+        status: 403,
+        responseDiagnostics: {
+          cloudflareMitigated: true,
+          isEdgeEverApiError: false,
+          rayId: "abc123-SJC",
+        },
+      });
+    }
   });
 });

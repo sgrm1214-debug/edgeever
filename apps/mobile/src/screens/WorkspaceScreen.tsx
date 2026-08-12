@@ -110,7 +110,7 @@ import {
 } from "../lib/local-mirror";
 import { AccountSecurityPanel } from "./AccountSecurityModal";
 import { beginEditorStartup, markStartup, recordEditorStartup } from "../lib/startup-performance";
-import { prepareUploadAsset } from "../lib/mobile-image-upload";
+import { prepareUploadAsset, type MobileImageUploadAsset } from "../lib/mobile-image-upload";
 import MobileWebClipCapture from "../components/MobileWebClipCapture";
 import LocalTiptapEditor, { type LocalTiptapEditorRef } from "../components/LocalTiptapEditor";
 import { SAFE_DOM_WEBVIEW_PROPS } from "../lib/mobile-dom";
@@ -127,9 +127,11 @@ import { getMobileMarkdownFenceLanguage, trimMobileMarkdownFenceContent } from "
 import {
   buildMobileWebClipDraft,
   buildMobileWebClipDraftFromRenderedPage,
+  getSharedImages,
   getSharedWebUrl,
   isWeChatArticleUrl,
   type MobileRenderedWebPage,
+  type MobileSharedImage,
   type MobileSharedPayload,
   type MobileWebClipDraft,
 } from "../lib/mobile-web-clip";
@@ -219,9 +221,13 @@ type RichEditingSession = {
 type MobileMemoUpdateMutation = UseMutationResult<MemoDetail, Error, { memo: MemoDetail; payload: MobileMemoUpdatePayload }>;
 
 export const WorkspaceScreen = ({
+  incomingShareError = null,
+  incomingShareIsResolving = false,
   incomingSharePayloads = [],
   onIncomingShareHandled,
 }: {
+  incomingShareError?: Error | null;
+  incomingShareIsResolving?: boolean;
   incomingSharePayloads?: MobileSharedPayload[];
   onIncomingShareHandled?: () => void;
 }) => {
@@ -249,6 +255,7 @@ export const WorkspaceScreen = ({
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [incomingClipDraft, setIncomingClipDraft] = useState<MobileWebClipDraft | null>(null);
   const [incomingClipCaptureUrl, setIncomingClipCaptureUrl] = useState<string | null>(null);
+  const [incomingShareImages, setIncomingShareImages] = useState<MobileSharedImage[]>([]);
   const [isImportingShare, setIsImportingShare] = useState(false);
   const [notesActionsOpen, setNotesActionsOpen] = useState(false);
   const [notebookPickerOpen, setNotebookPickerOpen] = useState(false);
@@ -264,6 +271,7 @@ export const WorkspaceScreen = ({
   onIncomingShareHandledRef.current = onIncomingShareHandled;
   const debouncedSearchText = useDebouncedValue(searchText.trim(), 250);
   const incomingShareUrl = useMemo(() => getSharedWebUrl(incomingSharePayloads), [incomingSharePayloads]);
+  const sharedImages = useMemo(() => getSharedImages(incomingSharePayloads), [incomingSharePayloads]);
   const handleMemoIdRemapped = useCallback((temporaryId: string, memo: MemoDetail) => {
     setSelectedMemoId((current) => current === temporaryId ? memo.id : current);
     setSelectedMemoIds((current) => {
@@ -614,6 +622,7 @@ export const WorkspaceScreen = ({
     setSelectionMode(false);
     setSelectedMemoIds(new Set());
     setIncomingClipDraft(null);
+    setIncomingShareImages([]);
     setCreateSeed(seed);
     setCreateOpen(true);
   }, []);
@@ -666,11 +675,58 @@ export const WorkspaceScreen = ({
   }, [finishIncomingShare, incomingClipCaptureUrl, openIncomingClipDraft]);
 
   useEffect(() => {
+    if (incomingShareIsResolving) {
+      return;
+    }
+
+    if (incomingShareError && sharedImages.some((image) => !image.uri.startsWith("file:"))) {
+      if (processedShareUrlRef.current !== "invalid-binary-share") {
+        processedShareUrlRef.current = "invalid-binary-share";
+        Alert.alert("无法读取分享图片", incomingShareError.message || "请重新分享后再试。");
+        onIncomingShareHandledRef.current?.();
+      }
+      return;
+    }
+
+    if (sharedImages.length > 0) {
+      const shareKey = `images:${sharedImages.map((image) => image.uri).join("|")}`;
+      if (processedShareUrlRef.current === shareKey) {
+        return;
+      }
+      if (notebooks.length === 0) {
+        if (notebooksQuery.isSuccess) {
+          processedShareUrlRef.current = shareKey;
+          Alert.alert("无法保存图片", "请先在 EdgeEver 中创建一个笔记本。");
+          onIncomingShareHandledRef.current?.();
+        }
+        return;
+      }
+
+      processedShareUrlRef.current = shareKey;
+      beginEditorStartup();
+      setSelectedMemoId(null);
+      setIncomingClipDraft(null);
+      setIncomingShareImages(sharedImages);
+      setCreateSeed({
+        contentMarkdown: "",
+        tagsText: "",
+        title: sharedImages.length === 1 ? "分享的图片" : `分享的图片（${sharedImages.length} 张）`,
+      });
+      setActiveView("notes");
+      setMemoView("notebook");
+      setCreateOpen(true);
+      onIncomingShareHandledRef.current?.();
+      return;
+    }
+
     const sourceUrl = incomingShareUrl;
     if (!sourceUrl) {
       if (incomingSharePayloads.length > 0 && processedShareUrlRef.current !== "invalid-share") {
         processedShareUrlRef.current = "invalid-share";
-        Alert.alert("无法剪藏", "分享内容里没有可识别的网页链接。");
+        Alert.alert(
+          "无法读取分享内容",
+          incomingShareError?.message || "分享内容里没有可识别的网页链接或图片。",
+        );
         onIncomingShareHandledRef.current?.();
         return;
       }
@@ -721,11 +777,14 @@ export const WorkspaceScreen = ({
       active = false;
     };
   }, [
+    incomingShareError,
+    incomingShareIsResolving,
     incomingSharePayloads.length,
     incomingShareUrl,
     notebooks.length,
     notebooksQuery.isSuccess,
     openIncomingClipDraft,
+    sharedImages,
   ]);
 
   useEffect(() => {
@@ -1194,10 +1253,12 @@ export const WorkspaceScreen = ({
         defaultNotebookId={createMemoNotebookId}
         imageCompressionEnabled={imageCompressionEnabled}
         initialDraft={incomingClipDraft ?? createSeed}
+        initialSharedImages={incomingShareImages}
         notebooks={notebooks}
         onCreated={() => {
           setCreateOpen(false);
           setIncomingClipDraft(null);
+          setIncomingShareImages([]);
           setCreateSeed(null);
           setActiveView("notes");
           setMemoView("notebook");
@@ -1206,6 +1267,7 @@ export const WorkspaceScreen = ({
         onDismiss={() => {
           setCreateOpen(false);
           setIncomingClipDraft(null);
+          setIncomingShareImages([]);
           setCreateSeed(null);
         }}
         onQueued={runForcedSync}
@@ -1684,6 +1746,7 @@ const CreateMemoModal = ({
   defaultNotebookId,
   imageCompressionEnabled,
   initialDraft,
+  initialSharedImages = [],
   notebooks,
   onCreated,
   onDismiss,
@@ -1696,6 +1759,7 @@ const CreateMemoModal = ({
   defaultNotebookId: string;
   imageCompressionEnabled: boolean;
   initialDraft?: MobileCreateMemoSeed | MobileWebClipDraft | null;
+  initialSharedImages?: MobileSharedImage[];
   notebooks: Notebook[];
   onCreated: (memo: MemoDetail) => void;
   onDismiss: () => void;
@@ -1734,6 +1798,7 @@ const CreateMemoModal = ({
   const [editorReady, setEditorReady] = useState(false);
   const [imageOperation, setImageOperation] = useState<"idle" | "creating" | "uploading">("idle");
   const imageOperationRef = useRef(imageOperation);
+  const sharedImagesHandledRef = useRef(false);
   const createPendingRef = useRef(false);
   const [resourceTarget, setResourceTarget] = useState<MobileResourceTarget | null>(null);
   const { pickUploadAsset, uploadSourcePicker } = useMobileEditorUploadAsset();
@@ -2038,10 +2103,9 @@ const CreateMemoModal = ({
     return response.memo;
   };
 
-  const pickAndUploadImage = async () => {
+  const uploadImageAsset = async (asset: MobileImageUploadAsset | null) => {
     let uploadId: string | null = null;
     try {
-      const asset = await pickUploadAsset();
       if (!asset) {
         return;
       }
@@ -2065,6 +2129,23 @@ const CreateMemoModal = ({
       setImageOperation("idle");
     }
   };
+
+  const pickAndUploadImage = async () => {
+    const asset = await pickUploadAsset();
+    await uploadImageAsset(asset);
+  };
+
+  useEffect(() => {
+    if (!editorReady || sharedImagesHandledRef.current || initialSharedImages.length === 0) {
+      return;
+    }
+    sharedImagesHandledRef.current = true;
+    void (async () => {
+      for (const image of initialSharedImages) {
+        await uploadImageAsset(image);
+      }
+    })();
+  }, [editorReady, initialSharedImages]);
 
   const markDirty = () => {
     userEditedSinceOpenRef.current = true;

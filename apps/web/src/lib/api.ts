@@ -258,15 +258,29 @@ export class ApiRequestError extends Error {
   status: number;
   code?: string;
   details?: unknown;
+  responseDiagnostics?: ApiResponseDiagnostics;
 
-  constructor(message: string, status: number, code?: string, details?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: unknown,
+    responseDiagnostics?: ApiResponseDiagnostics,
+  ) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.code = code;
     this.details = details;
+    this.responseDiagnostics = responseDiagnostics;
   }
 }
+
+export type ApiResponseDiagnostics = {
+  cloudflareMitigated: boolean;
+  isEdgeEverApiError: boolean;
+  rayId?: string;
+};
 
 let desktopSessionRejected = false;
 
@@ -299,13 +313,20 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
+    const rayId = response.headers.get("cf-ray")?.trim();
     const error = body && typeof body === "object" && "error" in body
       ? (body as { error?: { code?: string; message?: string; details?: unknown } }).error
       : undefined;
+    const isEdgeEverApiError = Boolean(error && typeof error === "object");
     const message =
       body && typeof body === "object" && "error" in body
         ? error?.message
         : response.statusText;
+    const responseDiagnostics: ApiResponseDiagnostics = {
+      cloudflareMitigated: response.headers.get("cf-mitigated") === "challenge",
+      isEdgeEverApiError,
+      ...(rayId ? { rayId } : {}),
+    };
 
     if (response.status === 401) {
       if (isDesktop) {
@@ -319,7 +340,13 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
       }
     }
 
-    throw new ApiRequestError(message || "Request failed", response.status, error?.code, error?.details);
+    throw new ApiRequestError(
+      message || "Request failed",
+      response.status,
+      error?.code,
+      error?.details,
+      responseDiagnostics,
+    );
   }
 
   const body = await response.json() as T;

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -177,6 +178,7 @@ describe("Cloudflare deployment entrypoints", () => {
 
   test("deployed repositories receive guarded daily upstream updates", () => {
     const workflow = readRepositoryFile(".github/workflows/sync-edgeever-upstream.yml");
+    const bunConfig = readRepositoryFile("bunfig.toml");
     const packageJson = JSON.parse(readRepositoryFile("package.json"));
     const scripts = packageJson.scripts as Record<string, string>;
 
@@ -189,6 +191,7 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(workflow).toContain("edge)");
     expect(workflow).toContain("force_redeploy");
     expect(workflow).toContain("bun run db:migrate:local");
+    expect(bunConfig).toContain('pathIgnorePatterns = ["tests/e2e/**"]');
     expect(scripts.test).toBe("bun test --path-ignore-patterns='tests/e2e/**'");
     expect(workflow).toContain(scripts.test);
     expect(workflow.match(/if: steps\.upstream\.outputs\.align_mode == 'merge'/g)).toHaveLength(2);
@@ -208,6 +211,26 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(workflow).not.toContain("local_app_changes");
     expect(workflow).toContain("scripts/upstream-sync-plan.mjs");
     expect(workflow).toContain("Prefer this workflow over GitHub **Sync fork**");
+  });
+
+  test("forks skip every workflow job except upstream updates", () => {
+    const workflowsDirectory = resolve(repositoryRoot, ".github/workflows");
+    const workflowFiles = readdirSync(workflowsDirectory)
+      .filter((file) => /\.ya?ml$/.test(file))
+      .filter((file) => file !== "sync-edgeever-upstream.yml");
+
+    for (const file of workflowFiles) {
+      const workflow = readRepositoryFile(`.github/workflows/${file}`);
+      const jobs = workflow.slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length);
+      const jobStarts = [...jobs.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)];
+
+      expect(jobStarts.length).toBeGreaterThan(0);
+      for (const [index, match] of jobStarts.entries()) {
+        const nextJob = jobStarts[index + 1];
+        const job = jobs.slice(match.index, nextJob?.index);
+        expect(job).toContain("github.repository == 'tianma-if/edgeever'");
+      }
+    }
   });
 
   test("keeps a forced-redeploy commit on the deploy-mirror update path", () => {

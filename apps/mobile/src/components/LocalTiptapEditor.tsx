@@ -56,6 +56,7 @@ import {
   isMobileImageUploadPlaceholderSource,
   stripMobileImageUploadPlaceholders,
 } from "../lib/mobile-image-upload-placeholder";
+import { getMobileAiSourceRange } from "../lib/mobile-ai-selection";
 import { toProtectedResourceLoadPath } from "../lib/mobile-protected-resources";
 
 type EditorDoc = TiptapDoc;
@@ -130,6 +131,7 @@ const ignoreAiRequest = async () => undefined;
 type MobileAiSelection = {
   from: number;
   to: number;
+  wholeNote: boolean;
   markdown: string;
   documentFingerprint: string;
 };
@@ -681,19 +683,21 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   }, [editor]);
 
   const openAiForSelection = useCallback(() => {
-    if (isViewer || !editor || editor.isDestroyed || !onAiRequestRef.current) return;
-    const { from, to, empty } = editor.state.selection;
-    if (empty || from >= to) return;
+    if (isViewer || !editor || editor.isDestroyed || !onAiRequestRef.current) return false;
+    const sourceRange = getMobileAiSourceRange(editor.state.selection, editor.state.doc.content.size);
+    if (!sourceRange) return false;
+    const { from, to, wholeNote } = sourceRange;
     const selectionDoc = getPersistableEditorDoc({
       type: "doc",
       content: editor.state.doc.slice(from, to).content.toJSON(),
     } as EditorDoc, props.baseUrl);
     const markdown = docToMarkdown(selectionDoc).trim();
-    if (!markdown) return;
+    if (!markdown) return false;
     setAiPanel({
       selection: {
         from,
         to,
+        wholeNote,
         markdown,
         documentFingerprint: getAiDocumentFingerprint(getPersistableEditorDoc(editor.getJSON() as EditorDoc, props.baseUrl)),
       },
@@ -708,6 +712,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       requestId: null,
     });
     editor.commands.blur();
+    return true;
   }, [editor, isViewer, props.baseUrl, props.locale]);
 
   const closeAiPanel = useCallback(() => {
@@ -717,7 +722,11 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     setAiPanel(null);
     window.requestAnimationFrame(() => {
       if (editor.isDestroyed) return;
-      editor.chain().focus().setTextSelection({ from, to }).run();
+      if (aiPanel.selection.wholeNote) {
+        editor.chain().focus().selectAll().run();
+      } else {
+        editor.chain().focus().setTextSelection({ from, to }).run();
+      }
     });
   }, [aiPanel, editor]);
 
@@ -914,14 +923,13 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       (activeEditor?.isActive("taskList") ? MOBILE_EDITOR_ACTIVE_FLAGS.taskList : 0) |
       (activeEditor?.isActive("blockquote") ? MOBILE_EDITOR_ACTIVE_FLAGS.blockquote : 0),
   });
-  const hasAiSelection = useEditorState({
-    editor,
-    selector: ({ editor: activeEditor }) => Boolean(activeEditor && !activeEditor.state.selection.empty),
-  });
-
   const requestOpenAiForSelection = () => {
-    if (hasAiSelection) {
-      openAiForSelection();
+    if (openAiForSelection()) {
+      setAiSelectionHint(false);
+      if (aiSelectionHintTimerRef.current !== null) {
+        window.clearTimeout(aiSelectionHintTimerRef.current);
+        aiSelectionHintTimerRef.current = null;
+      }
       return;
     }
     setAiSelectionHint(true);
@@ -993,7 +1001,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
             ))}
           {onAiRequestRef.current ? (
             <button
-              aria-label={props.locale === "en-US" ? "Use AI on selected text" : "用 AI 处理选中内容"}
+              aria-label={props.locale === "en-US" ? "Use AI on the note or selected text" : "用 AI 处理正文或选中内容"}
               className="edgeever-ai-toolbar-button"
               onClick={requestOpenAiForSelection}
               onMouseDown={(event) => event.preventDefault()}
@@ -1008,7 +1016,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       <EditorContent className="edgeever-editor-scroll" editor={editor} />
       {aiSelectionHint ? (
         <div aria-live="polite" className="edgeever-ai-selection-hint" role="status">
-          {props.locale === "en-US" ? "Select text in the note first." : "请先在正文中选择一段文字。"}
+          {props.locale === "en-US" ? "Add some note content first." : "请先输入正文内容。"}
         </div>
       ) : null}
       {aiUndoFingerprint && !aiPanel ? (
@@ -1106,11 +1114,22 @@ const MobileSelectionAiPanel = ({
   const replaceDisabled = panel.generating || !panel.output || !canReplaceAiSource(panel.action);
 
   return (
-    <section aria-label={english ? "AI selection assistant" : "AI 选区助手"} aria-modal="true" className="edgeever-ai-panel" role="dialog">
+    <section
+      aria-label={panel.selection.wholeNote
+        ? (english ? "AI whole-note assistant" : "AI 全文助手")
+        : (english ? "AI selection assistant" : "AI 选区助手")}
+      aria-modal="true"
+      className="edgeever-ai-panel"
+      role="dialog"
+    >
       <header className="edgeever-ai-panel-header">
         <div>
-          <strong>{english ? "AI selection assistant" : "AI 选区助手"}</strong>
-          <small>{english ? "Only the selected text will be processed." : "只处理当前选中的正文。"}</small>
+          <strong>{panel.selection.wholeNote
+            ? (english ? "AI whole-note assistant" : "AI 全文助手")
+            : (english ? "AI selection assistant" : "AI 选区助手")}</strong>
+          <small>{panel.selection.wholeNote
+            ? (english ? "No text selected; the whole note will be processed." : "未选择文字，将处理整篇正文。")
+            : (english ? "Only the selected text will be processed." : "只处理当前选中的正文。")}</small>
         </div>
         <button aria-label={english ? "Close" : "关闭"} onClick={onClose} type="button">×</button>
       </header>
@@ -2218,7 +2237,7 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-ai-panel select:focus, .edgeever-ai-panel input:focus, .edgeever-ai-panel textarea:focus { border-color: #16a06e; box-shadow: 0 0 0 2px rgb(22 160 110 / 14%); }
   .edgeever-ai-result-heading { display: flex; align-items: center; justify-content: space-between; color: ${theme === "dark" ? "#e2e8f0" : "#334155"}; font-size: 13px; font-weight: 750; }
   .edgeever-ai-result-heading small { color: #16a06e; }
-  .edgeever-ai-result { min-height: 170px; padding: 12px; border: 1px solid ${theme === "dark" ? "#334155" : "#dbe4df"}; border-radius: 10px; background: ${theme === "dark" ? "#17251f" : "#fff"}; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
+  .edgeever-ai-result { min-height: 170px; max-height: min(42vh, 360px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 12px; border: 1px solid ${theme === "dark" ? "#334155" : "#dbe4df"}; border-radius: 10px; background: ${theme === "dark" ? "#17251f" : "#fff"}; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.55; }
   .edgeever-ai-result > span { color: ${theme === "dark" ? "#94a3b8" : "#64748b"}; }
   .edgeever-ai-refine-row { display: flex; gap: 8px; }
   .edgeever-ai-refine-row input { min-width: 0; flex: 1; }

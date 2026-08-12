@@ -6,7 +6,7 @@ import { GitHubRepositoryLink } from "@/components/GitHubRepositoryLink";
 import { Input } from "@/components/ui/input";
 
 interface LoginScreenProps {
-  error: { message: string; diagnosticCode: string } | null;
+  error: { message: string; diagnosticCode: string; rayId?: string } | null;
   instanceUrl?: string;
   isSubmitting: boolean;
   onSubmit: (payload: { instanceUrl?: string; username: string; password: string }) => void;
@@ -71,6 +71,11 @@ export const LoginScreen = ({ error, instanceUrl: initialInstanceUrl, isSubmitti
               <p className="mt-1 font-mono text-[11px] text-rose-500">
                 {t("login.diagnosticCode", { code: error.diagnosticCode })}
               </p>
+              {error.rayId ? (
+                <p className="mt-0.5 break-all font-mono text-[11px] text-rose-500">
+                  {t("login.cloudflareRayId", { id: error.rayId })}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

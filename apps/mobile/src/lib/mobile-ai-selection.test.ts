@@ -1,7 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { buildMobileAiStreamBridgePayload, parseMobileSelectionAiRequest } from "./mobile-ai-selection";
+import { buildMobileAiStreamBridgePayload, getMobileAiSourceRange, parseMobileSelectionAiRequest } from "./mobile-ai-selection";
 
 describe("mobile AI selection bridge", () => {
+  test("uses the selected range when text is selected and the whole note otherwise", () => {
+    expect(getMobileAiSourceRange({ from: 4, to: 12, empty: false }, 20)).toEqual({
+      from: 4,
+      to: 12,
+      wholeNote: false,
+    });
+    expect(getMobileAiSourceRange({ from: 8, to: 8, empty: true }, 20)).toEqual({
+      from: 0,
+      to: 20,
+      wholeNote: true,
+    });
+  });
+
   test("accepts semantic selection actions and normalized options", () => {
     expect(parseMobileSelectionAiRequest(JSON.stringify({
       requestId: "request-1",

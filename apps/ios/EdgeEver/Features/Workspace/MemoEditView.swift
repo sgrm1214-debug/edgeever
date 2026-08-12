@@ -21,6 +21,7 @@ struct MemoEditView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let mode: MemoEditMode
+    var initialSharedImages: [ShareHandoffStore.SharedImage] = []
     /// When set (edit-from-detail), close by popping to the list under the cover first —
     /// never `dismiss()` onto a still-pushed detail page.
     var onLeaveToList: (() -> Void)? = nil
@@ -47,6 +48,7 @@ struct MemoEditView: View {
     @State private var aiSelection: AiEditorSelection?
     @State private var showEmptyAiSelectionAlert = false
     @State private var aiUndoToken: UUID?
+    @State private var didImportSharedImages = false
 
     private var title: String { get { viewModel.title } nonmutating set { viewModel.title = newValue } }
     private var tagsText: String { get { viewModel.tagsText } nonmutating set { viewModel.tagsText = newValue } }
@@ -273,6 +275,7 @@ struct MemoEditView: View {
                 // One open-edit focus only (SharedTipTapRuntime also focuses once per document).
                 SharedTipTapRuntime.editor.focusEnd()
             }
+            await importInitialSharedImagesIfNeeded()
         }
         .onDisappear {
             viewModel.cancelScheduledSave()
@@ -612,7 +615,7 @@ struct MemoEditView: View {
             error = message
             showUploadError = true
         case .picked(let data, let filename):
-            Task { await insertImageData(data, filename: filename) }
+            Task { _ = await insertImageData(data, filename: filename) }
         }
     }
 
@@ -1071,7 +1074,7 @@ struct MemoEditView: View {
     }
 
     /// Upload bytes from the system PHPicker and insert into TipTap.
-    private func insertImageData(_ data: Data, filename: String) async {
+    private func insertImageData(_ data: Data, filename: String) async -> Bool {
         let succeeded = await viewModel.performUpload {
             NSLog("MemoEditView insertImageData: start bytes=%d name=%@", data.count, filename)
             let compress = env.preferences.useCompression
@@ -1146,6 +1149,25 @@ struct MemoEditView: View {
         if !succeeded {
             showUploadError = true
             NSLog("MemoEditView insertImageData failed: %@", error ?? "unknown")
+        }
+        return succeeded
+    }
+
+    private func importInitialSharedImagesIfNeeded() async {
+        guard !didImportSharedImages, !initialSharedImages.isEmpty else { return }
+        didImportSharedImages = true
+        for image in initialSharedImages {
+            do {
+                let data = try Data(contentsOf: image.fileURL)
+                let succeeded = await insertImageData(data, filename: image.filename)
+                env.shareHandoff.removeImage(image)
+                guard succeeded else { return }
+            } catch {
+                env.shareHandoff.removeImage(image)
+                self.error = error.localizedDescription
+                showUploadError = true
+                return
+            }
         }
     }
 

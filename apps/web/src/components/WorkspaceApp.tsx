@@ -145,6 +145,7 @@ const EvernoteImportGuidePane = lazy(() =>
 );
 const TagsPane = lazy(() => import("./TagsPane").then((module) => ({ default: module.TagsPane })));
 const TemplatesPane = lazy(() => import("./TemplatesPane").then((module) => ({ default: module.TemplatesPane })));
+const AiPromptsPane = lazy(() => import("./AiPromptsPane").then((module) => ({ default: module.AiPromptsPane })));
 
 const PaneLoadingFallback = ({ label = "Loading" }: { label?: string }) => (
   <div className="flex h-full min-h-0 items-center justify-center bg-white text-sm font-medium text-slate-400" role="status">
@@ -666,6 +667,7 @@ export const WorkspaceApp = ({
     navigateTrash: navigateWorkspaceTrash,
     navigateSettings: navigateWorkspaceSettings,
     navigateTemplates: navigateWorkspaceTemplates,
+    navigateAiPrompts: navigateWorkspaceAiPrompts,
   } = useWorkspaceRoute();
   const localDataScope = useMemo(
     () => createLocalDataScope(window.location.origin, user?.id),
@@ -674,9 +676,10 @@ export const WorkspaceApp = ({
   const repository = useMemo(() => createRepository(localDataScope), [localDataScope]);
   const isInitialSettingsRoute = route.isSettings;
   const isInitialTemplatesRoute = route.isTemplates;
+  const isInitialAiPromptsRoute = route.isAiPrompts;
   const isInitialMobileEditorReturn = Boolean(route.mobileEditorReturnMemoId);
   const isTrashRoute = route.isTrash;
-  const [activePane, setActivePane] = useState<Pane>(() => ((isInitialSettingsRoute || isInitialTemplatesRoute) && !isInitialMobileEditorReturn ? "editor" : "memos"));
+  const [activePane, setActivePane] = useState<Pane>(() => ((isInitialSettingsRoute || isInitialTemplatesRoute || isInitialAiPromptsRoute) && !isInitialMobileEditorReturn ? "editor" : "memos"));
   const [memoView, setMemoView] = useState<MemoView>(() => (isTrashRoute ? "trash" : "notebook"));
   const {
     beginMemoSelection,
@@ -745,13 +748,23 @@ export const WorkspaceApp = ({
     shortcutSettings,
     syncIntervalMs,
   } = useWorkspacePreferences();
-  const [rightView, setRightView] = useState<"editor" | "settings" | "assets" | "tags" | "templates" | "evernote-migration">(() =>
-    isInitialSettingsRoute ? "settings" : isInitialTemplatesRoute ? "templates" : "editor"
+  const [rightView, setRightView] = useState<"editor" | "settings" | "assets" | "tags" | "templates" | "ai-prompts" | "evernote-migration">(() =>
+    isInitialSettingsRoute
+      ? "settings"
+      : isInitialTemplatesRoute
+        ? "templates"
+        : isInitialAiPromptsRoute
+          ? "ai-prompts"
+          : "editor"
   );
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [mobileNotebookPickerOpen, setMobileNotebookPickerOpen] = useState(false);
   const [mobileBottomNavActive, setMobileBottomNavActive] = useState<MobileBottomNavItem>(() =>
-    isInitialSettingsRoute && !isInitialMobileEditorReturn ? "settings" : isInitialTemplatesRoute ? "templates" : "home"
+    isInitialSettingsRoute && !isInitialMobileEditorReturn
+      ? "settings"
+      : isInitialTemplatesRoute || isInitialAiPromptsRoute
+        ? "templates"
+        : "home"
   );
   const [mobileSearchFocusToken, setMobileSearchFocusToken] = useState(0);
   const [noteSearchFocusToken, setNoteSearchFocusToken] = useState(0);
@@ -1079,6 +1092,14 @@ export const WorkspaceApp = ({
       return;
     }
 
+    if (route.isAiPrompts) {
+      skipNextHomeRouteSyncRef.current = false;
+      setRightView("ai-prompts");
+      setMobileBottomNavActive("templates");
+      setActivePane("editor");
+      return;
+    }
+
     if (skipNextHomeRouteSyncRef.current) {
       skipNextHomeRouteSyncRef.current = false;
       return;
@@ -1087,7 +1108,7 @@ export const WorkspaceApp = ({
     setMemoView(isTrashRoute ? "trash" : "notebook");
     setRightView("editor");
     setMobileBottomNavActive("home");
-  }, [isTrashRoute, route.isSettings, route.isTemplates]);
+  }, [isTrashRoute, route.isSettings, route.isTemplates, route.isAiPrompts]);
 
   useEffect(() => {
     if (window.edgeeverDesktop?.isAvailable) {
@@ -2175,6 +2196,13 @@ export const WorkspaceApp = ({
     setActivePane("editor");
   };
 
+  const handleOpenAiPrompts = () => {
+    clearHiddenMobileSearch();
+    navigateWorkspaceAiPrompts();
+    setRightView("ai-prompts");
+    setMobileBottomNavActive("templates");
+    setActivePane("editor");
+  };
 
   const handleOpenSettings = () => {
     clearHiddenMobileSearch();
@@ -2192,6 +2220,12 @@ export const WorkspaceApp = ({
 
   const handleCloseTemplates = () => {
     setTemplatesOpen(false);
+    navigateWorkspaceHome();
+    setRightView("editor");
+    setMobileBottomNavActive("home");
+  };
+
+  const handleCloseAiPrompts = () => {
     navigateWorkspaceHome();
     setRightView("editor");
     setMobileBottomNavActive("home");
@@ -2574,6 +2608,8 @@ export const WorkspaceApp = ({
           ? t("workspace.loading.tags")
         : rightView === "templates"
           ? t("templates.title")
+        : rightView === "ai-prompts"
+          ? t("aiPrompts.title")
         : rightView === "evernote-migration"
           ? t("workspace.loading.migration")
           : t("workspace.loading.editor");
@@ -2665,6 +2701,7 @@ export const WorkspaceApp = ({
                   onOpenAssets={handleOpenAssets}
                   onOpenTags={handleOpenTags}
                   onOpenTemplates={handleOpenTemplates}
+                  onOpenAiPrompts={handleOpenAiPrompts}
                   onOpenSettings={handleOpenSettings}
                   onOpenTrash={() => {
                     navigateWorkspaceTrash();
@@ -2835,6 +2872,7 @@ export const WorkspaceApp = ({
                     <SettingsPane
                     onClose={handleCloseSettings}
                     onOpenTemplates={handleOpenTemplates}
+                  onOpenAiPrompts={handleOpenAiPrompts}
                     imageCompressionEnabled={imageCompressionEnabled}
                     onImageCompressionChange={setImageCompressionEnabled}
                     syncIntervalMs={syncIntervalMs}
@@ -2871,12 +2909,15 @@ export const WorkspaceApp = ({
                       await updateTemplateMutation.mutateAsync({ templateId, payload });
                     }}
                   />
+                  ) : rightView === "ai-prompts" ? (
+                    <AiPromptsPane onClose={handleCloseAiPrompts} />
                   ) : rightView === "evernote-migration" ? (
                     <EvernoteImportGuidePane onClose={() => setRightView("settings")} />
                   ) : (
                     <EditorPane
                     memo={selectedMemo}
                     repository={repository}
+                    onOpenAiPrompts={handleOpenAiPrompts}
                     desktopFocusMode={desktopFocusModeActive}
                     onToggleDesktopFocusMode={toggleDesktopFocusMode}
                     mobileDefaultEditMemoId={createdMemoEditId}

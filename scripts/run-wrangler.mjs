@@ -151,6 +151,10 @@ const isRemoteCommand =
   wranglerArgs.includes("deploy") || wranglerArgs.includes("--remote");
 const isRemoteDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--remote");
 const isLocalDevCommand = wranglerArgs.includes("dev") && wranglerArgs.includes("--local");
+// Any --local command rewrites .wrangler.generated.toml. Keep local-only vars
+// (especially auth-free access) so `d1 migrations apply --local` cannot strip
+// them and leave a later wrangler reload requiring login mid-session.
+const isLocalCommand = wranglerArgs.includes("--local");
 
 const workerName = envValue("WORKER_NAME");
 if (workerName) {
@@ -235,7 +239,7 @@ const runtimeVars = {
   EDGE_EVER_LOCAL_DEMO_SEED: envValue("LOCAL_DEMO_SEED"),
   // Auth-free access is a local-development capability. Remote deployments
   // fail closed when credentials and users are both missing.
-  EDGE_EVER_ALLOW_UNAUTHENTICATED: isLocalDevCommand ? "true" : undefined,
+  EDGE_EVER_ALLOW_UNAUTHENTICATED: isLocalCommand ? "true" : undefined,
 };
 const runtimeVarLines = Object.entries(runtimeVars)
   .filter(([, value]) => Boolean(value))

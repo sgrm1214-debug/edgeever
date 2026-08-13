@@ -117,6 +117,21 @@ describe("AI route contracts", () => {
     }
   });
 
+  test("defers prompt-specific action and parameter validation to the saved prompt", () => {
+    expect(AiGenerateSchema.safeParse({
+      action: "custom",
+      promptId: "aiprompt_saved",
+      title: "Note",
+      contentMarkdown: "Body",
+    }).success).toBe(true);
+    expect(AiGenerateSchema.safeParse({
+      action: "translate",
+      promptId: "aiprompt_server_resolves_behavior",
+      title: "Note",
+      contentMarkdown: "Body",
+    }).success).toBe(true);
+  });
+
   test("does not allow API tokens to manage personal AI credentials", async () => {
     const app = createApp({ currentAuth: { ...auth, kind: "agent", actorType: "agent" } });
     const response = await app.request("/api/v1/ai/settings", {}, environment);
@@ -179,6 +194,54 @@ describe("AI route contracts", () => {
       environment,
     );
     expect(response.status).toBe(400);
+  });
+
+  test("resolves saved prompt behavior inside the authenticated workspace", async () => {
+    const app = createApp();
+    const { sqlite, environment: databaseEnvironment } = createDatabaseEnvironment();
+    const now = "2026-08-12T01:00:00.000Z";
+    sqlite.query(
+      `INSERT INTO ai_prompt_templates (
+         id, workspace_id, seed_key, action, parameter_kind, result_mode,
+         name, description, instruction,
+         name_customized, description_customized, instruction_customized,
+         created_at, updated_at
+       ) VALUES (?, ?, NULL, 'custom', 'tone', 'replace', ?, NULL, ?, 1, 1, 1, ?, ?)`,
+    ).run("aiprompt_tone", auth.workspaceId, "Tone prompt", "Use the requested tone.", now, now);
+
+    const missingParameter = await app.request(
+      "/api/v1/ai/generate",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "summarize",
+          promptId: "aiprompt_tone",
+          title: "Note",
+          contentMarkdown: "Body",
+        }),
+      },
+      databaseEnvironment,
+    );
+    expect(missingParameter.status).toBe(400);
+    expect(await missingParameter.json()).toMatchObject({ error: { code: "ai_tone_required" } });
+
+    const missingPrompt = await app.request(
+      "/api/v1/ai/generate",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "custom",
+          promptId: "aiprompt_other_workspace",
+          title: "Note",
+          contentMarkdown: "Body",
+        }),
+      },
+      databaseEnvironment,
+    );
+    expect(missingPrompt.status).toBe(404);
+    expect(await missingPrompt.json()).toMatchObject({ error: { code: "ai_prompt_not_found" } });
   });
 
   test("bounds custom editing instructions", async () => {

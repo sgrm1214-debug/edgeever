@@ -125,6 +125,16 @@ On platforms without a native client, EdgeEver can be installed as a PWA using C
 
 - Bugs, feature requests, and deployment issues: [GitHub Issues](https://github.com/tianma-if/edgeever/issues)
 
+### WeChat Community Group
+
+Welcome to the EdgeEver AI community group, home to many Vibe Coding builders and AI enthusiasts. Join us to discuss the EdgeEver experience, real-world AI Agent applications, cost-effective or free AI resources, and automation workflows.
+
+> The group QR code is valid for 7 days. If it has expired, add WeChat `m1245207870` and include “EdgeEver group” in your request.
+
+<p align="center">
+  <img src="assets/wechat-group-qr.jpg" alt="EdgeEver AI community group QR code" width="260" />
+</p>
+
 ## Tech Stack
 
 - Bun workspace monorepo with Web, API, official site, and shared type package.

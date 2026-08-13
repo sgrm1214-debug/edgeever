@@ -114,6 +114,8 @@ import { registerAuthRoutes, type UserRow } from "./auth-routes";
 import { registerApiTokenRoutes, type ApiTokenRow } from "./api-token-routes";
 import { registerObjectStorageRoutes } from "./object-storage-routes";
 import { registerAiRoutes } from "./ai-routes";
+import { registerAiPromptRoutes } from "./ai-prompt-routes";
+import { ensureWorkspaceAiPromptSeed } from "./ai-prompt-seed";
 import { registerResourceRoutes } from "./resource-routes";
 import { registerSyncRoutes } from "./sync-routes";
 import { registerMemoRoutes } from "./memo-routes";
@@ -325,6 +327,9 @@ registerObjectStorageRoutes(app, {
   isDemoMode: (...args) => isDemoMode(...args),
 });
 registerAiRoutes(app, {
+  isDemoMode: (...args) => isDemoMode(...args),
+});
+registerAiPromptRoutes(app, {
   isDemoMode: (...args) => isDemoMode(...args),
 });
 
@@ -1168,6 +1173,7 @@ const ensureUserWorkspace = async (db: D1Database, userId: string, username: str
   ).bind(userId).first<{ workspace_id: string; role: "owner" | "member" }>();
   if (existing) {
     await ensureWorkspaceTemplateSeed(db, existing.workspace_id);
+    await ensureWorkspaceAiPromptSeed(db, existing.workspace_id);
     return { workspaceId: existing.workspace_id, role: existing.role };
   }
 
@@ -1183,6 +1189,7 @@ const ensureUserWorkspace = async (db: D1Database, userId: string, username: str
     ).bind(userId).first<{ workspace_id: string; role: "owner" | "member" }>();
     if (claimed) {
       await ensureWorkspaceTemplateSeed(db, claimed.workspace_id);
+      await ensureWorkspaceAiPromptSeed(db, claimed.workspace_id);
       return { workspaceId: claimed.workspace_id, role: claimed.role };
     }
   }
@@ -1201,6 +1208,7 @@ const ensureUserWorkspace = async (db: D1Database, userId: string, username: str
     ).bind(notebook.id, workspaceId, notebook.name, notebook.slug, notebook.color, notebook.sortOrder, now, now)),
   ]);
   await ensureWorkspaceTemplateSeed(db, workspaceId);
+  await ensureWorkspaceAiPromptSeed(db, workspaceId);
   return { workspaceId, role: "member" as const };
 };
 
@@ -1235,6 +1243,8 @@ const ensureWorkspaceTemplateSeed = async (db: D1Database, workspaceId: string) 
     now,
   ).run();
 };
+
+
 
 const createSession = async (c: AppContext, user: UserRow, requestedDeviceId?: string) => {
   const token = randomToken(SESSION_TOKEN_BYTES);

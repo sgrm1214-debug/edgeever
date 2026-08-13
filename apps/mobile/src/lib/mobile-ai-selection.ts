@@ -9,6 +9,8 @@ import {
 export type MobileSelectionAiRequest = {
   requestId: string;
   action: AiAction;
+  promptId?: string;
+  locale?: string;
   contentMarkdown: string;
   targetLanguage?: AiTargetLanguage;
   tone?: AiTone;
@@ -44,6 +46,8 @@ export const parseMobileSelectionAiRequest = (requestJson: string): MobileSelect
     return {
       requestId: raw.requestId,
       action: parsed.data.action,
+      promptId: parsed.data.promptId,
+      locale: parsed.data.locale,
       contentMarkdown: parsed.data.contentMarkdown,
       targetLanguage: parsed.data.targetLanguage,
       tone: parsed.data.tone,

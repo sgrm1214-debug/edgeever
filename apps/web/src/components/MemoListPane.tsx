@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import * as m from "motion/react-m";
 import {
@@ -140,9 +141,13 @@ export const MemoSelectionActionBar = ({
   onMoveTargetChange: (notebookId: string) => void;
 }) => {
   const { t } = useTranslation();
+  const selectedMoveNotebookName = moveNotebookOptions.find((item) => item.id === moveTargetNotebookId)?.name;
 
   return (
-    <div className="hidden h-full min-h-0 flex-1 items-center justify-start bg-white px-16 py-10 lg:flex lg:pl-44 xl:px-24 xl:pl-44">
+    <div
+      className="hidden h-full min-h-0 flex-1 items-start justify-start bg-white px-6 py-6 lg:flex lg:px-8 lg:py-8 xl:px-10"
+      data-memo-selection-action-bar
+    >
       <m.div className="w-72 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-lg" {...paneEnterMotion}>
         <div className="flex h-9 items-center gap-2 px-3 text-xs font-semibold text-slate-400">
           <CheckSquare className="h-4 w-4" />
@@ -153,7 +158,7 @@ export const MemoSelectionActionBar = ({
             <div className="flex items-center gap-2">
               <Select value={moveTargetNotebookId} disabled={isMoving} onValueChange={onMoveTargetChange}>
                 <SelectTrigger className="h-8 min-w-0 flex-1 text-xs text-slate-700 border-slate-200">
-                  <SelectValue placeholder={t("memoList.chooseNotebook")} />
+                  <SelectValue placeholder={t("memoList.chooseNotebook")}>{selectedMoveNotebookName}</SelectValue>
                 </SelectTrigger>
                 <SelectContent className="max-h-60 bg-white border border-slate-200 rounded-md py-1 shadow-md">
                   {moveNotebookOptions.map((item) => (
@@ -1426,8 +1431,9 @@ export const MemoListPane = ({
         )}
       </div>
 
-      {/* Controlled Right Click context menu for single note on Desktop using absolute placement */}
-      {memoContextMenu && (
+      {/* Keep the virtual trigger in the document viewport so fixed coordinates
+          are not offset by the memo pane's backdrop-filter containing block. */}
+      {memoContextMenu && typeof document !== "undefined" ? createPortal(
         <div style={{ position: "fixed", left: memoContextMenu.x, top: memoContextMenu.y, zIndex: 100 }}>
           <DropdownMenu open={true} onOpenChange={(open) => { if (!open) setMemoContextMenu(null); }}>
             <DropdownMenuTrigger asChild>
@@ -1436,6 +1442,7 @@ export const MemoListPane = ({
             <DropdownMenuContent
               align="start"
               className="max-h-[calc(100dvh-1.5rem)] w-56 max-w-[calc(100vw-1.5rem)] overflow-y-auto bg-white border border-slate-200 rounded-md py-1 shadow-md"
+              data-memo-actions-menu
             >
               <DropdownMenuItem
                 className="flex h-9 w-full items-center gap-2 px-3 text-left text-sm text-slate-700 hover:bg-slate-50 cursor-pointer outline-none"
@@ -1596,8 +1603,9 @@ export const MemoListPane = ({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
 
       {memoIdCopyNotice && (
         <div

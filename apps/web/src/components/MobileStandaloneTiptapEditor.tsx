@@ -42,9 +42,13 @@ import {
 } from "@/lib/mobile-editor-standalone";
 import { getMemoUpdateQueueId, isMemoUpdateAlreadyApplied, queueMemoUpdate, shouldQueueMemoSaveError } from "@/lib/sync-queue";
 import { EdgeEverCodeBlock, codeBlockLowlight } from "@/lib/code-block";
+import { createMarkdownImagePasteRule } from "@/lib/markdown-image-paste";
 import { ThemeBlock } from "./ThemeBlock";
 
 const ProtectedExternalImage = Image.extend({
+  addPasteRules() {
+    return [createMarkdownImagePasteRule(this.type)];
+  },
   renderHTML({ HTMLAttributes }) {
     const referrerPolicy = getImageReferrerPolicy(HTMLAttributes.src);
     return [

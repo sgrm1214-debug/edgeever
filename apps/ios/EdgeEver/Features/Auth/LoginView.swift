@@ -65,11 +65,28 @@ struct LoginView: View {
 
                     field(
                         env.preferences.t("实例地址", en: "Instance URL"),
-                        placeholder: "https://notes.example.com",
+                        placeholder: EdgeEverPublicDemo.instanceURLString,
                         text: $baseUrl,
                         keyboard: .URL,
                         secure: false
                     )
+                    Text(env.preferences.t(
+                        "请填写完整 HTTPS 地址，不要只输入 demo。",
+                        en: "Enter the full HTTPS URL, not just “demo”."
+                    ))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.secondary)
+                    .padding(.top, 8)
+                    Button {
+                        baseUrl = EdgeEverPublicDemo.instanceURLString
+                    } label: {
+                        Text(env.preferences.t("填入公开演示实例", en: "Use public demo instance"))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppTheme.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(env.preferences.t("填入公开演示实例", en: "Use public demo instance"))
+                    .padding(.top, 6)
                     .padding(.bottom, 14)
 
                     field(

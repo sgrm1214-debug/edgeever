@@ -8,7 +8,7 @@ import CodeBlock from "@tiptap/extension-code-block";
 import Placeholder from "@tiptap/extension-placeholder";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
-import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { EditorContent, Extension, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -27,6 +27,9 @@ import {
   getImageReferrerPolicy,
   getResourceIdFromUrl,
   type AiAction,
+  type AiPromptParameterKind,
+  type AiPromptResultMode,
+  type AiPromptTemplate,
   type AiStreamEvent,
   type AiTargetLanguage,
   type AiTone,
@@ -57,6 +60,11 @@ import {
   stripMobileImageUploadPlaceholders,
 } from "../lib/mobile-image-upload-placeholder";
 import { getMobileAiSourceRange } from "../lib/mobile-ai-selection";
+import {
+  MOBILE_NOTE_SEARCH_HIGHLIGHT_PLUGIN_KEY,
+  createMobileNoteSearchHighlightPlugin,
+  getMobileNoteSearchMatches,
+} from "../lib/mobile-note-search";
 import { toProtectedResourceLoadPath } from "../lib/mobile-protected-resources";
 
 type EditorDoc = TiptapDoc;
@@ -86,7 +94,7 @@ type LocalTiptapEditorSharedProps = {
   onLoadResource: (source: string) => Promise<string | null>;
   onResourcePress?: (targetJson: string) => Promise<void>;
   onReady?: (startupMs: number) => Promise<void>;
-  onSearchResult?: (count: number, index: number) => Promise<void>;
+  onSearchResult?: (count: number, index: number, query: string) => Promise<void>;
   ref: Ref<LocalTiptapEditorRef>;
   locale: "zh-CN" | "en-US";
   theme: "light" | "dark";
@@ -95,6 +103,7 @@ type LocalTiptapEditorSharedProps = {
 /** Editable note body with toolbar (create / rich edit). */
 type LocalTiptapEditorModeProps = LocalTiptapEditorSharedProps & {
   mode?: "editor";
+  aiPromptsJson?: string;
   autoFocus?: boolean;
   onChange: (content: EditorDoc) => Promise<void>;
   onPickImage: () => Promise<void>;
@@ -127,6 +136,13 @@ const CHANGE_IDLE_MS = 500;
 const TRANSIENT_IMAGE_UPLOAD_META = "edgeeverImageUploadPlaceholder";
 const ignoreSearchResult = async () => undefined;
 const ignoreAiRequest = async () => undefined;
+const AI_PROMPT_OPTION_PREFIX = "prompt:";
+
+const fallbackPromptParameterKind = (action: AiAction): AiPromptParameterKind =>
+  action === "translate" ? "target-language" : action === "change-tone" ? "tone" : "none";
+
+const fallbackPromptResultMode = (action: AiAction): AiPromptResultMode =>
+  canReplaceAiSource(action) ? "both" : "append";
 
 type MobileAiSelection = {
   from: number;
@@ -139,6 +155,9 @@ type MobileAiSelection = {
 type MobileAiPanelState = {
   selection: MobileAiSelection;
   action: AiAction;
+  promptId: string | null;
+  parameterKind: AiPromptParameterKind;
+  resultMode: AiPromptResultMode;
   targetLanguage: AiTargetLanguage;
   tone: AiTone;
   customInstruction: string;
@@ -409,9 +428,80 @@ const inlineMermaidSvgStyles = (svg: string) => {
   return serialized;
 };
 
+const getEditorScrollContainer = (editor: Editor) =>
+  editor.view.dom.closest<HTMLElement>(".edgeever-editor-scroll");
+
+const updateEditorKeyboardInset = (editor: Editor) => {
+  const scrollContainer = getEditorScrollContainer(editor);
+  if (!scrollContainer) {
+    return;
+  }
+  const visualViewport = window.visualViewport;
+  const visibleBottom = visualViewport
+    ? visualViewport.offsetTop + visualViewport.height
+    : window.innerHeight;
+  const keyboardInset = Math.max(0, window.innerHeight - visibleBottom);
+  scrollContainer.style.setProperty("--edgeever-keyboard-inset", `${Math.round(keyboardInset)}px`);
+};
+
+const scrollEditorPositionIntoView = (
+  editor: Editor,
+  position: number,
+  options: { behavior?: ScrollBehavior; center?: boolean } = {}
+) => {
+  const scrollContainer = getEditorScrollContainer(editor);
+  if (!scrollContainer) {
+    return;
+  }
+  try {
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const positionRect = editor.view.coordsAtPos(position);
+    const visualViewport = window.visualViewport;
+    const visibleTop = Math.max(containerRect.top, visualViewport?.offsetTop ?? containerRect.top);
+    const visibleBottom = Math.min(
+      containerRect.bottom,
+      visualViewport ? visualViewport.offsetTop + visualViewport.height : containerRect.bottom
+    );
+    const padding = 24;
+    const isAbove = positionRect.top < visibleTop + padding;
+    const isBelow = positionRect.bottom > visibleBottom - padding;
+    if (!isAbove && !isBelow) {
+      return;
+    }
+    const targetTop = options.center
+      ? scrollContainer.scrollTop + positionRect.top - visibleTop
+        - (visibleBottom - visibleTop - Math.max(positionRect.bottom - positionRect.top, 1)) / 2
+      : scrollContainer.scrollTop + (isAbove
+        ? positionRect.top - visibleTop - padding
+        : positionRect.bottom - visibleBottom + padding);
+    scrollContainer.scrollTo({
+      behavior: options.behavior ?? "auto",
+      top: Math.max(0, targetTop),
+    });
+  } catch {
+    // The selection can disappear while content is being replaced. The next
+    // selection/viewport update will retry with a valid document position.
+  }
+};
+
 function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   const isViewer = props.mode === "viewer";
   const autoFocus = props.mode === "viewer" ? false : Boolean(props.autoFocus);
+  const aiPromptsJson = props.mode === "viewer" ? "[]" : (props.aiPromptsJson ?? "[]");
+  const aiPrompts = useMemo(() => {
+    try {
+      const parsed = JSON.parse(aiPromptsJson) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((prompt): prompt is AiPromptTemplate =>
+        Boolean(prompt)
+        && typeof prompt === "object"
+        && typeof (prompt as Partial<AiPromptTemplate>).id === "string"
+        && typeof (prompt as Partial<AiPromptTemplate>).name === "string"
+        && typeof (prompt as Partial<AiPromptTemplate>).action === "string");
+    } catch {
+      return [];
+    }
+  }, [aiPromptsJson]);
   const startedAtRef = useRef(performance.now());
   const changeTimerRef = useRef<number | null>(null);
   const imageUploadInFlightRef = useRef(false);
@@ -425,11 +515,50 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
   const onAiCancelRef = useRef(props.mode === "viewer" ? undefined : props.onAiCancel);
   const onReadyRef = useRef(props.onReady ?? (async () => undefined));
   const onSearchResultRef = useRef(props.onSearchResult ?? ignoreSearchResult);
+  const searchStateRef = useRef({ activeIndex: -1, query: "" });
   const [aiPanel, setAiPanel] = useState<MobileAiPanelState | null>(null);
   const [aiSelectionHint, setAiSelectionHint] = useState(false);
   const aiSelectionHintTimerRef = useRef<number | null>(null);
   const [aiUndoFingerprint, setAiUndoFingerprint] = useState<string | null>(null);
   const aiUndoTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setAiPanel((current) => {
+      if (!current) return current;
+      if (current.promptId) {
+        const selected = aiPrompts.find((prompt) => prompt.id === current.promptId);
+        if (!selected) {
+          return {
+            ...current,
+            action: "custom",
+            promptId: null,
+            parameterKind: "none",
+            resultMode: "both",
+            output: "",
+            error: props.locale === "en-US"
+              ? "The selected prompt no longer exists. Choose another prompt."
+              : "所选提示词已不存在，请重新选择。",
+          };
+        }
+        return {
+          ...current,
+          action: selected.action,
+          parameterKind: selected.parameterKind,
+          resultMode: selected.resultMode,
+        };
+      }
+      if (current.action === "custom" || aiPrompts.length === 0) return current;
+      const preferred = aiPrompts.find((prompt) => prompt.seedKey === current.action)
+        ?? aiPrompts[0];
+      return preferred ? {
+        ...current,
+        action: preferred.action,
+        promptId: preferred.id,
+        parameterKind: preferred.parameterKind,
+        resultMode: preferred.resultMode,
+      } : current;
+    });
+  }, [aiPrompts, props.locale]);
 
   onChangeRef.current = props.mode === "viewer" ? undefined : props.onChange;
   onLoadResourceRef.current = props.onLoadResource;
@@ -459,6 +588,18 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     () => createMobileCodeBlockExtension(props.locale, props.theme),
     [props.locale, props.theme]
   );
+  const searchHighlightExtension = useMemo(
+    () => Extension.create({
+      name: "edgeeverMobileNoteSearchHighlight",
+      addProseMirrorPlugins() {
+        return [createMobileNoteSearchHighlightPlugin({
+          getActiveIndex: () => searchStateRef.current.activeIndex,
+          getQuery: () => searchStateRef.current.query,
+        })];
+      },
+    }),
+    []
+  );
 
   const editor = useEditor({
     editable: !isViewer,
@@ -471,6 +612,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       ...createEdgeEverMathematics(),
       mermaidCodeBlockExtension,
       protectedImageExtension,
+      searchHighlightExtension,
       TableKit.configure({
         table: { renderWrapper: true },
       }),
@@ -533,31 +675,52 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       const next = resolveImageSources(parsed, props.baseUrl);
       // Do not focus while replacing content. Callers decide when the editor should
       // take focus and place the caret via focusEnd().
-      editor.commands.setContent(next, { emitUpdate: !isViewer });
+      // This command synchronizes native-owned state (draft restore/template/new
+      // composer reset). Callers already own persistence for that state, so an
+      // emitted update would create a delayed stale write during screen teardown.
+      editor.commands.setContent(next, { emitUpdate: false });
     } catch {
       // Ignore malformed payloads from the native bridge.
     }
-  }, [editor, isViewer, props.baseUrl]);
+  }, [editor, props.baseUrl]);
 
   const search = useCallback((query: DOMValue, requestedIndex: DOMValue) => {
-    const matches = getEditorSearchMatches(editor, typeof query === "string" ? query : "");
+    const normalizedQuery = typeof query === "string" ? query : "";
+    const matches = editor && !editor.isDestroyed
+      ? getMobileNoteSearchMatches(editor.state.doc, normalizedQuery)
+      : [];
     const requestedMatchIndex = typeof requestedIndex === "number" ? requestedIndex : 0;
     const index = matches.length > 0
-      ? Math.min(Math.max(requestedMatchIndex, 0), matches.length - 1)
+      ? requestedMatchIndex < 0
+        ? -1
+        : Math.min(Math.max(requestedMatchIndex, 0), matches.length - 1)
       : 0;
-    const match = matches[index];
-    if (editor && !editor.isDestroyed && match) {
-      editor.commands.setTextSelection({ from: match.from, to: match.to });
+    searchStateRef.current = {
+      activeIndex: matches.length > 0 ? index : -1,
+      query: normalizedQuery,
+    };
+    const match = index >= 0 ? matches[index] : undefined;
+    if (editor && !editor.isDestroyed) {
+      if (match) {
+        editor.chain().setTextSelection({ from: match.from, to: match.to }).scrollIntoView().run();
+        window.requestAnimationFrame(() => {
+          scrollEditorPositionIntoView(editor, match.from, { behavior: "smooth", center: true });
+        });
+      } else {
+        editor.view.dispatch(editor.state.tr.setMeta(MOBILE_NOTE_SEARCH_HIGHLIGHT_PLUGIN_KEY, true));
+      }
     }
-    void onSearchResultRef.current(matches.length, index);
+    void onSearchResultRef.current(matches.length, index, normalizedQuery);
   }, [editor]);
 
   const replaceAll = useCallback((query: DOMValue, replacement: DOMValue) => {
     const normalizedQuery = typeof query === "string" ? query : "";
     const normalizedReplacement = typeof replacement === "string" ? replacement : "";
-    const matches = getEditorSearchMatches(editor, normalizedQuery);
+    const matches = editor && !editor.isDestroyed
+      ? getMobileNoteSearchMatches(editor.state.doc, normalizedQuery)
+      : [];
     if (!editor || editor.isDestroyed || matches.length === 0) {
-      void onSearchResultRef.current(0, 0);
+      void onSearchResultRef.current(0, 0, normalizedQuery);
       return;
     }
     editor
@@ -693,6 +856,11 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     } as EditorDoc, props.baseUrl);
     const markdown = docToMarkdown(selectionDoc).trim();
     if (!markdown) return false;
+    const preferredAction = wholeNote ? "summarize" : "improve-writing";
+    const preferredPrompt = aiPrompts.find((prompt) => prompt.seedKey === preferredAction)
+      ?? aiPrompts[0]
+      ?? null;
+    const initialAction = preferredPrompt?.action ?? preferredAction;
     setAiPanel({
       selection: {
         from,
@@ -701,7 +869,10 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
         markdown,
         documentFingerprint: getAiDocumentFingerprint(getPersistableEditorDoc(editor.getJSON() as EditorDoc, props.baseUrl)),
       },
-      action: "improve-writing",
+      action: initialAction,
+      promptId: preferredPrompt?.id ?? null,
+      parameterKind: preferredPrompt?.parameterKind ?? fallbackPromptParameterKind(initialAction),
+      resultMode: preferredPrompt?.resultMode ?? fallbackPromptResultMode(initialAction),
       targetLanguage: getDefaultAiTargetLanguage(props.locale),
       tone: "professional",
       customInstruction: "",
@@ -713,7 +884,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     });
     editor.commands.blur();
     return true;
-  }, [editor, isViewer, props.baseUrl, props.locale]);
+  }, [aiPrompts, editor, isViewer, props.baseUrl, props.locale]);
 
   const closeAiPanel = useCallback(() => {
     if (!aiPanel || !editor) return;
@@ -736,6 +907,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     const requestId = globalThis.crypto?.randomUUID?.() ?? `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const source = instruction ? aiPanel.output : aiPanel.selection.markdown;
     const action = instruction ? "custom" : aiPanel.action;
+    const promptId = instruction ? null : aiPanel.promptId;
     setAiPanel((current) => current ? {
       ...current,
       output: "",
@@ -747,10 +919,12 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
     void onAiRequestRef.current(JSON.stringify({
       requestId,
       action,
+      locale: props.locale,
+      ...(promptId ? { promptId } : {}),
       contentMarkdown: source,
-      ...(action === "translate" ? { targetLanguage: aiPanel.targetLanguage } : {}),
-      ...(action === "change-tone" ? { tone: aiPanel.tone } : {}),
-      ...(action === "custom" ? { instruction: instruction ?? aiPanel.customInstruction.trim() } : {}),
+      ...(aiPanel.parameterKind === "target-language" && !instruction ? { targetLanguage: aiPanel.targetLanguage } : {}),
+      ...(aiPanel.parameterKind === "tone" && !instruction ? { tone: aiPanel.tone } : {}),
+      ...(!promptId && action === "custom" ? { instruction: instruction ?? aiPanel.customInstruction.trim() } : {}),
     })).catch((requestError) => {
       setAiPanel((current) => current?.requestId === requestId ? {
         ...current,
@@ -802,7 +976,8 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       } : current);
       return;
     }
-    if (mode === "replace" && !canReplaceAiSource(aiPanel.action)) return;
+    if (mode === "append" && aiPanel.resultMode === "replace") return;
+    if (mode === "replace" && aiPanel.resultMode === "append") return;
     const parsed = resolveImageSources(markdownToDoc(aiPanel.output), props.baseUrl);
     const content = parsed.content ?? [];
     const range = mode === "append"
@@ -839,7 +1014,12 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       setContent,
       flush,
       focusEnd: () => {
-        if (!isViewer) editor?.commands.focus("end");
+        if (!isViewer && editor && !editor.isDestroyed) {
+          editor.commands.focus("end");
+          window.requestAnimationFrame(() => {
+            scrollEditorPositionIntoView(editor, editor.state.selection.head);
+          });
+        }
       },
       removeResource,
       renameResource,
@@ -914,6 +1094,61 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       editor.commands.setContent(next, { emitUpdate: false });
     }
   }, [editor, isViewer, props.baseUrl, props.content]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || isViewer) {
+      return;
+    }
+
+    let scrollFrame = 0;
+    let settledScrollTimer: number | null = null;
+    const ensureSelectionVisible = () => {
+      updateEditorKeyboardInset(editor);
+      window.cancelAnimationFrame(scrollFrame);
+      scrollFrame = window.requestAnimationFrame(() => {
+        if (!editor.isDestroyed && editor.isFocused) {
+          scrollEditorPositionIntoView(editor, editor.state.selection.head);
+        }
+      });
+      if (settledScrollTimer !== null) {
+        window.clearTimeout(settledScrollTimer);
+      }
+      // Android IMEs animate the visible viewport after focus. Recheck once the
+      // animation settles so the last line stays above the keyboard.
+      settledScrollTimer = window.setTimeout(() => {
+        settledScrollTimer = null;
+        if (!editor.isDestroyed && editor.isFocused) {
+          updateEditorKeyboardInset(editor);
+          scrollEditorPositionIntoView(editor, editor.state.selection.head);
+        }
+      }, 180);
+    };
+
+    const handleSelectionUpdate = () => {
+      if (editor.isFocused) {
+        ensureSelectionVisible();
+      }
+    };
+    const visualViewport = window.visualViewport;
+    window.addEventListener("resize", ensureSelectionVisible);
+    visualViewport?.addEventListener("resize", ensureSelectionVisible);
+    visualViewport?.addEventListener("scroll", ensureSelectionVisible);
+    editor.on("focus", ensureSelectionVisible);
+    editor.on("selectionUpdate", handleSelectionUpdate);
+    updateEditorKeyboardInset(editor);
+
+    return () => {
+      window.cancelAnimationFrame(scrollFrame);
+      if (settledScrollTimer !== null) {
+        window.clearTimeout(settledScrollTimer);
+      }
+      window.removeEventListener("resize", ensureSelectionVisible);
+      visualViewport?.removeEventListener("resize", ensureSelectionVisible);
+      visualViewport?.removeEventListener("scroll", ensureSelectionVisible);
+      editor.off("focus", ensureSelectionVisible);
+      editor.off("selectionUpdate", handleSelectionUpdate);
+    };
+  }, [editor, isViewer]);
 
   const toolbarState = useEditorState({
     editor,
@@ -1037,6 +1272,7 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
           onRefine={(instruction) => runAiSelectionRequest(instruction)}
           onStop={stopAiSelectionRequest}
           panel={aiPanel}
+          prompts={aiPrompts}
         />
       ) : null}
     </div>
@@ -1066,6 +1302,7 @@ const MobileSelectionAiPanel = ({
   onRefine,
   onStop,
   panel,
+  prompts,
 }: {
   locale: "zh-CN" | "en-US";
   onApply: (mode: "append" | "replace") => void;
@@ -1075,6 +1312,7 @@ const MobileSelectionAiPanel = ({
   onRefine: (instruction: string) => void;
   onStop: () => void;
   panel: MobileAiPanelState;
+  prompts: AiPromptTemplate[];
 }) => {
   const english = locale === "en-US";
   const actionLabels: Record<AiAction, string> = {
@@ -1110,8 +1348,36 @@ const MobileSelectionAiPanel = ({
     direct: english ? "Direct" : "直接",
   };
   const update = (next: Partial<MobileAiPanelState>) => onChange((current) => current ? { ...current, ...next } : current);
-  const generateDisabled = panel.generating || (panel.action === "custom" && !panel.customInstruction.trim());
-  const replaceDisabled = panel.generating || !panel.output || !canReplaceAiSource(panel.action);
+  const generateDisabled = panel.generating || (!panel.promptId && panel.action === "custom" && !panel.customInstruction.trim());
+  const appendDisabled = panel.generating || !panel.output || panel.resultMode === "replace";
+  const replaceDisabled = panel.generating || !panel.output || panel.resultMode === "append";
+  const selectedValue = panel.promptId ? `${AI_PROMPT_OPTION_PREFIX}${panel.promptId}` : panel.action;
+
+  const selectPromptOrAction = (value: string) => {
+    if (value.startsWith(AI_PROMPT_OPTION_PREFIX)) {
+      const promptId = value.slice(AI_PROMPT_OPTION_PREFIX.length);
+      const prompt = prompts.find((item) => item.id === promptId);
+      if (!prompt) return;
+      update({
+        action: prompt.action,
+        promptId: prompt.id,
+        parameterKind: prompt.parameterKind,
+        resultMode: prompt.resultMode,
+        output: "",
+        error: null,
+      });
+      return;
+    }
+    const action = value as AiAction;
+    update({
+      action,
+      promptId: null,
+      parameterKind: fallbackPromptParameterKind(action),
+      resultMode: fallbackPromptResultMode(action),
+      output: "",
+      error: null,
+    });
+  };
 
   return (
     <section
@@ -1138,13 +1404,18 @@ const MobileSelectionAiPanel = ({
           <span>{english ? "AI action" : "AI 操作"}</span>
           <select
             disabled={panel.generating}
-            onChange={(event) => update({ action: event.target.value as AiAction, output: "", error: null })}
-            value={panel.action}
+            onChange={(event) => selectPromptOrAction(event.target.value)}
+            value={selectedValue}
           >
-            {AI_SELECTED_TEXT_ACTIONS.map((action) => <option key={action} value={action}>{actionLabels[action]}</option>)}
+            {prompts.length > 0
+              ? <>
+                  {prompts.map((prompt) => <option key={prompt.id} value={`${AI_PROMPT_OPTION_PREFIX}${prompt.id}`}>{prompt.name}</option>)}
+                  <option value="custom">{actionLabels.custom}</option>
+                </>
+              : AI_SELECTED_TEXT_ACTIONS.map((action) => <option key={action} value={action}>{actionLabels[action]}</option>)}
           </select>
         </label>
-        {panel.action === "translate" ? (
+        {panel.parameterKind === "target-language" ? (
           <label>
             <span>{english ? "Target language" : "目标语言"}</span>
             <select disabled={panel.generating} onChange={(event) => update({ targetLanguage: event.target.value as AiTargetLanguage, output: "", error: null })} value={panel.targetLanguage}>
@@ -1152,7 +1423,7 @@ const MobileSelectionAiPanel = ({
             </select>
           </label>
         ) : null}
-        {panel.action === "change-tone" ? (
+        {panel.parameterKind === "tone" ? (
           <label>
             <span>{english ? "Tone" : "语气"}</span>
             <select disabled={panel.generating} onChange={(event) => update({ tone: event.target.value as AiTone, output: "", error: null })} value={panel.tone}>
@@ -1160,7 +1431,7 @@ const MobileSelectionAiPanel = ({
             </select>
           </label>
         ) : null}
-        {panel.action === "custom" ? (
+        {!panel.promptId && panel.action === "custom" ? (
           <label>
             <span>{english ? "Tell AI what to do" : "告诉 AI 你想怎么处理"}</span>
             <textarea
@@ -1206,7 +1477,7 @@ const MobileSelectionAiPanel = ({
       </div>
       <footer className="edgeever-ai-panel-footer">
         <div>
-          <button disabled={!panel.output || panel.generating} onClick={() => onApply("append")} type="button">
+          <button disabled={appendDisabled} onClick={() => onApply("append")} type="button">
             {english ? "Insert after" : "插入到选区后"}
           </button>
           <button disabled={replaceDisabled} onClick={() => onApply("replace")} type="button">
@@ -1223,43 +1494,6 @@ const MobileSelectionAiPanel = ({
       </footer>
     </section>
   );
-};
-
-type EditorSearchMatch = { from: number; to: number };
-
-const getEditorSearchMatches = (editor: ReturnType<typeof useEditor>, query: string): EditorSearchMatch[] => {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!editor || editor.isDestroyed || needle.length === 0) {
-    return [];
-  }
-
-  const characters: Array<{ char: string; pos: number }> = [];
-  let previousTextEnd: number | null = null;
-  editor.state.doc.descendants((node, pos) => {
-    if (!node.isText || !node.text) {
-      return;
-    }
-    if (previousTextEnd !== null && pos > previousTextEnd) {
-      characters.push({ char: "\u0000", pos: -1 });
-    }
-    for (let index = 0; index < node.text.length; index += 1) {
-      characters.push({ char: node.text[index] ?? "", pos: pos + index });
-    }
-    previousTextEnd = pos + node.text.length;
-  });
-
-  const haystack = characters.map((item) => item.char).join("").toLocaleLowerCase();
-  const matches: EditorSearchMatch[] = [];
-  let index = haystack.indexOf(needle);
-  while (index !== -1) {
-    const start = characters[index];
-    const end = characters[index + needle.length - 1];
-    if (start && end && start.pos >= 0 && end.pos >= 0) {
-      matches.push({ from: start.pos, to: end.pos + 1 });
-    }
-    index = haystack.indexOf(needle, index + needle.length);
-  }
-  return matches;
 };
 
 const EditorIcon = ({ children, size, strokeWidth }: { children: ReactNode; size: number; strokeWidth: number }) => (
@@ -2209,6 +2443,7 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-editor-toolbar .edgeever-ai-toolbar-button { width: auto; gap: 4px; padding: 0 10px; border-color: ${theme === "dark" ? "#166534" : "#bbf7d0"}; background: ${theme === "dark" ? "#052e24" : "#ecfdf5"}; color: ${theme === "dark" ? "#6ee7b7" : "#047857"}; font-weight: 750; }
   .tiptap { min-height: 100%; max-width: 100%; min-width: 0; outline: none; }
   .edgeever-editor-scroll {
+    --edgeever-keyboard-inset: 0px;
     min-height: 0;
     min-width: 0;
     flex: 1;
@@ -2252,7 +2487,8 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
     min-height: 100%;
     max-width: 100%;
     min-width: 0;
-    padding: 18px 12px 32px;
+    padding: 18px 12px calc(32px + var(--edgeever-keyboard-inset));
+    scroll-padding-bottom: calc(32px + var(--edgeever-keyboard-inset));
     font-size: 1rem;
     line-height: var(--editor-body-line-height);
     overflow-wrap: anywhere;
@@ -2260,6 +2496,15 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
     caret-color: ${options?.viewer ? "transparent" : "#0f766e"};
   }
   .edgeever-viewer-content { -webkit-user-select: text; user-select: text; cursor: text; }
+  .edgeever-search-match {
+    border-radius: 0.2rem;
+    background-color: rgb(254 240 138 / 0.8);
+    box-shadow: 0 0 0 1px rgb(234 179 8 / 0.25);
+  }
+  .edgeever-search-match-active {
+    background-color: rgb(251 191 36 / 0.9);
+    box-shadow: 0 0 0 2px rgb(217 119 6 / 0.45);
+  }
   .edgeever-editor-content > :first-child { margin-top: 0; }
   .edgeever-editor-content p {
     margin: 0 0 var(--editor-paragraph-spacing) 0;
@@ -2281,11 +2526,11 @@ const getEditorStyles = (theme: "light" | "dark", options?: { viewer?: boolean }
   .edgeever-editor-content h2 { margin: 0.85em 0 0.35em; font-size: 1.35rem; }
   .edgeever-editor-content h3 { margin: 0.75em 0 0.3em; font-size: 1.15rem; }
   .edgeever-editor-content ul[data-type="taskList"] { margin: 0 0 var(--editor-paragraph-spacing); padding-left: 0; list-style: none; }
-  .edgeever-editor-content ul[data-type="taskList"] li[data-type="taskItem"] { display: flex; align-items: flex-start; gap: 9px; margin: 4px 0; }
-  .edgeever-editor-content ul[data-type="taskList"] li[data-type="taskItem"] > label { display: inline-flex; flex: 0 0 auto; align-items: center; margin-top: 3px; user-select: none; }
-  .edgeever-editor-content ul[data-type="taskList"] li[data-type="taskItem"] > label input { width: 18px; height: 18px; margin: 0; accent-color: #16a06e; }
-  .edgeever-editor-content ul[data-type="taskList"] li[data-type="taskItem"] > div { min-width: 0; flex: 1 1 auto; }
-  .edgeever-editor-content ul[data-type="taskList"] li[data-type="taskItem"] > div > p { margin-bottom: 0; }
+  .edgeever-editor-content ul[data-type="taskList"] li[data-checked] { display: flex; align-items: flex-start; gap: 9px; margin: 4px 0; }
+  .edgeever-editor-content ul[data-type="taskList"] li[data-checked] > label { display: inline-flex; flex: 0 0 auto; align-items: center; margin-top: 3px; user-select: none; }
+  .edgeever-editor-content ul[data-type="taskList"] li[data-checked] > label input { width: 18px; height: 18px; margin: 0; accent-color: #16a06e; }
+  .edgeever-editor-content ul[data-type="taskList"] li[data-checked] > div { min-width: 0; flex: 1 1 auto; }
+  .edgeever-editor-content ul[data-type="taskList"] li[data-checked] > div > p { margin-bottom: 0; }
   .edgeever-editor-content ul[data-type="taskList"] ul[data-type="taskList"] { margin: 4px 0 0; padding-left: 24px; }
   .edgeever-editor-content blockquote { margin-left: 0; max-width: 100%; padding-left: 14px; border-left: 3px solid #5eead4; color: ${theme === "dark" ? "#cbd5e1" : "#475569"}; }
   .edgeever-editor-content pre { max-width: 100%; overflow-x: auto; border-radius: 10px; padding: 14px 90px 14px 14px; background: #0f172a; color: #e2e8f0; font-size: 0.9rem; }

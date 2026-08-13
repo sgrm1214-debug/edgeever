@@ -534,13 +534,14 @@ textarea {
   padding-left: 0;
 }
 
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] {
+/* TipTap's task-item NodeView exposes data-checked, but not data-type, in the live editor DOM. */
+.ProseMirror ul[data-type="taskList"] li[data-checked] {
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
 }
 
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] > label {
+.ProseMirror ul[data-type="taskList"] li[data-checked] > label {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -548,7 +549,7 @@ textarea {
   user-select: none;
 }
 
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] > label input {
+.ProseMirror ul[data-type="taskList"] li[data-checked] > label input {
   width: 1rem;
   height: 1rem;
   margin: 0;
@@ -556,12 +557,12 @@ textarea {
   cursor: pointer;
 }
 
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] > div {
+.ProseMirror ul[data-type="taskList"] li[data-checked] > div {
   min-width: 0;
   flex: 1 1 auto;
 }
 
-.ProseMirror ul[data-type="taskList"] li[data-type="taskItem"] > div > p {
+.ProseMirror ul[data-type="taskList"] li[data-checked] > div > p {
   margin-bottom: 0;
 }
 

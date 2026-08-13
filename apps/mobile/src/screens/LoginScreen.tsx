@@ -7,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { PUBLIC_DEMO_INSTANCE_URL } from "@edgeever/shared";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityIndicator, ExternalLink, LockKeyhole } from "../components/icons";
 import { Pressable, Text, TextInput } from "../components/LocalizedText";
@@ -72,11 +73,19 @@ export const LoginScreen = () => {
                 autoCorrect={false}
                 keyboardType="url"
                 onChangeText={setBaseUrl}
-                placeholder="https://notes.example.com"
+                placeholder={PUBLIC_DEMO_INSTANCE_URL}
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
                 value={baseUrl}
               />
+              <Text style={styles.hint}>请填写完整 HTTPS 地址，不要只输入 demo。</Text>
+              <Pressable
+                accessibilityLabel="填入公开演示实例"
+                accessibilityRole="button"
+                onPress={() => setBaseUrl(PUBLIC_DEMO_INSTANCE_URL)}
+              >
+                <Text style={styles.demoLink}>填入公开演示实例</Text>
+              </Pressable>
             </View>
 
             <View style={styles.field}>
@@ -207,6 +216,16 @@ const baseLoginStyles = StyleSheet.create({
     fontSize: 16,
     minHeight: 48,
     paddingHorizontal: 14,
+  },
+  hint: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  demoLink: {
+    color: "#059669",
+    fontSize: 13,
+    fontWeight: "700",
   },
   error: {
     color: "#dc2626",

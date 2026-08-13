@@ -5,13 +5,17 @@ import {
   AiProviderConfigCreateSchema,
   AiProviderConfigUpdateSchema,
   AiProviderConnectionTestSchema,
+  promptNeedsTargetLanguage,
+  promptNeedsTone,
 } from "@edgeever/shared";
 import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
 import type { AppContext, AppEnv, Bindings } from "./api-context";
 import { AppError } from "./app-error";
 import { auditStatement } from "./audit";
+import { getAiPromptTemplate, resolveWorkspaceActionInstruction } from "./ai-prompt-service";
 import {
+  createAiGenerationResultBoundary,
   decryptAiCredential,
   discoverAiModels,
   getAiModelConfig,
@@ -19,8 +23,8 @@ import {
   getAiSettings,
   getDefaultAiModelId,
   loadDefaultAiModel,
+  normalizeAiGenerationText,
   normalizeAiBaseUrl,
-  parseAiGenerationResult,
   resolvePrimaryAiCredentialEncryptionKey,
   streamAiGeneration,
   testAiModel,
@@ -445,27 +449,72 @@ export const registerAiRoutes = (app: Hono<AppEnv>, dependencies: AiRouteDepende
       if (denied) return denied;
       try {
         const input = context.req.valid("json");
+        const workspaceId = getWorkspaceId(context);
+        const selectedPrompt = input.promptId
+          ? await getAiPromptTemplate(
+            context.env.storage.db,
+            workspaceId,
+            input.promptId,
+            input.locale,
+          )
+          : null;
+        if (input.promptId && !selectedPrompt) {
+          throw new AppError("ai_prompt_not_found", "The selected prompt no longer exists.", 404);
+        }
+
+        const action = selectedPrompt?.action ?? input.action;
+        const needsTargetLanguage = selectedPrompt
+          ? promptNeedsTargetLanguage(selectedPrompt.parameterKind)
+          : action === "translate";
+        const needsTone = selectedPrompt
+          ? promptNeedsTone(selectedPrompt.parameterKind)
+          : action === "change-tone";
+        if (needsTargetLanguage && !input.targetLanguage) {
+          throw new AppError("ai_target_language_required", "Choose a target language for this prompt.", 400);
+        }
+        if (needsTone && !input.tone) {
+          throw new AppError("ai_tone_required", "Choose a tone for this prompt.", 400);
+        }
+
+        const resolvedInstruction = selectedPrompt?.instruction
+          || input.instruction?.trim()
+          || await resolveWorkspaceActionInstruction(
+            context.env.storage.db,
+            workspaceId,
+            action,
+            input.locale,
+          )
+          || undefined;
         const model = await loadDefaultAiModel(
           context.env.storage.db,
-          getWorkspaceId(context),
+          workspaceId,
           context.env,
         );
-        const result = streamAiGeneration({ ...input, model, abortSignal: context.req.raw.signal });
+        const resultBoundary = createAiGenerationResultBoundary();
+        const result = streamAiGeneration({
+          ...input,
+          action,
+          instruction: resolvedInstruction,
+          targetLanguage: needsTargetLanguage ? input.targetLanguage : undefined,
+          tone: needsTone ? input.tone : undefined,
+          model,
+          resultBoundary,
+          abortSignal: context.req.raw.signal,
+        });
         const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({
           async start(controller) {
             const send = (event: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
             send({ type: "start" });
             try {
-              let submittedContent = false;
+              let generatedContent = "";
               for await (const part of result.stream) {
                 if (part.type === "error") throw part.error;
-                if (part.type !== "tool-call" || part.toolName !== "submitNoteResult") continue;
-                if (submittedContent) throw new Error("The AI submitted more than one note result.");
-                send({ type: "text-delta", text: parseAiGenerationResult(part.input).contentMarkdown });
-                submittedContent = true;
+                if (part.type === "text-delta") generatedContent += part.text;
               }
-              if (!submittedContent) throw new Error("The AI did not submit a note result.");
+              const contentMarkdown = normalizeAiGenerationText(generatedContent, resultBoundary);
+              if (!contentMarkdown) throw new Error("The AI did not return a note result.");
+              send({ type: "text-delta", text: contentMarkdown });
               const [usage, finishReason] = await Promise.all([result.usage, result.finishReason]);
               send({
                 type: "finish",

@@ -19,6 +19,8 @@ describe("mobile AI selection bridge", () => {
     expect(parseMobileSelectionAiRequest(JSON.stringify({
       requestId: "request-1",
       action: "change-tone",
+      promptId: undefined,
+      locale: undefined,
       contentMarkdown: "Selected text",
       tone: "friendly",
     }))).toEqual({
@@ -28,6 +30,20 @@ describe("mobile AI selection bridge", () => {
       targetLanguage: undefined,
       tone: "friendly",
       instruction: undefined,
+    });
+
+    expect(parseMobileSelectionAiRequest(JSON.stringify({
+      requestId: "request-saved-prompt",
+      action: "custom",
+      promptId: "aiprompt_saved",
+      locale: "en-US",
+      contentMarkdown: "Selected text",
+    }))).toMatchObject({
+      requestId: "request-saved-prompt",
+      action: "custom",
+      promptId: "aiprompt_saved",
+      locale: "en-US",
+      contentMarkdown: "Selected text",
     });
   });
 

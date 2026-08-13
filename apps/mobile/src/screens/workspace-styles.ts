@@ -1270,6 +1270,9 @@ const baseWorkspaceStyles = StyleSheet.create({
     backgroundColor: "#ffffff",
     flex: 1,
   },
+  richEditorKeyboardAvoiding: {
+    flex: 1,
+  },
   richEditorHeaderStatus: {
     maxWidth: 76,
   },

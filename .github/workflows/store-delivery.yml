@@ -28,7 +28,7 @@ on:
           - internal
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: edgeever-store-delivery-${{ inputs.release_tag }}
@@ -134,6 +134,9 @@ jobs:
           packager: npm
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Restore Android upload keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -173,6 +176,28 @@ jobs:
             --non-interactive \
             --wait
         working-directory: apps/mobile
+
+      - name: Download Play-signed universal APK
+        env:
+          ANDROID_PLAY_APP_SIGNER_SHA256: ${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION_CODE: ${{ needs.plan.outputs.version_code }}
+        run: |
+          apk_path="$RUNNER_TEMP/edgeever-android-${RELEASE_TAG}-arm64-v8a.apk"
+          node scripts/download-play-universal-apk.mjs "$VERSION_CODE" "$apk_path"
+          echo "apk_path=$apk_path" >> "$GITHUB_ENV"
+
+      - name: Verify Play app signature
+        env:
+          EDGE_EVER_ANDROID_ALLOWED_SIGNER_SHA256: ${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
+        run: node scripts/verify-android-apk-signature.mjs "$apk_path"
+
+      - name: Replace GitHub Release APK with the Play-signed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" "$apk_path" --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Remove temporary upload keystore
         if: always()

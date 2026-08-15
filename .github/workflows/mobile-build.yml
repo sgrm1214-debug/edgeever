@@ -20,6 +20,7 @@ on:
       - ".github/workflows/mobile-build.yml"
       - "scripts/build-android-local.sh"
       - "scripts/verify-android-apk-signature.mjs"
+      - "scripts/download-play-universal-apk.mjs"
 
 permissions:
   actions: read
@@ -123,6 +124,7 @@ jobs:
       - name: Verify existing APK uses the pinned signer
         if: steps.plan.outputs.asset_ready == 'true'
         env:
+          EDGE_EVER_ANDROID_ALLOWED_SIGNER_SHA256: 22bf52a9501c89020f5acc966960152c826bfa64f31e578e858d088f8cd75d87,${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
           CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -154,6 +156,7 @@ jobs:
       - name: Copy latest compatible APK without renaming
         env:
           CURRENT_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          EDGE_EVER_ANDROID_ALLOWED_SIGNER_SHA256: 22bf52a9501c89020f5acc966960152c826bfa64f31e578e858d088f8cd75d87,${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_TAG: ${{ needs.release-plan.outputs.previous_tag }}
         run: |
@@ -243,6 +246,8 @@ jobs:
 
       - name: Verify release APK signature
         if: github.event_name == 'workflow_dispatch'
+        env:
+          EDGE_EVER_ANDROID_ALLOWED_SIGNER_SHA256: 22bf52a9501c89020f5acc966960152c826bfa64f31e578e858d088f8cd75d87,${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
         run: node scripts/verify-android-apk-signature.mjs apps/mobile/android/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload APK

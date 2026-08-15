@@ -1,8 +1,19 @@
 name = "edgeever"
-main = "apps/api/src/index.ts"
+main = ".wrangler/edgeever-worker/index.js"
 compatibility_date = "2026-06-26"
 workers_dev = true
-account_id = "5b0dc8433c33e625f83beae3ef49aa71"
+no_bundle = true
+find_additional_modules = true
+base_dir = ".wrangler/edgeever-worker"
+
+[[rules]]
+type = "ESModule"
+globs = ["modules/*.js"]
+fallthrough = true
+
+[build]
+command = "bun scripts/build-cloudflare-worker.mjs"
+watch_dir = ["apps/api/src", "packages/shared/src"]
 
 [assets]
 directory = "apps/web/dist"
@@ -13,7 +24,7 @@ run_worker_first = ["/api/*", "/mcp", "/__scheduled"]
 [[d1_databases]]
 binding = "DB"
 database_name = "edgeever"
-database_id = "971bdff7-8066-4ea7-9dc7-0cba1f1ce396"
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
@@ -23,4 +34,3 @@ preview_bucket_name = "edgeever-resources-preview"
 
 [observability]
 enabled = true
- 

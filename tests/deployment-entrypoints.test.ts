@@ -99,6 +99,13 @@ describe("Cloudflare deployment entrypoints", () => {
     expect(scripts["deploy:cloudflare-builds"]).toBe(
       "EDGE_EVER_USE_EXISTING_AUTH_SECRET=true bun run deploy:ci",
     );
+    expect(scripts["build:cloudflare"]).toContain("bun run build:worker");
+
+    const wranglerConfig = readRepositoryFile("wrangler.toml");
+    expect(wranglerConfig).toContain('main = ".wrangler/edgeever-worker/index.js"');
+    expect(wranglerConfig).toContain("no_bundle = true");
+    expect(wranglerConfig).toContain("find_additional_modules = true");
+    expect(wranglerConfig).toContain('globs = ["modules/*.js"]');
   });
 
   test("online deployment declares the required authentication Secret", () => {

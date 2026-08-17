@@ -240,8 +240,6 @@ describe("AI route contracts", () => {
     sqlite.close();
   });
 
-<<<<<<< HEAD
-=======
   test("caps normalized AI tag suggestions at three", async () => {
     const { sqlite, environment: databaseEnvironment } = createDatabaseEnvironment();
     const app = createApp({
@@ -268,7 +266,6 @@ describe("AI route contracts", () => {
     sqlite.close();
   });
 
->>>>>>> upstream/main
   test("defers prompt-specific action and parameter validation to the saved prompt", () => {
     expect(AiGenerateSchema.safeParse({
       action: "custom",

@@ -7,6 +7,10 @@ import {
   AiProviderConnectionTestSchema,
   AiTagSuggestionPromptUpdateSchema,
   AiTagSuggestionsRequestSchema,
+<<<<<<< HEAD
+=======
+  MAX_AI_TAG_SUGGESTIONS,
+>>>>>>> upstream/main
   normalizeTags,
   promptNeedsTargetLanguage,
   promptNeedsTone,
@@ -524,7 +528,11 @@ export const registerAiRoutes = (app: Hono<AppEnv>, dependencies: AiRouteDepende
           normalizeTags(rawSuggestions)
             .filter((name) => !currentTagKeys.has(name.toLocaleLowerCase()))
             .map((name) => allCanonicalTags.get(name.toLocaleLowerCase()) ?? name),
+<<<<<<< HEAD
         ).slice(0, 7);
+=======
+        ).slice(0, MAX_AI_TAG_SUGGESTIONS);
+>>>>>>> upstream/main
         const suggestions = suggestionNames
           .map((name) => {
             const canonicalName = allCanonicalTags.get(name.toLocaleLowerCase());

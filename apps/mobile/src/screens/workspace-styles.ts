@@ -1211,8 +1211,7 @@ const baseWorkspaceStyles = StyleSheet.create({
     color: "#64748b",
     flex: 1,
     fontSize: 15,
-    lineHeight: 23,
-    minHeight: 36,
+    lineHeight: 20,
     minWidth: 0,
     padding: 0,
   },
@@ -1226,6 +1225,16 @@ const baseWorkspaceStyles = StyleSheet.create({
   },
   createMemoTagsPlaceholder: {
     color: "#94a3b8",
+  },
+  smartTagButton: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  smartTagButtonSuccess: {
+    backgroundColor: "#ecfdf5",
   },
   createMemoToolButton: {
     alignItems: "center",

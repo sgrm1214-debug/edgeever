@@ -243,7 +243,7 @@ jobs:
           set -euo pipefail
           bun install --frozen-lockfile
           bun run db:migrate:local
-          bun test --path-ignore-patterns='tests/e2e/**'
+          bun run test
           bun run typecheck
           bun run build
 

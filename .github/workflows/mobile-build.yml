@@ -64,6 +64,17 @@ jobs:
           target_commitish="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')"
           test "$(git rev-parse "${target_commitish}^{commit}")" = "$(git rev-parse "${GITHUB_SHA}^{commit}")"
 
+      - name: Set up Bun for release validation
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install release validation dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run full project regression tests
+        run: bun run test
+
       - name: Compare with previous formal release
         id: plan
         env:

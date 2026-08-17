@@ -151,6 +151,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EDGE_EVER_ANDROID_PLAY_ARCHS: arm64-v8a
         run: bun run build:android:play
 
       - name: Preserve Play bundle and deobfuscation mapping
@@ -192,6 +193,14 @@ jobs:
         env:
           EDGE_EVER_ANDROID_ALLOWED_SIGNER_SHA256: ${{ secrets.ANDROID_PLAY_APP_SIGNER_SHA256 }}
         run: node scripts/verify-android-apk-signature.mjs "$apk_path"
+
+      - name: Verify Play APK architecture
+        run: |
+          actual_archs="$(unzip -Z1 "$apk_path" | sed -n 's#^lib/\([^/]*\)/.*#\1#p' | sort -u | paste -sd, -)"
+          if [[ "$actual_archs" != "arm64-v8a" ]]; then
+            echo "::error::Expected an arm64-v8a Play APK, received: ${actual_archs:-no native libraries}."
+            exit 1
+          fi
 
       - name: Replace GitHub Release APK with the Play-signed build
         env:

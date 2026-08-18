@@ -6,7 +6,7 @@ parent_pid="$1"
 user_data_dir="$2"
 application_path="$3"
 attempt=0
-while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$attempt" -lt 300 ]; do
+while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$attempt" -lt 3000 ]; do
   /bin/sleep 0.1
   attempt=$((attempt + 1))
 done
@@ -49,7 +49,7 @@ export const macApplicationBundlePath = (executablePath) => {
   throw new Error("EdgeEver must be running from a macOS application bundle");
 };
 
-export const scheduleMacLocalDataReset = ({
+export const scheduleMacLocalDataReset = async ({
   appDataDirectory,
   executablePath,
   parentPid,
@@ -73,6 +73,10 @@ export const scheduleMacLocalDataReset = ({
       stdio: "ignore",
     },
   );
+  await new Promise((resolveSpawn, rejectSpawn) => {
+    helper.once("spawn", resolveSpawn);
+    helper.once("error", rejectSpawn);
+  });
   helper.unref();
   return { applicationPath, target };
 };

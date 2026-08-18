@@ -819,34 +819,56 @@ app.whenReady().then(async () => {
     if (requestedUserDataDirectory) throw new Error("Local data reset is unavailable with a custom user-data directory");
     if (localDataResetScheduled) return { scheduled: true };
 
-    localDataResetScheduled = true;
-    isQuitting = true;
-    shutdownCleanupStarted = true;
-    if (sidecarRestartTimer) {
-      clearTimeout(sidecarRestartTimer);
-      sidecarRestartTimer = null;
-    }
-    tray?.destroy();
-
     try {
-      await stopSidecar();
-      await Promise.allSettled([
-        session.defaultSession.clearStorageData(),
-        session.defaultSession.clearCache(),
-      ]);
-      scheduleMacLocalDataReset({
+      await scheduleMacLocalDataReset({
         appDataDirectory: app.getPath("appData"),
-        executablePath: process.execPath,
+        executablePath: app.getPath("exe"),
         parentPid: process.pid,
         userDataDirectory: app.getPath("userData"),
       });
     } catch (error) {
-      localDataResetScheduled = false;
-      isQuitting = false;
-      shutdownCleanupStarted = false;
+      await writeDiagnostic("local-data-reset.schedule-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
 
+    // Only begin shutting down once the detached reset helper has definitely
+    // started. From this point on, exiting lets that helper remove userData and
+    // relaunch the app, so non-critical cleanup failures must not strand the
+    // application in a half-stopped state.
+    localDataResetScheduled = true;
+    isQuitting = true;
+    shutdownCleanupStarted = true;
+    const forcedExitTimer = setTimeout(() => app.exit(0), 5000);
+    forcedExitTimer.unref();
+    if (sidecarRestartTimer) {
+      clearTimeout(sidecarRestartTimer);
+      sidecarRestartTimer = null;
+    }
+    try {
+      tray?.destroy();
+      tray = null;
+    } catch (error) {
+      void writeDiagnostic("local-data-reset.tray-cleanup-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await stopSidecar().catch((error) => writeDiagnostic("local-data-reset.sidecar-stop-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    }));
+    const storageResults = await Promise.allSettled([
+      Promise.resolve().then(() => session.defaultSession.clearStorageData()),
+      Promise.resolve().then(() => session.defaultSession.clearCache()),
+    ]);
+    const storageFailure = storageResults.find((result) => result.status === "rejected");
+    if (storageFailure) {
+      void writeDiagnostic("local-data-reset.storage-cleanup-failed", {
+        message: storageFailure.reason instanceof Error ? storageFailure.reason.message : String(storageFailure.reason),
+      });
+    }
+
+    clearTimeout(forcedExitTimer);
     setTimeout(() => app.exit(0), 50).unref();
     return { scheduled: true };
   });

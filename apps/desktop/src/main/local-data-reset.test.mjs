@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import {
   macApplicationBundlePath,
   managedUserDataDirectory,
@@ -32,16 +33,19 @@ describe("desktop local data reset", () => {
     expect(() => macApplicationBundlePath("/usr/local/bin/edgeever")).toThrow();
   });
 
-  test("passes paths as shell arguments instead of interpolating them", () => {
+  test("passes paths as shell arguments instead of interpolating them", async () => {
     let invocation;
     let unrefCalled = false;
-    const result = scheduleMacLocalDataReset({
+    const resultPromise = scheduleMacLocalDataReset({
       appDataDirectory: "/Users/example/Library/Application Support",
       executablePath: "/Applications/EdgeEver.app/Contents/MacOS/EdgeEver",
       parentPid: 42,
       spawnProcess: (...args) => {
         invocation = args;
-        return { unref: () => { unrefCalled = true; } };
+        const helper = new EventEmitter();
+        helper.unref = () => { unrefCalled = true; };
+        queueMicrotask(() => helper.emit("spawn"));
+        return helper;
       },
       userDataDirectory: "/Users/example/Library/Application Support/EdgeEver data",
     });
@@ -55,10 +59,28 @@ describe("desktop local data reset", () => {
     expect(invocation[1][1]).not.toContain("/Applications/EdgeEver.app");
     expect(invocation[1][1]).not.toContain("EdgeEver data");
     expect(invocation[2]).toEqual({ detached: true, stdio: "ignore" });
+    const result = await resultPromise;
     expect(unrefCalled).toBe(true);
     expect(result).toEqual({
       applicationPath: "/Applications/EdgeEver.app",
       target: "/Users/example/Library/Application Support/EdgeEver data",
     });
+  });
+
+  test("rejects when the reset helper cannot be started", async () => {
+    const resultPromise = scheduleMacLocalDataReset({
+      appDataDirectory: "/Users/example/Library/Application Support",
+      executablePath: "/Applications/EdgeEver.app/Contents/MacOS/EdgeEver",
+      parentPid: 42,
+      spawnProcess: () => {
+        const helper = new EventEmitter();
+        helper.unref = () => {};
+        queueMicrotask(() => helper.emit("error", new Error("spawn failed")));
+        return helper;
+      },
+      userDataDirectory: "/Users/example/Library/Application Support/EdgeEver",
+    });
+
+    await expect(resultPromise).rejects.toThrow("spawn failed");
   });
 });

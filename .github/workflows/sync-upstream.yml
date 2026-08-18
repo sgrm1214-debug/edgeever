@@ -28,6 +28,16 @@ jobs:
             echo "自动合并失败，存在冲突，请手动处理";
             exit 1;
           }
+      - name: Force-fix D1 database_id
+        run: |
+          sed -i 's/database_id = "00000000-0000-0000-0000-000000000000"/database_id = "971bdff7-8066-4ea7-9dc7-0cba1f1ce396"/' wrangler.toml
+          if git diff --quiet wrangler.toml; then
+            echo "No fix needed, database_id already correct."
+          else
+            git add wrangler.toml
+            git commit -m "fix: restore correct D1 database_id after merge"
+            echo "database_id corrected."
+          fi
       - name: Push changes
         run: git push https://x-access-token:${{ secrets.OOKK }}@github.com/sgrm1214-debug/edgeever.git main
       - name: Setup Node

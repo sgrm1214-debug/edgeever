@@ -19,6 +19,21 @@ project_name="${EDGE_EVER_PROJECT_NAME:-edgeever}"
 generated_password=false
 temporary_compose=""
 temporary_env=""
+current_step="Parse arguments"
+diagnostics_printed=false
+start_epoch=0
+declare -a compose=()
+
+log() {
+  local level="$1"
+  shift
+  printf '[%s] [%-7s] %s\n' "$(date '+%H:%M:%S')" "$level" "$*" >&2
+}
+
+step() {
+  current_step="$2"
+  log "STEP $1/6" "$2"
+}
 
 usage() {
   cat <<'EOF'
@@ -43,14 +58,37 @@ EDGE_EVER_AUTH_PASSWORD.
 EOF
 }
 
+print_diagnostics() {
+  [[ "$diagnostics_printed" == false ]] || return 0
+  diagnostics_printed=true
+
+  log ERROR "Stage: $current_step"
+  if ((${#compose[@]} > 0)); then
+    log INFO "Container status:"
+    "${compose[@]}" ps -a >&2 || true
+    log INFO "Recent container logs:"
+    "${compose[@]}" logs --tail 80 edgeever >&2 || true
+    log INFO "Troubleshooting commands:"
+    printf '  cd %q\n' "$install_dir" >&2
+    printf '  docker compose --project-name %q --env-file .env --file compose.yaml ps -a\n' "$project_name" >&2
+    printf '  docker compose --project-name %q --env-file .env --file compose.yaml logs --tail 200 edgeever\n' "$project_name" >&2
+  fi
+  log INFO "Deployment guide: https://github.com/tianma-if/edgeever/blob/main/docs/deploy-docker.md"
+}
+
 fail() {
-  printf 'EdgeEver installer: %s\n' "$*" >&2
+  trap - ERR
+  log ERROR "$*"
+  print_diagnostics
   exit 1
 }
 
 on_error() {
   local exit_code=$?
-  printf 'EdgeEver installer: command failed at line %s\n' "${BASH_LINENO[0]}" >&2
+  local line_number="${BASH_LINENO[0]}"
+  trap - ERR
+  log ERROR "A command failed (exit code: $exit_code, line: $line_number)"
+  print_diagnostics
   exit "$exit_code"
 }
 
@@ -104,6 +142,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+start_epoch="$(date '+%s')"
+step 1 "Validate environment"
 [[ -n "$install_dir" ]] || fail "set HOME or EDGE_EVER_INSTALL_DIR"
 [[ "$project_name" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || fail "invalid EDGE_EVER_PROJECT_NAME"
 
@@ -111,10 +151,39 @@ command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v docker >/dev/null 2>&1 || fail "Docker is required: https://docs.docker.com/engine/install/"
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 is required"
 docker info >/dev/null 2>&1 || fail "cannot connect to the Docker daemon"
+log INFO "Docker and Docker Compose are available"
+
+host_os=""
+if [[ -r /etc/os-release ]]; then
+  while IFS='=' read -r key value; do
+    if [[ "$key" == "PRETTY_NAME" ]]; then
+      host_os="${value#\"}"
+      host_os="${host_os%\"}"
+      break
+    fi
+  done < /etc/os-release
+fi
+host_os="${host_os:-$(uname -s)}"
+kernel_version="$(uname -sr)"
+host_architecture="$(uname -m)"
+docker_engine_version="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+docker_engine_version="${docker_engine_version:-unknown}"
+docker_compose_version="$(docker compose version --short 2>/dev/null || true)"
+docker_compose_version="${docker_compose_version:-unknown}"
+log INFO "Host OS: $host_os"
+log INFO "Kernel: $kernel_version"
+log INFO "Architecture: $host_architecture"
+log INFO "Docker Engine: $docker_engine_version"
+log INFO "Docker Compose: $docker_compose_version"
 
 mkdir -p "$install_dir"
 env_file="$install_dir/.env"
 compose_file="$install_dir/compose.yaml"
+if [[ -f "$env_file" ]]; then
+  install_mode="upgrade"
+else
+  install_mode="new installation"
+fi
 
 read_env_value() {
   local key="$1"
@@ -135,6 +204,7 @@ read_env_value() {
   return 1
 }
 
+step 2 "Resolve configuration"
 if [[ -z "$image" ]]; then
   image="$(read_env_value EDGE_EVER_IMAGE || true)"
   image="${image:-$GHCR_IMAGE}"
@@ -183,6 +253,11 @@ fi
 [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1 && port <= 65535)) || fail "port must be between 1 and 65535"
 [[ "$username" != *$'\n'* && "$username" != *"'"* ]] || fail "invalid administrator username"
 [[ "$password" != *$'\n'* && "$password" != *"'"* ]] || fail "password must not contain a newline or single quote"
+log INFO "Mode: $install_mode"
+log INFO "Install directory: $install_dir"
+log INFO "EdgeEver target: $image:$version"
+log INFO "Compose source: $compose_url"
+log INFO "Published port: $port"
 
 cleanup() {
   [[ -z "$temporary_compose" || ! -e "$temporary_compose" ]] || rm -f "$temporary_compose"
@@ -191,13 +266,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
+step 3 "Download Compose configuration"
 temporary_compose="$(mktemp "$install_dir/.compose.yaml.XXXXXX")"
 curl --fail --silent --show-error --location --output "$temporary_compose" "$compose_url"
 grep -q '^services:' "$temporary_compose" || fail "downloaded Compose file is invalid"
 chmod 0644 "$temporary_compose"
 mv "$temporary_compose" "$compose_file"
 temporary_compose=""
+log INFO "Saved Compose configuration to $compose_file"
 
+step 4 "Write runtime configuration"
 temporary_env="$(mktemp "$install_dir/.env.XXXXXX")"
 {
   printf "EDGE_EVER_IMAGE='%s'\n" "$image"
@@ -209,6 +287,7 @@ temporary_env="$(mktemp "$install_dir/.env.XXXXXX")"
 chmod 0600 "$temporary_env"
 mv "$temporary_env" "$env_file"
 temporary_env=""
+log INFO "Saved protected configuration to $env_file (password hidden)"
 
 compose=(
   docker compose
@@ -218,33 +297,43 @@ compose=(
   --file "$compose_file"
 )
 
-printf 'Pulling %s:%s...\n' "$image" "$version"
+step 5 "Pull image and start container"
 "${compose[@]}" pull
 "${compose[@]}" up -d --remove-orphans
 
+step 6 "Wait for health check"
 container_id=""
 health=""
-for _ in {1..60}; do
+for attempt in {1..60}; do
   container_id="$("${compose[@]}" ps -q edgeever 2>/dev/null || true)"
   if [[ -n "$container_id" ]]; then
     health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id" 2>/dev/null || true)"
     [[ "$health" == "healthy" ]] && break
     [[ "$health" == "exited" || "$health" == "dead" ]] && break
   fi
+  if ((attempt == 1 || attempt % 5 == 0)); then
+    log INFO "Waiting for container health (status: ${health:-not started}, elapsed: $((attempt * 2))s)"
+  fi
   sleep 2
 done
 
 if [[ "$health" != "healthy" ]]; then
-  "${compose[@]}" logs --tail 80 edgeever >&2 || true
   fail "container did not become healthy (status: ${health:-unknown})"
 fi
 
-printf '\nEdgeEver is ready.\n'
-printf 'URL: http://<server-ip>:%s\n' "$port"
-printf 'Username: %s\n' "$username"
+running_image="$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+log INFO "Running image: ${running_image:-$image:$version}"
+log SUCCESS "EdgeEver is ready ($(($(date '+%s') - start_epoch))s)"
+printf '\nConnection details\n'
+printf '  URL: http://<server-ip>:%s\n' "$port"
+printf '  Username: %s\n' "$username"
 if [[ "$generated_password" == true ]]; then
-  printf 'Password: %s\n' "$password"
+  printf '  Password: %s\n' "$password"
 else
-  printf 'Password: unchanged (stored in %s)\n' "$env_file"
+  printf '  Password: unchanged (stored in %s)\n' "$env_file"
 fi
-printf 'Install directory: %s\n' "$install_dir"
+printf '  Install directory: %s\n' "$install_dir"
+printf '\nUseful commands\n'
+printf '  cd %q\n' "$install_dir"
+printf '  docker compose ps\n'
+printf '  docker compose logs --tail 200 -f edgeever\n'

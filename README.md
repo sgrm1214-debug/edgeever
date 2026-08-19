@@ -94,15 +94,22 @@ Complete setup in 5 simple web steps:
 
 ### Option C: Docker on a VPS or NAS
 
+For a VPS or NAS outside mainland China, use the GitHub-hosted installer and
+GHCR image:
+
 ```sh
 curl -fsSL https://edgeever.org/install.sh | bash
 ```
 
-The script pulls the latest image, generates an administrator password, and starts EdgeEver with Docker Compose. Users in mainland China can use the Tencent COS and TCR mirrors:
+For a VPS or NAS located in mainland China, use the Tencent COS installer and
+Tencent TCR image for faster, more reliable downloads:
 
 ```sh
 curl -fsSL https://edgeever-installer-1256854452.cos.ap-guangzhou.myqcloud.com/install.sh | bash -s -- --mirror tcr
 ```
+
+Both commands pull the latest image, generate an administrator password, and
+start EdgeEver with Docker Compose.
 
 See the [Docker deployment guide](docs/deploy-docker.md) for manual deployment and configuration.
 

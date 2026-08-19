@@ -94,11 +94,21 @@ Cloudflare 在线部署可以选择以下两种方式之一：
 
 ### 方案三：在 VPS 或 NAS 上使用 Docker
 
+如果 VPS 或 NAS 位于中国大陆境外，使用 GitHub 托管的安装脚本和 GHCR 镜像：
+
+```sh
+curl -fsSL https://edgeever.org/install.sh | bash
+```
+
+如果 VPS 或 NAS 位于中国大陆境内，使用腾讯云 COS 安装脚本和腾讯云 TCR 镜像，
+下载速度和稳定性通常更好：
+
 ```sh
 curl -fsSL https://edgeever-installer-1256854452.cos.ap-guangzhou.myqcloud.com/install.sh | bash -s -- --mirror tcr
 ```
 
-脚本和 Compose 配置由腾讯云 COS 提供中国大陆入口，并自动从腾讯云 TCR 拉取最新镜像、生成管理员密码及启动 EdgeEver。手动部署与配置说明见 [Docker 部署文档](docs/deploy-docker.zh-CN.md)。
+两种方式都会自动拉取最新镜像、生成管理员密码，并使用 Docker Compose 启动
+EdgeEver。手动部署与配置说明见 [Docker 部署文档](docs/deploy-docker.zh-CN.md)。
 
 ---
 

@@ -95,12 +95,10 @@ Cloudflare 在线部署可以选择以下两种方式之一：
 ### 方案三：在 VPS 或 NAS 上使用 Docker
 
 ```sh
-export EDGE_EVER_VERSION=vX.Y.Z
-export EDGE_EVER_AUTH_PASSWORD='请替换为足够长的随机密码'
-docker compose up -d
+curl -fsSL https://edgeever-installer-1256854452.cos.ap-guangzhou.myqcloud.com/install.sh | bash -s -- --mirror tcr
 ```
 
-Docker 将 SQLite 与本地附件统一持久化到 `/data` 卷，也支持 S3 兼容附件存储。HTTPS、Secret、NAS 权限、备份与升级说明请查看 [Docker 部署文档](docs/deploy-docker.zh-CN.md)。
+脚本和 Compose 配置由腾讯云 COS 提供中国大陆入口，并自动从腾讯云 TCR 拉取最新镜像、生成管理员密码及启动 EdgeEver。手动部署与配置说明见 [Docker 部署文档](docs/deploy-docker.zh-CN.md)。
 
 ---
 

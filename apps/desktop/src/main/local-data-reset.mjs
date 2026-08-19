@@ -22,6 +22,14 @@ if /bin/rm -rf -- "$user_data_dir"; then
 fi
 `;
 
+export class LocalDataResetError extends Error {
+  constructor(code, message, options) {
+    super(message, options);
+    this.name = "LocalDataResetError";
+    this.code = code;
+  }
+}
+
 export const managedUserDataDirectory = (userDataDirectory, appDataDirectory) => {
   const target = resolve(userDataDirectory);
   const appData = resolve(appDataDirectory);
@@ -33,7 +41,10 @@ export const managedUserDataDirectory = (userDataDirectory, appDataDirectory) =>
     isAbsolute(relativeTarget) ||
     relativeTarget.includes(sep)
   ) {
-    throw new Error("EdgeEver local data must be a direct child of the application-data directory");
+    throw new LocalDataResetError(
+      "unsafe-data-directory",
+      "EdgeEver local data must be a direct child of the application-data directory",
+    );
   }
   return target;
 };
@@ -46,7 +57,10 @@ export const macApplicationBundlePath = (executablePath) => {
     if (parent === candidate) break;
     candidate = parent;
   }
-  throw new Error("EdgeEver must be running from a macOS application bundle");
+  throw new LocalDataResetError(
+    "application-bundle-not-found",
+    "EdgeEver must be running from a macOS application bundle",
+  );
 };
 
 export const scheduleMacLocalDataReset = async ({
@@ -73,10 +87,18 @@ export const scheduleMacLocalDataReset = async ({
       stdio: "ignore",
     },
   );
-  await new Promise((resolveSpawn, rejectSpawn) => {
-    helper.once("spawn", resolveSpawn);
-    helper.once("error", rejectSpawn);
-  });
+  try {
+    await new Promise((resolveSpawn, rejectSpawn) => {
+      helper.once("spawn", resolveSpawn);
+      helper.once("error", rejectSpawn);
+    });
+  } catch (error) {
+    throw new LocalDataResetError(
+      "helper-start-failed",
+      "EdgeEver could not start the local-data reset helper",
+      { cause: error },
+    );
+  }
   helper.unref();
   return { applicationPath, target };
 };

@@ -23,7 +23,7 @@ import { isAllowedPrintPreviewUrl } from "./window-open-policy.mjs";
 import { showWindow } from "./window-visibility.mjs";
 import { trayIconPath } from "./tray-icon.mjs";
 import { writeRichClipboard } from "./clipboard-write.mjs";
-import { scheduleMacLocalDataReset } from "./local-data-reset.mjs";
+import { LocalDataResetError, scheduleMacLocalDataReset } from "./local-data-reset.mjs";
 import { buildDesktopDiagnosticIssueUrl, normalizeDesktopDiagnostic } from "./desktop-diagnostics.mjs";
 import electronUpdater from "electron-updater";
 
@@ -828,9 +828,14 @@ app.whenReady().then(async () => {
       });
     } catch (error) {
       await writeDiagnostic("local-data-reset.schedule-failed", {
+        code: error instanceof LocalDataResetError ? error.code : "unexpected",
         message: error instanceof Error ? error.message : String(error),
+        cause: error instanceof LocalDataResetError && error.cause instanceof Error ? error.cause.message : undefined,
       });
-      throw error;
+      return {
+        scheduled: false,
+        errorCode: error instanceof LocalDataResetError ? error.code : "unexpected",
+      };
     }
 
     // Only begin shutting down once the detached reset helper has definitely

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import {
+  LocalDataResetError,
   macApplicationBundlePath,
   managedUserDataDirectory,
   scheduleMacLocalDataReset,
@@ -21,16 +22,28 @@ describe("desktop local data reset", () => {
       "/Users/example/Library/Application Support/EdgeEver/accounts",
       "/Users/example/Library/Application Support",
     )).toThrow();
-    expect(() => managedUserDataDirectory(
-      "/Users/example/Documents",
-      "/Users/example/Library/Application Support",
-    )).toThrow();
+    try {
+      managedUserDataDirectory(
+        "/Users/example/Documents",
+        "/Users/example/Library/Application Support",
+      );
+      throw new Error("expected path validation to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LocalDataResetError);
+      expect(error.code).toBe("unsafe-data-directory");
+    }
   });
 
   test("finds the enclosing macOS application bundle", () => {
     expect(macApplicationBundlePath("/Applications/EdgeEver.app/Contents/MacOS/EdgeEver"))
       .toBe("/Applications/EdgeEver.app");
-    expect(() => macApplicationBundlePath("/usr/local/bin/edgeever")).toThrow();
+    try {
+      macApplicationBundlePath("/usr/local/bin/edgeever");
+      throw new Error("expected bundle validation to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LocalDataResetError);
+      expect(error.code).toBe("application-bundle-not-found");
+    }
   });
 
   test("passes paths as shell arguments instead of interpolating them", async () => {
@@ -81,6 +94,9 @@ describe("desktop local data reset", () => {
       userDataDirectory: "/Users/example/Library/Application Support/EdgeEver",
     });
 
-    await expect(resultPromise).rejects.toThrow("spawn failed");
+    const error = await resultPromise.catch((reason) => reason);
+    expect(error).toBeInstanceOf(LocalDataResetError);
+    expect(error.code).toBe("helper-start-failed");
+    expect(error.cause?.message).toBe("spawn failed");
   });
 });

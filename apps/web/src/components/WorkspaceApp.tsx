@@ -1282,6 +1282,7 @@ export const WorkspaceApp = ({
 
   useWorkspaceSyncLifecycle({
     pendingSyncCount: syncSummary.total,
+    backgroundRefreshKey: localDataScope,
     refreshWorkspace: refreshWorkspaceFromServer,
     runQueuedSync,
     setOnline: setIsOnline,
@@ -3044,6 +3045,10 @@ export const WorkspaceApp = ({
                     replaceFocusToken={noteReplaceFocusToken}
                     saveAndSyncToken={noteSaveAndSyncToken}
                     editorModeToggleToken={noteEditorModeToggleToken}
+<<<<<<< HEAD
+=======
+                    shortcutSettings={shortcutSettings}
+>>>>>>> upstream/main
                     onSyncRequested={syncMemosManually}
                     documentActionRequest={memoDocumentActionRequest}
                     onDocumentActionConsumed={(requestId) => {

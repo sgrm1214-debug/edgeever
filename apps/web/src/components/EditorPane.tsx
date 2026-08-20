@@ -633,10 +633,9 @@ type EditorPaneProps = {
   replaceFocusToken: number;
   saveAndSyncToken: number;
   editorModeToggleToken: number;
-<<<<<<< HEAD
-=======
+
   shortcutSettings: ShortcutSettings;
->>>>>>> upstream/main
+
   onSyncRequested: () => Promise<void>;
   documentActionRequest?: MemoDocumentActionRequest | null;
   onDocumentActionConsumed?: (requestId: number) => void;

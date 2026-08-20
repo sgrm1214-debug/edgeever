@@ -21,13 +21,26 @@ jobs:
         run: git remote add upstream https://github.com/tianma-if/edgeever.git
       - name: Fetch upstream
         run: git fetch upstream
-      - name: Merge upstream/main into main
+      - name: Merge upstream/main into main (auto-resolve favoring upstream)
         run: |
           git checkout main
-          git merge upstream/main --no-edit || {
-            echo "自动合并失败，存在冲突，请手动处理";
-            exit 1;
-          }
+          if git merge upstream/main --no-edit -X theirs; then
+            echo "自动合并成功，无冲突。"
+          else
+            echo "存在冲突，自动采用上游版本解决...";
+            for f in $(git diff --name-only --diff-filter=U); do
+              if git cat-file -e upstream/main:"$f" 2>/dev/null; then
+                git checkout --theirs "$f";
+                git add "$f";
+              else
+                git rm -f "$f" 2>/dev/null || rm -f "$f";
+                git add -A -- "$f" 2>/dev/null || true;
+              fi
+            done
+            git add -A
+            git commit --no-edit
+            echo "冲突已自动解决，全部采用上游版本。"
+          fi
       - name: Force-fix D1 database_id
         run: |
           sed -i 's/database_id = "00000000-0000-0000-0000-000000000000"/database_id = "971bdff7-8066-4ea7-9dc7-0cba1f1ce396"/' wrangler.toml

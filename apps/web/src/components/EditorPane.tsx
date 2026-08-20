@@ -706,10 +706,7 @@ const RichEditorPane = ({
   replaceFocusToken,
   saveAndSyncToken,
   editorModeToggleToken,
-<<<<<<< HEAD
-=======
   shortcutSettings,
->>>>>>> upstream/main
   onSyncRequested,
   documentActionRequest,
   onDocumentActionConsumed,

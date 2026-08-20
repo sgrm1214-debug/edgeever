@@ -2,11 +2,7 @@ import { useMemo, useState } from "react";
 import { CircleCheck, Copy, ExternalLink } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
-import { UpdateAvailableDescription } from "@/components/UpdateAvailableDescription";
-=======
 import { useDeployedUpdateNotice } from "@/hooks/useDeployedUpdateNotice";
->>>>>>> upstream/main
 import { detectWebClientKind } from "@/lib/client-environment";
 import { cn } from "@/lib/utils";
 import { getReleaseTagForVersion, resolveLocalizedReleaseChanges } from "@/lib/version-check";
@@ -103,10 +99,6 @@ export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
         <div className="flex items-start gap-2 rounded-md border border-emerald-200 border-l-2 border-l-emerald-500 bg-emerald-50/40 px-3 py-2 text-slate-800" role="status">
           <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
           <div className="min-w-0 flex-1 text-xs leading-5">
-<<<<<<< HEAD
-            <div className="font-semibold">{t("systemInfo.updateAvailableTitle")}</div>
-            <div className="text-slate-500"><UpdateAvailableDescription version={latestRelease.version} /></div>
-=======
             <div className="font-semibold">{t("systemInfo.deployedUpdateTitle", { version: releaseTag?.replace(/^v/, "") ?? release.version })}</div>
             {releaseHighlights.length > 0 ? (
               <ul className="mt-1 list-disc space-y-0.5 pl-4 text-slate-600">
@@ -120,7 +112,7 @@ export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
                 i18nKey="systemInfo.clientUpdatesNote"
                 components={{
                   releases: (
-                    <a
+                    
                       className="text-slate-500 underline underline-offset-2 hover:text-emerald-700"
                       href="https://github.com/tianma-if/edgeever/releases"
                       target="_blank"
@@ -130,7 +122,6 @@ export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
                 }}
               />
             </p>
->>>>>>> upstream/main
           </div>
           <a className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-700 underline underline-offset-2 hover:text-emerald-900" href={releaseUrl} target="_blank" rel="noreferrer">
             {t("systemInfo.viewReleaseNotes")} <ExternalLink className="h-3 w-3" />

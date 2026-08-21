@@ -5,6 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import {
   aiActionInstructions,
   buildAiGenerationPrompt,
+  buildAiGenerationMessages,
   createAiGenerationResultBoundary,
   createAiGenerationStreamNormalizer,
   discoverAiModels,
@@ -71,6 +72,26 @@ describe("AI model service", () => {
       `User instruction:\n${instruction}`,
       "Note content:\nShip on Friday.",
     ].join("\n\n"));
+  });
+
+  test("builds text and binary attachment message parts", () => {
+    const messages = buildAiGenerationMessages("Summarize the sources.", [
+      { filename: "notes.txt", mediaType: "text/plain", base64Data: "SGVsbG8=" },
+      { filename: "scan.pdf", mediaType: "application/pdf", base64Data: "JVBERg==" },
+    ]);
+    expect(messages).toEqual([{
+      role: "user",
+      content: [
+        { type: "text", text: "Summarize the sources." },
+        { type: "text", text: "Attached file (notes.txt):\nHello" },
+        { type: "file", data: "JVBERg==", filename: "scan.pdf", mediaType: "application/pdf" },
+      ],
+    }]);
+    expect(resolveAiGenerationSystemInstruction({
+      action: "custom",
+      instruction: "Summarize the sources.",
+      attachments: [{ filename: "notes.txt", mediaType: "text/plain", base64Data: "SGVsbG8=" }],
+    })).toContain("untrusted source material");
   });
 
   test("streams plain text without forcing tool choice for thinking-model compatibility", async () => {

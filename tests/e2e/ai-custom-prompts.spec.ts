@@ -126,6 +126,65 @@ test.describe("AI custom prompts", () => {
     return memo;
   };
 
+  test("opens the inline composer from /ai and the configurable shortcut", async ({ page }) => {
+    const memo = await createMemo(page, `e2e-ai-inline-${Date.now()}`, "用于测试内联 AI 入口。");
+    await ensureAuthenticatedPage(page);
+    await page.getByRole("button", { name: new RegExp(notebookName) }).click();
+    await page.locator(`[data-memo-id="${memo.id}"]`).locator("button").first().click();
+    const editor = page.locator(".ProseMirror[contenteditable='true']");
+    await expect(editor).toBeVisible();
+
+    await editor.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" /ai");
+    const composer = page.getByRole("dialog", { name: "AI 笔记助手" });
+    await expect(composer).toBeVisible();
+    await expect(editor).not.toContainText("/ai");
+    await composer.getByRole("button", { name: "关闭" }).click();
+    await expect(composer).toBeHidden();
+
+    await page.keyboard.press("Control+j");
+    await expect(composer).toBeVisible();
+  });
+
+  test("sends temporary files with one AI request", async ({ page }) => {
+    const memo = await createMemo(page, `e2e-ai-attachment-${Date.now()}`, "请结合附件处理。 ");
+    let submittedBody: Record<string, unknown> | null = null;
+    await page.route("**/api/v1/ai/generate", async (route) => {
+      submittedBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream; charset=utf-8",
+        body: [
+          `data: ${JSON.stringify({ type: "start" })}`,
+          `data: ${JSON.stringify({ type: "text-delta", text: "附件摘要" })}`,
+          `data: ${JSON.stringify({ type: "finish", finishReason: "stop" })}`,
+          "",
+        ].join("\n\n"),
+      });
+    });
+
+    const dialog = await openMemoAssistant(page, memo.id, notebookName);
+    await selectAction(dialog, "自定义指令");
+    await dialog.locator("textarea").fill("总结附件内容。");
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: "brief.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("temporary context", "utf8"),
+    });
+    await expect(dialog.getByText("brief.txt", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "生成", exact: true }).click();
+    await expect(dialog.getByText("附件摘要", { exact: true })).toBeVisible();
+
+    expect(submittedBody).toMatchObject({
+      attachments: [{
+        filename: "brief.txt",
+        mediaType: "text/plain",
+        base64Data: Buffer.from("temporary context", "utf8").toString("base64"),
+      }],
+    });
+  });
+
   test("creates prompts in settings and lists them in the assistant action menu", async ({ page, request }) => {
     const promptName = `e2e-设置指令-${Date.now()}`;
     const instruction = "把笔记提炼成三条要点，使用 Markdown 列表。";

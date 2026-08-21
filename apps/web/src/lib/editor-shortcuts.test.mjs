@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { saveAndSyncEditor } from "./editor-shortcuts.ts";
+import { getAiSlashCommandStart, saveAndSyncEditor } from "./editor-shortcuts.ts";
 
 describe("editor shortcut actions", () => {
+  test("recognizes /ai only at a text boundary", () => {
+    expect(getAiSlashCommandStart({ caretPosition: 2, insertedText: "i", textBefore: "/a" })).toBe(0);
+    expect(getAiSlashCommandStart({ caretPosition: 8, insertedText: "I", textBefore: "hello /a" })).toBe(6);
+    expect(getAiSlashCommandStart({ caretPosition: 5, insertedText: "i", textBefore: "x/a" })).toBeNull();
+    expect(getAiSlashCommandStart({ caretPosition: 2, insertedText: "x", textBefore: "/a" })).toBeNull();
+  });
+
   test("saves dirty editor content before starting sync", async () => {
     const calls = [];
 

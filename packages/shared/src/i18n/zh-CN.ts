@@ -581,12 +581,10 @@ export const zhCN = {
     browserMode: "浏览器",
     unknown: "未知",
     copy: "复制信息",
-
     deployedUpdateTitle: "云端实例已自动更新至 v{{version}}",
     releaseNotesUnavailable: "本次构建未包含更新摘要，可查看完整 Release 说明。",
     clientUpdatesNote: "桌面端可前往 <releases>Releases</releases> 下载更新，移动端请通过对应的应用商店更新。",
     viewReleaseNotes: "完整说明",
-
     desktopUpdateDownloading: "正在下载更新…",
     desktopUpdateReady: "更新已下载完成",
     desktopUpdateDownload: "下载更新",

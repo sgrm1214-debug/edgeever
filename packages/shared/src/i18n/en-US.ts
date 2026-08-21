@@ -581,12 +581,10 @@ export const enUS = {
     browserMode: "Browser",
     unknown: "Unknown",
     copy: "Copy info",
-
     deployedUpdateTitle: "Cloud instance was automatically updated to v{{version}}",
     releaseNotesUnavailable: "This build does not include an update summary. You can view the full Release notes.",
     clientUpdatesNote: "Download desktop updates from <releases>Releases</releases>, or update mobile apps through the corresponding app store.",
     viewReleaseNotes: "Full notes",
-
     desktopUpdateDownloading: "Downloading update…",
     desktopUpdateReady: "Update downloaded",
     desktopUpdateDownload: "Download update",

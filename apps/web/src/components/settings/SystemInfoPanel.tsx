@@ -112,7 +112,7 @@ export const SystemInfoPanel = ({ active = true }: { active?: boolean }) => {
                 i18nKey="systemInfo.clientUpdatesNote"
                 components={{
                   releases: (
-<a                    
+                    <a
                       className="text-slate-500 underline underline-offset-2 hover:text-emerald-700"
                       href="https://github.com/tianma-if/edgeever/releases"
                       target="_blank"

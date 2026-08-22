@@ -81,6 +81,15 @@ describe("Docker release contract", () => {
     expect(workflow).toContain('gh release view "${RELEASE_TAG}"');
     expect(workflow).not.toContain('releases/tags/${RELEASE_TAG}');
     expect(workflow).toContain("docker logout ghcr.io");
+    expect(workflow).toContain("TCR_IMAGE_NAME: ccr.ccs.tencentyun.com/edgeever/edgeever");
+    expect(workflow).toContain("secrets.TENCENT_TCR_USERNAME");
+    expect(workflow).toContain("secrets.TENCENT_TCR_PASSWORD");
+    expect(workflow).toContain('echo "${TCR_IMAGE_NAME}:${RELEASE_TAG}"');
+    expect(workflow).toContain('echo "${TCR_IMAGE_NAME}:latest"');
+    expect(workflow).toContain('echo "${TCR_IMAGE_NAME}:sha-${short_sha}"');
+    expect(workflow).toContain('docker logout ccr.ccs.tencentyun.com');
+    expect(workflow).toContain('test "${ghcr_digest}" = "${tcr_digest}"');
+    expect(workflow).toContain('for image in "${GHCR_IMAGE_NAME}" "${TCR_IMAGE_NAME}"');
     expect(workflow).toContain("docker buildx imagetools inspect");
   });
 });

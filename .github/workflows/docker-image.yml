@@ -53,7 +53,8 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: ghcr.io/tianma-if/edgeever
+  GHCR_IMAGE_NAME: ghcr.io/tianma-if/edgeever
+  TCR_IMAGE_NAME: ccr.ccs.tencentyun.com/edgeever/edgeever
 
 jobs:
   container-test:
@@ -139,9 +140,12 @@ jobs:
             fi
             {
               echo "tags<<EOF"
-              echo "${IMAGE_NAME}:${RELEASE_TAG}"
-              echo "${IMAGE_NAME}:${version}"
-              echo "${IMAGE_NAME}:latest"
+              echo "${GHCR_IMAGE_NAME}:${RELEASE_TAG}"
+              echo "${GHCR_IMAGE_NAME}:${version}"
+              echo "${GHCR_IMAGE_NAME}:latest"
+              echo "${TCR_IMAGE_NAME}:${RELEASE_TAG}"
+              echo "${TCR_IMAGE_NAME}:${version}"
+              echo "${TCR_IMAGE_NAME}:latest"
               echo "EOF"
               echo "version=${version}"
               echo "audit_tag=${RELEASE_TAG}"
@@ -150,8 +154,10 @@ jobs:
             short_sha="${GITHUB_SHA:0:12}"
             {
               echo "tags<<EOF"
-              echo "${IMAGE_NAME}:main"
-              echo "${IMAGE_NAME}:sha-${short_sha}"
+              echo "${GHCR_IMAGE_NAME}:main"
+              echo "${GHCR_IMAGE_NAME}:sha-${short_sha}"
+              echo "${TCR_IMAGE_NAME}:main"
+              echo "${TCR_IMAGE_NAME}:sha-${short_sha}"
               echo "EOF"
               echo "version=main"
               echo "audit_tag=main"
@@ -171,6 +177,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Sign in to Tencent Cloud Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ccr.ccs.tencentyun.com
+          username: ${{ secrets.TENCENT_TCR_USERNAME }}
+          password: ${{ secrets.TENCENT_TCR_PASSWORD }}
+
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
@@ -185,10 +198,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify anonymous image access
+      - name: Verify mirrored anonymous image access
         run: |
           docker logout ghcr.io
-          docker buildx imagetools inspect "${IMAGE_NAME}:${{ steps.image.outputs.audit_tag }}"
+          docker logout ccr.ccs.tencentyun.com
+          ghcr_inspect="$(docker buildx imagetools inspect "${GHCR_IMAGE_NAME}:${{ steps.image.outputs.audit_tag }}")"
+          tcr_inspect="$(docker buildx imagetools inspect "${TCR_IMAGE_NAME}:${{ steps.image.outputs.audit_tag }}")"
+          ghcr_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${ghcr_inspect}" | head -n 1)"
+          tcr_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${tcr_inspect}" | head -n 1)"
+          test -n "${ghcr_digest}"
+          test "${ghcr_digest}" = "${tcr_digest}"
+          for image in "${GHCR_IMAGE_NAME}" "${TCR_IMAGE_NAME}"; do
+            docker buildx imagetools inspect --raw "${image}:${{ steps.image.outputs.audit_tag }}" |
+              jq -e '([.manifests[].platform.architecture] | index("amd64") != null) and ([.manifests[].platform.architecture] | index("arm64") != null)'
+          done
 
   release-audit:
     if: github.repository == 'tianma-if/edgeever' && github.event_name == 'release'
@@ -200,11 +223,19 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          release_inspect="$(docker buildx imagetools inspect "${IMAGE_NAME}:${RELEASE_TAG}")"
-          latest_inspect="$(docker buildx imagetools inspect "${IMAGE_NAME}:latest")"
-          release_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${release_inspect}" | head -n 1)"
-          latest_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${latest_inspect}" | head -n 1)"
-          test -n "${release_digest}"
-          test "${release_digest}" = "${latest_digest}"
-          docker buildx imagetools inspect --raw "${IMAGE_NAME}:${RELEASE_TAG}" |
-            jq -e '([.manifests[].platform.architecture] | index("amd64") != null) and ([.manifests[].platform.architecture] | index("arm64") != null)'
+          expected_digest=""
+          for image in "${GHCR_IMAGE_NAME}" "${TCR_IMAGE_NAME}"; do
+            release_inspect="$(docker buildx imagetools inspect "${image}:${RELEASE_TAG}")"
+            latest_inspect="$(docker buildx imagetools inspect "${image}:latest")"
+            release_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${release_inspect}" | head -n 1)"
+            latest_digest="$(sed -n 's/^Digest:[[:space:]]*//p' <<<"${latest_inspect}" | head -n 1)"
+            test -n "${release_digest}"
+            test "${release_digest}" = "${latest_digest}"
+            if [[ -z "${expected_digest}" ]]; then
+              expected_digest="${release_digest}"
+            else
+              test "${release_digest}" = "${expected_digest}"
+            fi
+            docker buildx imagetools inspect --raw "${image}:${RELEASE_TAG}" |
+              jq -e '([.manifests[].platform.architecture] | index("amd64") != null) and ([.manifests[].platform.architecture] | index("arm64") != null)'
+          done

@@ -29,3 +29,36 @@ export const getAiSlashCommandStart = ({
 
   return caretPosition - 2;
 };
+
+export const shouldOpenAiFromSpace = ({
+  altKey,
+  ctrlKey,
+  isComposing,
+  isEmptyParagraph,
+  key,
+  keyCode,
+  metaKey,
+  repeat,
+  selectionEmpty,
+  shiftKey,
+}: {
+  altKey: boolean;
+  ctrlKey: boolean;
+  isComposing: boolean;
+  isEmptyParagraph: boolean;
+  key: string;
+  keyCode: number;
+  metaKey: boolean;
+  repeat: boolean;
+  selectionEmpty: boolean;
+  shiftKey: boolean;
+}) => key === " "
+  && !altKey
+  && !ctrlKey
+  && !metaKey
+  && !shiftKey
+  && !repeat
+  && !isComposing
+  && keyCode !== 229
+  && selectionEmpty
+  && isEmptyParagraph;

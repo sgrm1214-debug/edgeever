@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Check, Copy, FileText, Library, Loader2, Paperclip, PenLine, RefreshCw, Sparkles, Square, Trash2, X } from "lucide-react";
@@ -49,6 +49,13 @@ import { cn } from "@/lib/utils";
 
 const FREEFORM_VALUE = "custom";
 const PROMPT_VALUE_PREFIX = "prompt:";
+const AI_ASSISTANT_LAYER_SELECTOR = '[data-edgeever-ai-assistant-layer="true"]';
+
+export const isAiAssistantPointerTarget = (target: EventTarget | null, panel: HTMLElement | null) => {
+  if (!(target instanceof Node)) return false;
+  if (panel?.contains(target)) return true;
+  return target instanceof Element && Boolean(target.closest(AI_ASSISTANT_LAYER_SELECTOR));
+};
 
 const promptSelectValue = (id: string) => `${PROMPT_VALUE_PREFIX}${id}`;
 
@@ -104,12 +111,18 @@ export const AiAssistantDialog = ({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isReadingAttachments, setIsReadingAttachments] = useState(false);
   const [initializedForOpen, setInitializedForOpen] = useState(false);
+  const [panelElement, setPanelElement] = useState<HTMLElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const instructionRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentReadIdRef = useRef(0);
+  const customInstructionEditedRef = useRef(false);
   const lastRequestRef = useRef<Parameters<typeof api.streamAiGeneration>[0] | null>(null);
+  const assignPanelRef = useCallback((node: HTMLElement | null) => {
+    panelRef.current = node;
+    setPanelElement(node);
+  }, []);
 
   const promptsQuery = useQuery({
     queryKey: ["ai-prompts", i18n.resolvedLanguage],
@@ -156,12 +169,15 @@ export const AiAssistantDialog = ({
     setAttachmentError(null);
     setIsReadingAttachments(false);
     setInitializedForOpen(false);
+    customInstructionEditedRef.current = false;
     lastRequestRef.current = null;
   }, [defaultAction, defaultTargetLanguage, hasSelection, open]);
 
   useEffect(() => {
     if (!open || initializedForOpen || promptsQuery.isLoading) return;
-    if (customInstruction.trim()) {
+    if (customInstructionEditedRef.current || customInstruction.trim()) {
+      setSelectedPromptId(null);
+      setAction("custom");
       setInitializedForOpen(true);
       return;
     }
@@ -182,9 +198,7 @@ export const AiAssistantDialog = ({
     if (!open) return;
     const frame = window.requestAnimationFrame(() => instructionRef.current?.focus());
     const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node) || panelRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest('[data-radix-popper-content-wrapper], [role="dialog"]')) return;
+      if (isAiAssistantPointerTarget(event.target, panelRef.current)) return;
       onOpenChange(false);
     };
     window.addEventListener("pointerdown", handlePointerDown);
@@ -210,6 +224,7 @@ export const AiAssistantDialog = ({
   };
 
   const handleActionChange = (value: string) => {
+    customInstructionEditedRef.current = false;
     if (value === FREEFORM_VALUE) {
       setAction("custom");
       setSelectedPromptId(null);
@@ -260,18 +275,27 @@ export const AiAssistantDialog = ({
     }
   };
 
-  const generate = () => runGeneration(buildAiAssistantRequest({
-    action: effectiveActionKey,
-    contentMarkdown: sourceMarkdown,
-    customInstruction,
-    locale: i18n.resolvedLanguage,
-    parameterKind: selectedPrompt ? effectiveParameterKind : undefined,
-    promptId: selectedPrompt?.id,
-    targetLanguage,
-    title,
-    tone,
-    attachments: attachments.map(({ byteLength: _byteLength, ...attachment }) => attachment),
-  }));
+  const generate = () => {
+    const currentInstruction = instructionRef.current?.value ?? customInstruction;
+    if (!selectedPrompt && effectiveActionKey === "custom" && !currentInstruction.trim()) {
+      setError(t("aiAssistant.customInstructionRequired"));
+      instructionRef.current?.focus();
+      return;
+    }
+
+    return runGeneration(buildAiAssistantRequest({
+      action: effectiveActionKey,
+      contentMarkdown: sourceMarkdown,
+      customInstruction: currentInstruction,
+      locale: i18n.resolvedLanguage,
+      parameterKind: selectedPrompt ? effectiveParameterKind : undefined,
+      promptId: selectedPrompt?.id,
+      targetLanguage,
+      title,
+      tone,
+      attachments: attachments.map(({ byteLength: _byteLength, ...attachment }) => attachment),
+    }));
+  };
 
   const addAttachments = async (files: File[]) => {
     if (!files.length) return;
@@ -356,11 +380,7 @@ export const AiAssistantDialog = ({
   const isFreeformCustom = !selectedPromptId && action === "custom";
   const canSaveAsPrompt = isFreeformCustom && customInstruction.trim().length > 0;
   const generateDisabled = isGenerating
-    || isReadingAttachments
-    || (isFreeformCustom && !customInstruction.trim())
-    || (!isFreeformCustom && !selectedPromptId)
-    || (promptNeedsTargetLanguage(effectiveParameterKind) && !targetLanguage)
-    || (promptNeedsTone(effectiveParameterKind) && !tone);
+    || isReadingAttachments;
 
   const panelStyle = useMemo<CSSProperties>(() => {
     const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
@@ -379,9 +399,9 @@ export const AiAssistantDialog = ({
     <>
       {open && typeof document !== "undefined" ? createPortal(
         <section
-          ref={panelRef}
+          ref={assignPanelRef}
           aria-label={t("aiAssistant.title")}
-          className="fixed z-[70] max-h-[70dvh] w-[min(36rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-950/5"
+          className="fixed z-[70] flex max-h-[70dvh] w-[min(36rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xl ring-1 ring-slate-950/5"
           role="dialog"
           style={panelStyle}
           onKeyDown={(event) => {
@@ -392,7 +412,7 @@ export const AiAssistantDialog = ({
             }
           }}
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <Sparkles className="h-5 w-5 shrink-0 text-emerald-600" />
               <span className="truncate text-sm font-semibold text-slate-950">{t("aiAssistant.title")}</span>
@@ -404,7 +424,8 @@ export const AiAssistantDialog = ({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="grid gap-4">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="grid gap-4">
             {hasSelection ? (
               <p className="max-h-12 overflow-hidden whitespace-pre-wrap border-l-2 border-emerald-200 pl-3 text-xs leading-5 text-slate-500">
                 {selectionMarkdown}
@@ -427,12 +448,18 @@ export const AiAssistantDialog = ({
                   </button>
                 ) : null}
               </div>
-              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <Select value={selectValue} onValueChange={handleActionChange}>
-                  <SelectTrigger aria-label={t("aiAssistant.actionLabel")} className="h-10 w-full min-w-0 sm:col-span-2">
+                  <SelectTrigger aria-label={t("aiAssistant.actionLabel")} className="h-10 w-full min-w-0">
                     <SelectValue placeholder={t("aiAssistant.actionLabel")} />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent
+                    className="z-[80] max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                    collisionBoundary={panelElement}
+                    collisionPadding={8}
+                    sideOffset={6}
+                    data-edgeever-ai-assistant-layer="true"
+                  >
                     {prompts.length ? (
                       <SelectGroup>
                         <SelectLabel>{t("aiAssistant.myPrompts")}</SelectLabel>
@@ -448,23 +475,27 @@ export const AiAssistantDialog = ({
                     </SelectGroup>
                   </SelectContent>
                 </Select>
-                <div className="grid min-w-0 grid-cols-2 gap-2">
+                <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-[8rem_7rem]">
                   <Button
                     type="button"
                     variant={!selectedPromptId && action === "custom" ? "solid" : "outline"}
-                    className="h-10 min-w-0 w-full gap-1 px-2 text-xs font-normal text-slate-600"
+                    className="h-10 min-w-0 w-full gap-1 whitespace-nowrap px-3 text-xs font-normal text-slate-600"
                     onClick={() => handleActionChange(FREEFORM_VALUE)}
                   >
-                    <PenLine className="h-3.5 w-3.5" />
+                    <PenLine className="h-3.5 w-3.5 shrink-0" />
                     {t("aiAssistant.useCustom")}
                   </Button>
                   {isGenerating ? (
-                    <Button type="button" variant="solid" className="h-10 min-w-0 w-full gap-1.5 px-2 text-sm font-semibold" onClick={() => controllerRef.current?.abort()}>
-                      <Square className="h-3.5 w-3.5" />{t("aiAssistant.stop")}
+                    <Button type="button" variant="solid" className="h-10 min-w-0 w-full gap-1.5 whitespace-nowrap px-3 text-sm font-semibold" onClick={() => controllerRef.current?.abort()}>
+                      <Square className="h-3.5 w-3.5 shrink-0" />{t("aiAssistant.stop")}
                     </Button>
                   ) : (
-                    <Button type="button" variant="solid" className="h-10 min-w-0 w-full gap-1.5 px-2 text-sm font-semibold" disabled={generateDisabled} onClick={() => void generate()}>
-                      <Sparkles className="h-4 w-4" />{t("aiAssistant.generate")}
+                    <Button type="button" variant="solid" className="h-10 min-w-0 w-full gap-1.5 whitespace-nowrap px-3 text-sm font-semibold" disabled={generateDisabled} onClick={() => void generate()}>
+                      <Sparkles className="h-4 w-4 shrink-0" />
+                      {t("aiAssistant.generate")}
+                      <kbd aria-hidden="true" className="ml-0.5 rounded bg-white/10 px-1 py-0.5 text-[10px] font-medium leading-none text-white/65">
+                        ↵
+                      </kbd>
                     </Button>
                   )}
                 </div>
@@ -480,7 +511,13 @@ export const AiAssistantDialog = ({
                   <SelectTrigger aria-label={t("aiAssistant.targetLanguage")} className="h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent
+                    className="z-[80] max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                    collisionBoundary={panelElement}
+                    collisionPadding={8}
+                    sideOffset={6}
+                    data-edgeever-ai-assistant-layer="true"
+                  >
                     {targetLanguages.map((language) => (
                       <SelectItem key={language} value={language}>{t(`aiAssistant.targetLanguages.${language}`)}</SelectItem>
                     ))}
@@ -496,7 +533,13 @@ export const AiAssistantDialog = ({
                   clearResult();
                 }}>
                   <SelectTrigger aria-label={t("aiAssistant.tone")} className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectContent
+                    className="z-[80] max-h-[min(20rem,var(--radix-select-content-available-height))]"
+                    collisionBoundary={panelElement}
+                    collisionPadding={8}
+                    sideOffset={6}
+                    data-edgeever-ai-assistant-layer="true"
+                  >
                     {aiTones.map((item) => <SelectItem key={item} value={item}>{t(`aiAssistant.tones.${item}`)}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -510,12 +553,31 @@ export const AiAssistantDialog = ({
                   className="min-h-24 resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15"
                   value={customInstruction}
                   onChange={(event) => {
-                    if (selectedPromptId) {
-                      setSelectedPromptId(null);
-                      setAction("custom");
-                    }
+                    customInstructionEditedRef.current = true;
+                    setSelectedPromptId(null);
+                    setAction("custom");
                     setCustomInstruction(event.target.value);
                     clearResult();
+                  }}
+                  onCompositionEnd={(event) => {
+                    customInstructionEditedRef.current = true;
+                    setSelectedPromptId(null);
+                    setAction("custom");
+                    setCustomInstruction(event.currentTarget.value);
+                    clearResult();
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key !== "Enter"
+                      || event.shiftKey
+                      || event.nativeEvent.isComposing
+                      || isGenerating
+                      || isReadingAttachments
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    void generate();
                   }}
                   placeholder={t("aiAssistant.customInstructionPlaceholder")}
                   maxLength={2_000}
@@ -627,9 +689,10 @@ export const AiAssistantDialog = ({
                 </div>
               </div>
             ) : null}
+            </div>
           </div>
           {output ? (
-            <div className="mt-4 flex flex-wrap justify-between gap-2">
+            <div className="mt-3 flex shrink-0 flex-wrap justify-between gap-2 border-t border-slate-200 pt-3" data-ai-assistant-actions>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" disabled={isGenerating} onClick={() => void copy()}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{t(copied ? "aiAssistant.copied" : "aiAssistant.copy")}</Button>
                 <Button type="button" variant="outline" disabled={isGenerating} onClick={() => { setOutput(""); setError(null); }}><Trash2 className="h-4 w-4" />{t("aiAssistant.discard")}</Button>
@@ -659,7 +722,7 @@ export const AiAssistantDialog = ({
           createPromptMutation.reset();
         }
       }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" data-edgeever-ai-assistant-layer="true">
           <form
             className="grid gap-4"
             onSubmit={(event: FormEvent) => {

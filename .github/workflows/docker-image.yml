@@ -107,7 +107,7 @@ jobs:
     needs: container-test
     name: Publish official multi-platform image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: write
       packages: write
@@ -143,9 +143,11 @@ jobs:
               echo "${GHCR_IMAGE_NAME}:${RELEASE_TAG}"
               echo "${GHCR_IMAGE_NAME}:${version}"
               echo "${GHCR_IMAGE_NAME}:latest"
-              echo "${TCR_IMAGE_NAME}:${RELEASE_TAG}"
-              echo "${TCR_IMAGE_NAME}:${version}"
-              echo "${TCR_IMAGE_NAME}:latest"
+              echo "EOF"
+              echo "mirror_tags<<EOF"
+              echo "${RELEASE_TAG}"
+              echo "${version}"
+              echo "latest"
               echo "EOF"
               echo "version=${version}"
               echo "audit_tag=${RELEASE_TAG}"
@@ -156,8 +158,10 @@ jobs:
               echo "tags<<EOF"
               echo "${GHCR_IMAGE_NAME}:main"
               echo "${GHCR_IMAGE_NAME}:sha-${short_sha}"
-              echo "${TCR_IMAGE_NAME}:main"
-              echo "${TCR_IMAGE_NAME}:sha-${short_sha}"
+              echo "EOF"
+              echo "mirror_tags<<EOF"
+              echo "main"
+              echo "sha-${short_sha}"
               echo "EOF"
               echo "version=main"
               echo "audit_tag=main"
@@ -197,6 +201,17 @@ jobs:
             org.opencontainers.image.version=${{ steps.image.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Mirror image to Tencent Cloud Container Registry
+        env:
+          MIRROR_TAGS: ${{ steps.image.outputs.mirror_tags }}
+        run: |
+          while IFS= read -r image_tag; do
+            [[ -n "${image_tag}" ]] || continue
+            docker buildx imagetools create \
+              --tag "${TCR_IMAGE_NAME}:${image_tag}" \
+              "${GHCR_IMAGE_NAME}:${image_tag}"
+          done <<< "${MIRROR_TAGS}"
 
       - name: Verify mirrored anonymous image access
         run: |

@@ -208,9 +208,19 @@ jobs:
         run: |
           while IFS= read -r image_tag; do
             [[ -n "${image_tag}" ]] || continue
-            docker buildx imagetools create \
-              --tag "${TCR_IMAGE_NAME}:${image_tag}" \
-              "${GHCR_IMAGE_NAME}:${image_tag}"
+            for attempt in 1 2 3; do
+              if docker buildx imagetools create \
+                --tag "${TCR_IMAGE_NAME}:${image_tag}" \
+                "${GHCR_IMAGE_NAME}:${image_tag}"; then
+                break
+              fi
+              if [[ "${attempt}" -eq 3 ]]; then
+                echo "Failed to mirror ${image_tag} after ${attempt} attempts" >&2
+                exit 1
+              fi
+              echo "Mirror attempt ${attempt} failed for ${image_tag}; retrying" >&2
+              sleep "$((attempt * 15))"
+            done
           done <<< "${MIRROR_TAGS}"
 
       - name: Verify mirrored anonymous image access

@@ -1,6 +1,7 @@
 import { Previewer } from "pagedjs";
 import hljs from "highlight.js/lib/common";
 import { renderMermaidSVG, THEMES } from "beautiful-mermaid";
+import { MERMAID_THEME_PALETTES } from "@/components/ThemeProvider";
 import {
   NOTE_PRINT_MESSAGE,
   NOTE_PRINT_READY_MESSAGE,
@@ -39,6 +40,7 @@ const renderMermaidBlocks = async (root: HTMLElement) => {
     try {
       const svg = renderMermaidSVG(source, {
         ...THEMES["zinc-light"],
+        ...MERMAID_THEME_PALETTES["zinc-light"],
         transparent: true,
         font: PRINT_FONT_FAMILY,
         padding: 24,

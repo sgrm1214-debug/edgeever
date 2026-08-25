@@ -8,6 +8,7 @@ import {
   type NotePrintPayload,
 } from "@/lib/note-print";
 import { getMessageTargetOrigin } from "@/lib/app-page-path";
+import { withEnvironmentTitlePrefix } from "@/lib/environment-title";
 import katexStyles from "katex/dist/katex.min.css?inline";
 import printStyles from "@/styles/note-print.css?inline";
 import "@fontsource-variable/noto-sans-sc/wght.css";
@@ -110,7 +111,10 @@ const buildSource = (payload: NotePrintPayload) => {
 
 const renderPreview = async (payload: NotePrintPayload) => {
   document.documentElement.lang = payload.language;
-  document.title = `${payload.title} · EdgeEver`;
+  document.title = withEnvironmentTitlePrefix(`${payload.title} · EdgeEver`, {
+    development: import.meta.env.DEV,
+    profile: __EDGEEVER_DEVELOPMENT_PROFILE__,
+  });
   setText(status, payload.labels.preparing);
   setText(hint, "");
   setText(closeButton, payload.labels.close);

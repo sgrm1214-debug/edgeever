@@ -1,11 +1,6 @@
 name: Build Tencent TCR image through CNB
 
 on:
-  workflow_run:
-    workflows:
-      - Build and publish Docker image
-    types:
-      - completed
   release:
     types:
       - published
@@ -29,17 +24,7 @@ concurrency:
 
 jobs:
   sync-source:
-    if: >-
-      github.repository == 'tianma-if/edgeever' &&
-      (
-        github.event_name == 'release' ||
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event_name == 'workflow_run' &&
-          github.event.workflow_run.conclusion == 'success' &&
-          github.event.workflow_run.event == 'push'
-        )
-      )
+    if: github.repository == 'tianma-if/edgeever'
     name: Trigger asynchronous Tencent-side image build
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -49,16 +34,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_SOURCE_REF: ${{ inputs.source_ref }}
           INPUT_DESTINATION_REF: ${{ inputs.destination_ref }}
         run: |
           if [[ "${EVENT_NAME}" == "release" ]]; then
             source_ref="${RELEASE_TAG}"
             destination_ref="${RELEASE_TAG}"
-          elif [[ "${EVENT_NAME}" == "workflow_run" ]]; then
-            source_ref="${WORKFLOW_SHA}"
-            destination_ref="main"
           else
             source_ref="${INPUT_SOURCE_REF}"
             destination_ref="${INPUT_DESTINATION_REF}"

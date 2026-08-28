@@ -1,15 +1,15 @@
 {
-  "version": "1.45.2",
+  "version": "1.45.4",
   "changes": {
     "en-US": [
-      "Show actionable diagnostics when mobile sign-in fails, making instance, network, and security-policy issues easier to resolve.",
-      "Allow attachments to be deleted safely from the asset library, with recoverable retries when storage cleanup is interrupted.",
-      "Route Android app upgrades through trusted Google Play or GitHub sources instead of requesting in-app package-install permission."
+      "Cloudflare Workers Builds now safely routes the default deploy command through EdgeEver's validated database migration and deployment pipeline, with a simpler quick-start flow.",
+      "Docker self-hosted images now build correctly with the guarded Cloudflare deployment tooling included.",
+      "Self-hosting guidance now highlights free-tier capacity more clearly and includes the Telegram community channel."
     ],
     "zh-CN": [
-      "移动端登录失败时显示可操作的诊断信息，帮助定位实例、网络与安全策略问题。",
-      "支持从附件库安全删除附件，并在存储清理中断时可靠重试。",
-      "Android 应用升级改为跳转 Google Play 或 GitHub 可信渠道，不再申请应用内安装软件包权限。"
+      "Cloudflare Workers Builds 现在会将默认部署命令安全接入 EdgeEver 已验证的数据库迁移与部署流水线，并简化快速上手流程。",
+      "Docker 自托管镜像现在可在包含 Cloudflare 部署保护工具的情况下正常构建。",
+      "自托管说明现在更清晰地展示免费额度，并补充 Telegram 社区频道入口。"
     ]
   }
 }

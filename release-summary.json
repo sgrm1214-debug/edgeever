@@ -1,15 +1,15 @@
 {
-  "version": "1.45.4",
+  "version": "1.46.0",
   "changes": {
     "en-US": [
-      "Cloudflare Workers Builds now safely routes the default deploy command through EdgeEver's validated database migration and deployment pipeline, with a simpler quick-start flow.",
-      "Docker self-hosted images now build correctly with the guarded Cloudflare deployment tooling included.",
-      "Self-hosting guidance now highlights free-tier capacity more clearly and includes the Telegram community channel."
+      "Prevent one failed desktop sync item from blocking notes created on other devices; add sync details with safe retry, recovery, discard, and redacted diagnostics.",
+      "Improve the official website's product messaging, navigation reliability, accessibility, and deployment call to action.",
+      "Clarify the manual deployment guidance."
     ],
     "zh-CN": [
-      "Cloudflare Workers Builds 现在会将默认部署命令安全接入 EdgeEver 已验证的数据库迁移与部署流水线，并简化快速上手流程。",
-      "Docker 自托管镜像现在可在包含 Cloudflare 部署保护工具的情况下正常构建。",
-      "自托管说明现在更清晰地展示免费额度，并补充 Telegram 社区频道入口。"
+      "修复桌面端单个失败同步项阻断其他设备新建笔记下行同步的问题；新增同步详情，支持安全重试、恢复为新笔记、放弃本地修改和复制脱敏诊断。",
+      "优化官网产品信息、导航可靠性、无障碍体验和部署引导。",
+      "完善手动部署指引。"
     ]
   }
 }

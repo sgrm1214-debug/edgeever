@@ -89,7 +89,7 @@ Complete setup in 5 simple web steps:
 2. **Enable Actions**: Open the Fork's **Actions** tab and click **I understand my workflows, go ahead and enable them** so the GitHub Actions workflow named **Update deployed EdgeEver** can run automatically, keeping you up to date with the latest **EdgeEver** features and fixes.
 3. **Import into Cloudflare**: Log into the Cloudflare Dashboard, navigate to **Workers & Pages**, and choose to import your Fork repository.
 4. **Create Resources & Credentials**: Create D1 `edgeever` and R2 `edgeever-resources`, then set the Worker Secret `EDGE_EVER_AUTH_PASSWORD` as your admin password. The deploy command creates the bindings; do not edit Fork files.
-5. **Build & Verify**: Keep Cloudflare's default deploy command (`npx wrangler deploy`) and start the first build. Once complete, visit `/api/health` to verify a `200` response before logging in.
+5. **Build & Verify**: Start the first build after importing the repository. Once complete, visit `/api/health` to verify a `200` response before logging in.
 
 > 📖 For full step-by-step instructions and configuration details, see the [Online Deployment Guide](docs/deploy-cloudflare-button.md).
 

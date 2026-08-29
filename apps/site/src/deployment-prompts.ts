@@ -39,7 +39,7 @@ export const manualDeploymentCopy = {
       },
       {
         title: "Build & Verify",
-        body: "Keep Cloudflare's default deploy command (npx wrangler deploy) and start the first build. Once complete, visit /api/health to verify a 200 response before logging in.",
+        body: "Start the first build after importing the repository. Once complete, visit /api/health to verify a 200 response before logging in.",
       },
     ],
   },
@@ -64,7 +64,7 @@ export const manualDeploymentCopy = {
       },
       {
         title: "启动构建与验证",
-        body: "保留 Cloudflare 默认部署命令（npx wrangler deploy）并启动首次构建。部署完成后访问 /api/health，确认返回 200 即可开始使用。",
+        body: "导入仓库后直接启动首次构建。部署完成后访问 /api/health，确认返回 200 即可开始使用。",
       },
     ],
   },

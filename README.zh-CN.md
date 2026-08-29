@@ -89,7 +89,7 @@ Cloudflare 在线部署可以选择以下两种方式之一：
 2. **启用 Actions**：进入 Fork 的 **Actions** 标签页，点击 **I understand my workflows, go ahead and enable them**，确保名为 **Update deployed EdgeEver** 的 GitHub Actions 工作流能够自动运行，从而持续获得 **EdgeEver** 最新的产品特性和问题修复。
 3. **导入 Cloudflare**：登录 Cloudflare 控制台，进入 **Workers & Pages**，选择导入该 Fork 仓库。
 4. **创建资源与登录凭据**：创建 D1 `edgeever` 与 R2 `edgeever-resources`，并添加 Worker Secret `EDGE_EVER_AUTH_PASSWORD` 作为管理员登录密码。binding 由部署命令生成，不要修改 Fork 中的文件。
-5. **启动构建与验证**：保留 Cloudflare 默认部署命令（`npx wrangler deploy`）并启动首次构建。部署完成后访问 `/api/health`，确认返回 `200` 即可开始使用。
+5. **启动构建与验证**：导入仓库后直接启动首次构建。部署完成后访问 `/api/health`，确认返回 `200` 即可开始使用。
 
 > 📖 包含具体参数与构建命令的详细步骤，请查看 [在线部署完整文档](docs/deploy-cloudflare-button.zh-CN.md)。
 

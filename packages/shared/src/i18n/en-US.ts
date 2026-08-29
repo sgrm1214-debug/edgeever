@@ -170,7 +170,12 @@ export const enUS = {
       discard: "Discard local changes",
       discardTitle: "Discard these local changes?",
       discardDescription: "Content that has not been uploaded from this sync item will be permanently deleted. Other notes and cloud data are not affected.",
-      copyDiagnostics: "Copy redacted diagnostics",
+      reportIssue: "Report issue",
+      reportTitlePrefix: "[Sync] Desktop sync needs attention",
+      reportContentHeading: "What happened",
+      reportContentPrompt: "Describe what happened, what you expected, and any steps that may help reproduce the sync problem.",
+      reportDiagnosticsHeading: "Automatically captured sync diagnostics",
+      reportDiagnosticsNotice: "EdgeEver generated and redacted these diagnostics locally. Review them before submitting.",
       operations: {
         memo_create: "Create note",
         memo_update: "Update note",

@@ -2921,8 +2921,8 @@ export const WorkspaceApp = ({
                   onOpenAssets={handleOpenAssets}
                   onOpenTags={handleOpenTags}
                   onOpenTemplates={handleOpenTemplates}
-                  onOpenAiPrompts={handleOpenAiPrompts}
-                  onOpenPluginMarketplace={handleOpenPluginManager}
+                  pluginHost={pluginHost}
+                  onOpenPluginManager={handleOpenPluginManager}
                   onOpenSettings={handleOpenSettings}
                   onOpenTrash={() => {
                     navigateWorkspaceTrash();
@@ -3115,8 +3115,6 @@ export const WorkspaceApp = ({
                     refreshWorkspaceAfterImport={async () => {
                       await refreshWorkspaceFromServer("manual");
                     }}
-                    pluginHost={pluginHost}
-                    onOpenPluginMarketplace={handleOpenPluginManager}
                   />
                   ) : rightView === "plugins" ? (
                     <PluginMarketplacePane host={pluginHost} onClose={handleClosePluginMarketplace} />
@@ -3158,7 +3156,6 @@ export const WorkspaceApp = ({
                       memo={selectedMemo}
                       repository={repository}
                       pluginHost={pluginHost}
-                      onOpenPluginManager={handleOpenPluginManager}
                     onOpenAiPrompts={handleOpenAiPrompts}
                     desktopFocusMode={desktopFocusModeActive}
                     onToggleDesktopFocusMode={toggleDesktopFocusMode}

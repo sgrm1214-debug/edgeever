@@ -170,7 +170,12 @@ export const zhCN = {
       discard: "放弃本地修改",
       discardTitle: "放弃这项本地修改？",
       discardDescription: "该同步项中尚未上传的内容会被永久删除。其他笔记和云端数据不会受到影响。",
-      copyDiagnostics: "复制脱敏诊断",
+      reportIssue: "反馈问题",
+      reportTitlePrefix: "[同步] 桌面端同步需要处理",
+      reportContentHeading: "问题描述",
+      reportContentPrompt: "请补充问题现象、预期结果，以及可能有助于复现同步问题的操作步骤。",
+      reportDiagnosticsHeading: "自动采集的同步诊断",
+      reportDiagnosticsNotice: "以下诊断由 EdgeEver 在本地生成并脱敏，请在提交前检查。",
       operations: {
         memo_create: "新建笔记",
         memo_update: "更新笔记",

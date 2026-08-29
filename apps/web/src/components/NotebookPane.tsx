@@ -7,7 +7,6 @@ import {
   Plus,
   LayoutList,
   LayoutTemplate,
-  Sparkles,
   BookPlus,
   ArrowDownWideNarrow,
   Notebook as NotebookIcon,
@@ -24,7 +23,6 @@ import {
   Download,
   ExternalLink,
   RotateCcw,
-  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -53,8 +51,12 @@ import {
   writeNotebookSortPreference,
 } from "@/lib/app-helpers";
 import type { EdgeEverRepository } from "@/lib/repository";
+import type { EdgeEverPluginHost } from "@/lib/plugins/plugin-host";
 import { statusSettleMotion } from "@/lib/motion";
 import { DesktopUpdateNotice } from "./DesktopUpdateNotice";
+import { PluginToolbarMenu } from "./plugins/PluginToolbarMenu";
+
+const DesktopSyncIssuesDialog = lazy(() => import("./DesktopSyncIssuesDialog").then((module) => ({ default: module.DesktopSyncIssuesDialog })));
 
 const DesktopSyncIssuesDialog = lazy(() => import("./DesktopSyncIssuesDialog").then((module) => ({ default: module.DesktopSyncIssuesDialog })));
 
@@ -349,8 +351,8 @@ export const NotebookPane = ({
   onOpenTags,
   onOpenAssets,
   onOpenTemplates,
-  onOpenAiPrompts,
-  onOpenPluginMarketplace,
+  pluginHost,
+  onOpenPluginManager,
   onOpenTrash,
   onEmptyTrash,
   onOpenSettings,
@@ -385,8 +387,8 @@ export const NotebookPane = ({
   onOpenTags: () => void;
   onOpenAssets: () => void;
   onOpenTemplates: () => void;
-  onOpenAiPrompts: () => void;
-  onOpenPluginMarketplace: () => void;
+  pluginHost: EdgeEverPluginHost;
+  onOpenPluginManager: () => void;
   onOpenTrash: () => void;
   onEmptyTrash: () => void;
   onOpenSettings: () => void;
@@ -522,12 +524,16 @@ export const NotebookPane = ({
       </header>
 
       <TooltipProvider delayDuration={0} skipDelayDuration={0}>
-        <nav className="grid shrink-0 grid-cols-2 gap-0.5 border-b border-slate-100 px-2 py-1.5 sm:grid-cols-3 lg:grid-cols-6" aria-label={t("notebookPane.secondaryEntries")}>
+        <nav className="grid shrink-0 grid-cols-2 gap-0.5 border-b border-slate-100 px-2 py-1.5 sm:grid-cols-3 lg:grid-cols-5" aria-label={t("notebookPane.secondaryEntries")}>
           <SidebarShortcutButton icon={<Tags className="h-4 w-4" />} label={t("mobileSheets.tags")} onClick={onOpenTags} />
           <SidebarShortcutButton icon={<Archive className="h-4 w-4" />} label={t("mobileSheets.assets")} onClick={onOpenAssets} />
           {showTemplateEntry && <SidebarShortcutButton icon={<LayoutTemplate className="h-4 w-4" />} label={t("nav.templates")} onClick={onOpenTemplates} />}
-          <SidebarShortcutButton icon={<Sparkles className="h-4 w-4" />} label={t("nav.prompts")} onClick={onOpenAiPrompts} />
-          <SidebarShortcutButton icon={<Store className="h-4 w-4" />} label={t("plugins.marketplace.title")} onClick={onOpenPluginMarketplace} />
+          <PluginToolbarMenu
+            host={pluginHost}
+            onManage={onOpenPluginManager}
+            align="start"
+            className="h-9 w-full rounded-md px-0 text-slate-600"
+          />
           <SidebarTrashShortcut active={view === "trash"} onOpenTrash={onOpenTrash} onEmptyTrash={onEmptyTrash} />
         </nav>
       </TooltipProvider>

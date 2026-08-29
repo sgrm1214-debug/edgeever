@@ -238,7 +238,6 @@ import { getEditorScrollProgress, restoreEditorScrollProgress } from "./editor/e
 import { useEditorSaveStatus } from "./editor/useEditorSaveStatus";
 import { resolveEditorDraftState } from "./editor/editor-draft-state";
 import type { EdgeEverPluginHost, PluginEditorAdapter } from "@/lib/plugins/plugin-host";
-import { PluginToolbarMenu } from "@/components/plugins/PluginToolbarMenu";
 import {
   useEditorResourceActions,
   type AttachmentMenuTarget,
@@ -272,12 +271,8 @@ const IconTooltip = ({ label, children }: { label: string; children: ReactNode }
   </TooltipProvider>
 );
 
-const EmptyEditorHeader = ({ pluginHost, onOpenPluginManager }: {
-  pluginHost: EdgeEverPluginHost;
-  onOpenPluginManager: () => void;
-}) => (
+const EmptyEditorHeader = () => (
   <header className="hidden h-12 shrink-0 items-center justify-end gap-1 border-b border-slate-100 px-5 lg:flex">
-    <PluginToolbarMenu host={pluginHost} onManage={onOpenPluginManager} />
     <ThemeToggle />
   </header>
 );
@@ -701,7 +696,6 @@ type EditorPaneProps = {
   onOpenMemo?: (memoId: string) => void;
   onOpenAiPrompts?: () => void;
   pluginHost: EdgeEverPluginHost;
-  onOpenPluginManager: () => void;
 };
 
 type RichEditorPaneProps = EditorPaneProps & {
@@ -775,7 +769,6 @@ const RichEditorPane = ({
   onOpenMemo,
   onOpenAiPrompts,
   pluginHost,
-  onOpenPluginManager,
   onRequestMobileNativeEdit,
 }: RichEditorPaneProps) => {
   const { t, i18n } = useTranslation();
@@ -3857,7 +3850,7 @@ const RichEditorPane = ({
   if (isLoading && !memo) {
     return (
       <div className="flex h-full min-w-0 flex-col bg-white">
-        <EmptyEditorHeader pluginHost={pluginHost} onOpenPluginManager={onOpenPluginManager} />
+        <EmptyEditorHeader />
         {selectionActionBar}
         <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-slate-500">{t("editor.loading")}</div>
       </div>
@@ -3867,7 +3860,7 @@ const RichEditorPane = ({
   if (!memo) {
     return (
       <div className="flex h-full min-w-0 flex-col bg-white">
-        <EmptyEditorHeader pluginHost={pluginHost} onOpenPluginManager={onOpenPluginManager} />
+        <EmptyEditorHeader />
         {selectionActionBar}
         <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
           <div>
@@ -4401,7 +4394,6 @@ const RichEditorPane = ({
                 {deployedUpdateUnseen ? <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-white" /> : null}
               </Button>
             </IconTooltip>
-            <PluginToolbarMenu host={pluginHost} onManage={onOpenPluginManager} />
             <ThemeToggle />
             {!effectiveReadOnly && (
               <IconTooltip label={t("editor.save")}>

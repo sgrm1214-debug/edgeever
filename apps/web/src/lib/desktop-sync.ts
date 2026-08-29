@@ -624,7 +624,7 @@ export const recoverDesktopMemoUpdate = async (item: DesktopOutboxItem, notebook
 
 const sanitizeDesktopSyncDiagnosticError = (value: string | null | undefined) => value
   ? value
-      .slice(0, 500)
+      .slice(0, 200)
       .replace(/https?:\/\/[^\s)\]}]+/gi, "[redacted-url]")
       .replace(/\b(?:memo|notebook|template|resource)_[A-Za-z0-9_-]+\b/g, "[redacted-id]")
       .replace(/\/Users\/[^/\s]+/g, "/Users/[redacted]")
@@ -633,8 +633,9 @@ const sanitizeDesktopSyncDiagnosticError = (value: string | null | undefined) =>
 
 export const createDesktopSyncDiagnosticText = (items: DesktopOutboxItem[]) => JSON.stringify({
   generatedAt: new Date().toISOString(),
-  items: items.map((item) => ({
-    id: item.id,
+  totalItemCount: items.length,
+  includedItemCount: Math.min(items.length, 5),
+  items: items.slice(0, 5).map((item) => ({
     kind: item.kind,
     status: item.status,
     attemptCount: item.attemptCount,

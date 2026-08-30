@@ -76,7 +76,7 @@ jobs:
           fetch-depth: 0
 
       - name: Build local image
-        run: docker build --tag edgeever:ci .
+        run: docker build --build-arg EDGE_EVER_BUILD_ID="${GITHUB_SHA}" --tag edgeever:ci .
 
       - name: Start container
         run: |
@@ -183,6 +183,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          build-args: |
+            EDGE_EVER_BUILD_ID=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.image.outputs.tags }}

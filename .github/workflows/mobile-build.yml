@@ -119,7 +119,9 @@ jobs:
           fi
 
           mapfile -t current_assets < <(
-            gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${CURRENT_TAG}" \
+            gh release view "$CURRENT_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
               --jq '.assets[].name'
           )
           asset_ready="$(

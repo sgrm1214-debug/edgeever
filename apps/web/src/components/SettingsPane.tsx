@@ -45,8 +45,6 @@ interface SettingsPaneProps {
   onOpenAiPrompts: () => void;
   imageCompressionEnabled: boolean;
   onImageCompressionChange: (enabled: boolean) => void;
-  syncIntervalMs: number | null;
-  onSyncIntervalChange: (intervalMs: number | null) => void;
   shortcutSettings: ShortcutSettings;
   onShortcutSettingsChange: (settings: ShortcutSettings) => void;
   editorContentAlignment: EditorContentAlignment;
@@ -86,8 +84,6 @@ export const SettingsPane = ({
   onOpenAiPrompts,
   imageCompressionEnabled,
   onImageCompressionChange,
-  syncIntervalMs,
-  onSyncIntervalChange,
   shortcutSettings,
   onShortcutSettingsChange,
   editorContentAlignment,
@@ -208,8 +204,6 @@ export const SettingsPane = ({
             <PreferenceCard
               imageCompressionEnabled={imageCompressionEnabled}
               onImageCompressionChange={onImageCompressionChange}
-              syncIntervalMs={syncIntervalMs}
-              onSyncIntervalChange={onSyncIntervalChange}
               shortcutSettings={shortcutSettings}
               onShortcutSettingsChange={onShortcutSettingsChange}
               editorContentAlignment={editorContentAlignment}

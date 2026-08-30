@@ -1,6 +1,7 @@
 import {
   getMemoSyncBaseConflictDetails,
   getSyncRetryAt,
+  hasSyncStateReset,
   isMemoSyncBaseCurrent,
   type DesktopOutboxItem,
   type DesktopRpcParams,
@@ -428,9 +429,7 @@ const applyBootstrap = async (page: SyncBootstrapResponse) => {
 export const hasDesktopSyncStateReset = (
   local: { cursor: number; syncIdentity: string },
   remote: Pick<SyncChangesResponse, "serverCursor" | "syncIdentity">,
-) => remote.serverCursor < local.cursor || Boolean(
-  remote.syncIdentity && remote.syncIdentity !== local.syncIdentity,
-);
+) => hasSyncStateReset(local, remote);
 
 export const classifyDesktopSyncFailure = (item: Pick<DesktopOutboxItem, "kind">, error: unknown) => {
   const conflict = error instanceof ApiRequestError

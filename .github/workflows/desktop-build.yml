@@ -422,6 +422,16 @@ jobs:
           EDGE_EVER_VERIFY_TARGET: win32
         run: bun scripts/verify-desktop-package.mjs
 
+      - name: Run packaged Windows sidecar integration tests
+        shell: pwsh
+        run: |
+          $env:EDGE_EVER_SIDECAR_PATH = (Resolve-Path "release/desktop/win-unpacked/resources/sidecar/edgeever-sidecar.exe").Path
+          $env:EDGE_EVER_MIGRATIONS_PATH = (Resolve-Path "release/desktop/win-unpacked/resources/migrations").Path
+          bun scripts/test-desktop-sidecar.mjs
+
+      - name: Verify packaged Windows first launch
+        run: bun run verify:packaged-desktop-startup -- release/desktop/win-unpacked/EdgeEver.exe
+
       - name: Verify that Preview executables are unsigned
         shell: pwsh
         run: |

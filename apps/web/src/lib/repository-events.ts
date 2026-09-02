@@ -1,4 +1,4 @@
-import type { MemoDetail } from "@edgeever/shared";
+import type { MemoDetail, MemoTemplate, Resource } from "@edgeever/shared";
 import type { EdgeEverRepository } from "@/lib/repository";
 
 export type RepositoryMutationEvent =
@@ -6,6 +6,12 @@ export type RepositoryMutationEvent =
   | { type: "note.updated"; note: MemoDetail }
   | { type: "note.deleted"; noteId: string }
   | { type: "tag.changed"; previousName?: string; name?: string; deleted?: boolean }
+  | { type: "template.created"; template: MemoTemplate }
+  | { type: "template.updated"; template: MemoTemplate }
+  | { type: "template.deleted"; templateId: string }
+  | { type: "resource.created"; resource: Resource }
+  | { type: "resource.updated"; resource: Resource }
+  | { type: "resource.deleted"; resourceId: string }
   | { type: "workspace.synced"; bootstrapped: boolean; changed: number };
 
 type RepositoryMutationListener = (event: RepositoryMutationEvent) => void;
@@ -56,6 +62,41 @@ export const withRepositoryMutationEvents = (repository: EdgeEverRepository, sco
   async useTemplate(templateId, notebookId) {
     const result = await repository.useTemplate(templateId, notebookId);
     notifyRepositoryMutation(scope, { type: "note.created", note: result.memo });
+    return result;
+  },
+  async uploadMemoResource(memoId, file) {
+    const result = await repository.uploadMemoResource(memoId, file);
+    notifyRepositoryMutation(scope, { type: "resource.created", resource: result.resource });
+    return result;
+  },
+  async updateResource(resourceId, file, expectedContentHash) {
+    const result = await repository.updateResource(resourceId, file, expectedContentHash);
+    notifyRepositoryMutation(scope, { type: "resource.updated", resource: result.resource });
+    return result;
+  },
+  async renameResource(resourceId, filename) {
+    const result = await repository.renameResource(resourceId, filename);
+    notifyRepositoryMutation(scope, { type: "resource.updated", resource: result.resource });
+    return result;
+  },
+  async deleteResource(resourceId) {
+    const result = await repository.deleteResource(resourceId);
+    notifyRepositoryMutation(scope, { type: "resource.deleted", resourceId });
+    return result;
+  },
+  async createTemplate(input) {
+    const result = await repository.createTemplate(input);
+    notifyRepositoryMutation(scope, { type: "template.created", template: result.template });
+    return result;
+  },
+  async updateTemplate(templateId, input) {
+    const result = await repository.updateTemplate(templateId, input);
+    notifyRepositoryMutation(scope, { type: "template.updated", template: result.template });
+    return result;
+  },
+  async deleteTemplate(templateId) {
+    const result = await repository.deleteTemplate(templateId);
+    notifyRepositoryMutation(scope, { type: "template.deleted", templateId });
     return result;
   },
   async mergeMemos(input) {

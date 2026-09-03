@@ -3327,7 +3327,7 @@ export const WorkspaceApp = ({
                     onOpenExecutionCenter={handleOpenExecutionCenter}
                   />
                   ) : rightView === "ai-prompts" ? (
-                    <AiPromptsPane onClose={handleCloseAiPrompts} onOpenExecutionCenter={handleOpenExecutionCenter} />
+                    <AiPromptsPane key={localDataScope} companionEnabled={authRequired && Boolean(user) && !demoMode} onClose={handleCloseAiPrompts} onOpenExecutionCenter={handleOpenExecutionCenter} />
                   ) : rightView === "execution-center" ? (
                     <ExecutionCenterPane currentDeviceId={scheduledTaskDeviceId} onClose={handleCloseExecutionCenter} />
                   ) : rightView === "evernote-migration" ? (

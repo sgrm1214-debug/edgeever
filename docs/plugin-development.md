@@ -275,7 +275,7 @@ context.events.on("template.updated", ({ template }) => console.log(template.nam
 
 ## Host-rendered settings
 
-Plugins can declare settings that EdgeEver renders consistently in plugin details. Supported field types are `text`, `secret`, `number`, `boolean`, and `select`:
+Plugins can declare settings that EdgeEver renders consistently on a dedicated Plugin settings page within plugin details. Installed plugin cards and the plugin toolbar menu link directly to this page. Plugins without settings fields have no settings entry, while disabled plugins remain configurable. Settings are stored on the current device only. Put defaults and credentials in settings, and use plugin commands or functional panels for actual operations; ordinary configuration does not need a separate custom panel. Supported field types are `text`, `secret`, `number`, `boolean`, and `select`:
 
 ```json
 {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { lazy, Suspense, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AiPromptParameterKind,
@@ -42,6 +42,8 @@ import { WORKSPACE_PAGE_TITLE_CLASSNAME } from "@/lib/workspace-ui";
 import { formatDateTime } from "@/lib/utils";
 import { ExecutionCenterButton } from "@/components/execution/ExecutionCenterButton";
 
+const CompanionDialog = lazy(() => import("./CompanionDialog"));
+
 const emptyForm = () => ({
   name: "",
   description: "",
@@ -50,7 +52,7 @@ const emptyForm = () => ({
   resultMode: "both" as AiPromptResultMode,
 });
 
-export const AiPromptsPane = ({ onClose, onOpenExecutionCenter }: { onClose: () => void; onOpenExecutionCenter: () => void }) => {
+export const AiPromptsPane = ({ onClose, onOpenExecutionCenter, companionEnabled = false }: { onClose: () => void; onOpenExecutionCenter: () => void; companionEnabled?: boolean }) => {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<AiPromptTemplate | null>(null);
@@ -60,6 +62,7 @@ export const AiPromptsPane = ({ onClose, onOpenExecutionCenter }: { onClose: () 
   const [preview, setPreview] = useState<AiPromptTemplate | null>(null);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [restoreFeedback, setRestoreFeedback] = useState<string | null>(null);
+  const [companionOpen, setCompanionOpen] = useState(false);
 
   const promptsQuery = useQuery({
     queryKey: ["ai-prompts", i18n.resolvedLanguage],
@@ -194,6 +197,13 @@ export const AiPromptsPane = ({ onClose, onOpenExecutionCenter }: { onClose: () 
 
       <main className="min-h-0 flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">
         <div className="mx-auto w-full max-w-5xl space-y-6">
+          {companionEnabled ? <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+            <p className="text-sm text-slate-700">{t("companion.intro")}</p>
+            <Button onClick={() => setCompanionOpen(true)}>{t("companion.title")}</Button>
+          </section> : null}
+          {companionOpen ? <Suspense fallback={<p role="status">{t("common.loading")}</p>}>
+            <CompanionDialog onClose={() => setCompanionOpen(false)} />
+          </Suspense> : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">

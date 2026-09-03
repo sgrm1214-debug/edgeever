@@ -71,6 +71,7 @@ import {
   createImageUploadPlaceholder,
   removeImageUploadPlaceholder,
   waitForImageSourceReady,
+  updateImageUploadPlaceholder,
 } from "./editor/image-upload-placeholder";
 import {
   clampResourceInsertionTarget,
@@ -78,6 +79,7 @@ import {
   getResourceInsertionTarget,
   shouldSelectInsertedResources,
 } from "@/lib/resource-insertion-target";
+import { insertUploadedResources } from "@/lib/resource-insertion";
 import {
   createSlashCommandExtension,
   type SlashCommandActions,
@@ -193,7 +195,7 @@ import {
   isAttachmentLinkHref,
 } from "@/lib/editor-external-link";
 import { insertAiDraftAtTextCursor } from "@/lib/ai-draft-insertion";
-import { createFileBatchQueue, processFilesSequentially } from "@/lib/file-batch";
+import { createFileBatchQueue, processFileUploadBatch } from "@/lib/file-batch";
 import { MEMO_ID_REMAPPED_EVENT, MEMO_SYNC_ACKNOWLEDGED_EVENT } from "@/lib/sync-events";
 import { useStandaloneMobileEditor } from "@/hooks/useStandaloneMobileEditor";
 import { statusSettleMotion } from "@/lib/motion";
@@ -987,12 +989,13 @@ const RichEditorPane = ({
     const targetMemoId = currentMemo.id;
     const interactionVersionAtRequest = editorCanvasInteractionVersionRef.current;
     const placeholderPosition = currentEditor.state.selection.from;
-    const imagePlaceholders = files
+    const imagePlaceholderByFile = new Map(files
       .filter((file) => SUPPORTED_PASTE_IMAGE_TYPES.has(file.type))
-      .map((file) => createImageUploadPlaceholder(
+      .map((file) => [file, createImageUploadPlaceholder(
         file,
         t("editor.uploadState.imagePreparing"),
-      ));
+      )] as const));
+    const imagePlaceholders = [...imagePlaceholderByFile.values()];
     imagePlaceholders.forEach((placeholder) => {
       addImageUploadPlaceholder(currentEditor, placeholder, placeholderPosition);
     });
@@ -1011,14 +1014,25 @@ const RichEditorPane = ({
       // Rapid consecutive pastes otherwise race with the same stale cursor.
       const insertionTarget = getResourceInsertionTarget(insertionEditor.state.selection);
       setImageUploadState("uploading");
+      const imageReadiness: Promise<void>[] = [];
 
-      const results = await processFilesSequentially(files, async (file) => {
+      const results = await processFileUploadBatch(files, async (file) => {
         const isImage = SUPPORTED_PASTE_IMAGE_TYPES.has(file.type);
         const shouldCompress = isImage && imageCompressionEnabledRef.current;
+        const placeholder = imagePlaceholderByFile.get(file);
+        if (placeholder) updateImageUploadPlaceholder(editorRef.current, placeholder,
+          t(shouldCompress ? "editor.uploadState.imageCompressing" : "editor.uploadState.uploading"));
         setImageUploadState(shouldCompress ? "compressing" : "uploading");
-        const uploadFile = shouldCompress ? (await compressImageForUpload(file)).file : file;
-
+        const preparedFile = shouldCompress ? (await compressImageForUpload(file)).file : file;
+        if (placeholder) updateImageUploadPlaceholder(editorRef.current, placeholder,
+          t("editor.uploadState.waitingToUpload"));
+        return preparedFile;
+      }, async (uploadFile, file) => {
+        const isImage = SUPPORTED_PASTE_IMAGE_TYPES.has(file.type);
+        const placeholder = imagePlaceholderByFile.get(file);
         setImageUploadState("uploading");
+        if (placeholder) updateImageUploadPlaceholder(editorRef.current, placeholder,
+          t("editor.uploadState.uploading"));
         let resource: {
           kind: "image" | "attachment";
           filename: string | null;
@@ -1041,6 +1055,9 @@ const RichEditorPane = ({
             url: `edgeever-staged://${staged.id}`,
           };
         }
+        if (resource.kind === "image") {
+          imageReadiness.push(waitForImageSourceReady(resource.url));
+        }
         return resource;
       });
 
@@ -1048,10 +1065,7 @@ const RichEditorPane = ({
       if (successfulResults.length > 0) {
         void queryClient.invalidateQueries({ queryKey: ["resources"] });
       }
-
-      await Promise.all(successfulResults.map(({ value: resource }) =>
-        resource.kind === "image" ? waitForImageSourceReady(resource.url) : Promise.resolve()
-      ));
+      await Promise.all(imageReadiness);
 
       const activeEditor = editorRef.current;
       if (memoRef.current?.id !== targetMemoId || !isEditorReady(activeEditor)) {
@@ -1117,11 +1131,11 @@ const RichEditorPane = ({
           insertion.focus();
         }
         insertion
-          .insertContentAt(
+          .command(insertUploadedResources(
             safeInsertionTarget,
-            groupConsecutiveImagesIntoGalleries(content),
-            { updateSelection },
-          )
+            content,
+            updateSelection,
+          ))
           .run();
         if (!updateSelection) {
           // ProseMirror can still map a cursor at the document boundary to a

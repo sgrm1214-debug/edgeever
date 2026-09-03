@@ -74,6 +74,7 @@ import { registerAuthRoutes } from "./auth-routes";
 import { registerApiTokenRoutes } from "./api-token-routes";
 import { registerObjectStorageRoutes } from "./object-storage-routes";
 import { registerAiRoutes } from "./ai-routes";
+import { registerCompanionRoutes } from "./companion-routes";
 import { registerAiPromptRoutes } from "./ai-prompt-routes";
 import { registerResourceRoutes } from "./resource-routes";
 import {
@@ -295,6 +296,7 @@ registerObjectStorageRoutes(app, {
 registerAiRoutes(app, {
   isDemoMode: (...args) => isDemoMode(...args),
 });
+registerCompanionRoutes(app, { isDemoMode: (...args) => isDemoMode(...args) });
 registerAiPromptRoutes(app, {
   isDemoMode: (...args) => isDemoMode(...args),
 });

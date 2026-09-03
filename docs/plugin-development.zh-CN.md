@@ -275,7 +275,7 @@ context.events.on("template.updated", ({ template }) => console.log(template.nam
 
 ## 宿主统一渲染的设置
 
-插件可以在 Manifest 中声明设置，由 EdgeEver 在插件详情页统一渲染。目前支持 `text`、`secret`、`number`、`boolean` 和 `select`：
+插件可以在 Manifest 中声明设置，由 EdgeEver 在插件详情的独立「插件设置」页面统一渲染。已安装插件卡片和插件工具菜单均可直达该页面；未声明配置项的插件不显示设置入口，停用的插件仍可配置。设置仅保存在当前设备。默认行为和凭据应放在设置中，实际操作使用插件命令或功能面板，无需为普通配置另建面板。目前支持 `text`、`secret`、`number`、`boolean` 和 `select`：
 
 ```json
 {

@@ -1,4 +1,4 @@
-import { CompanionIdSchema, CompanionMemoryImportSchema, CompanionMemoryInputSchema, CompanionMemoryUpdateSchema,
+import { CompanionDiscoverySettingsInputSchema, CompanionIdSchema, CompanionMemoryImportSchema, CompanionMemoryInputSchema, CompanionMemoryUpdateSchema,
   CompanionTurnInputSchema, type CompanionEvent, type CompanionSource } from "@edgeever/shared";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
@@ -12,6 +12,8 @@ import { beginCompanionTurn, checkpointCompanionTurn, clearCompanionHistory, com
   forgetCompanionMemory, getCompanionTurn, listCompanionMemories, listCompanionTurns, mapCompanionTurn,
   saveCompanionMemory, importCompanionMemories, type CompanionScope } from "./companion-service";
 import type { streamCompanion } from "./companion-runtime";
+import { applyCompanionAction, dismissCompanionAction, listCompanionActions } from "./companion-actions";
+import { acknowledgeDiscovery, checkDiscoveries, getDiscoverySettings, listDiscoveries, saveDiscoverySettings } from "./companion-discovery";
 
 const scopeFor = (c: AppContext): CompanionScope => ({ workspaceId: getWorkspaceId(c), ownerId: c.get("auth").actorId! });
 const fail = (c: AppContext, error: unknown) => error instanceof AppError
@@ -35,6 +37,45 @@ export const registerCompanionRoutes = (parent: Hono<AppEnv>, dependencies: {
   });
 
   app.get("/api/v1/companion/memories", async c => c.json({ memories: await listCompanionMemories(c.env.storage.db, scopeFor(c)) }));
+  app.get("/api/v1/companion/discovery/settings", async c => c.json({ settings: await getDiscoverySettings(c.env.storage.db, scopeFor(c)) }));
+  app.put("/api/v1/companion/discovery/settings", zValidator("json", CompanionDiscoverySettingsInputSchema), async c => {
+    const input = c.req.valid("json");
+    // Validate the same default model used by an actual discovery check.
+    // Turning Paw mode off must remain possible when a provider is unavailable.
+    if (input.enabled) {
+      await (dependencies.loadModel ?? loadDefaultAiModel)(c.env.storage.db, getWorkspaceId(c), c.env);
+    }
+    return c.json({ settings: await saveDiscoverySettings(c.env.storage.db, scopeFor(c), input) });
+  });
+  app.get("/api/v1/companion/discovery", async c => c.json({ items: await listDiscoveries(c.env.storage.db, scopeFor(c)) }));
+  app.post("/api/v1/companion/discovery/check", async c => {
+    const stop = new AbortController();
+    const timeout = setTimeout(() => stop.abort(), 60_000);
+    try {
+      await checkDiscoveries(c.env.storage.db, scopeFor(c), {
+        locale: c.req.query("locale") === "zh-CN" ? "zh-CN" : "en-US",
+        signal: AbortSignal.any([stop.signal, c.req.raw.signal]),
+        loadModel: () => (dependencies.loadModel ?? loadDefaultAiModel)(c.env.storage.db, getWorkspaceId(c), c.env),
+      });
+      return c.json({ items: await listDiscoveries(c.env.storage.db, scopeFor(c)) });
+    } finally { clearTimeout(timeout); }
+  });
+  for (const operation of ["seen", "dismiss"] as const) app.post(`/api/v1/companion/discovery/:id/${operation}`, async c => {
+    if (!CompanionIdSchema.safeParse(c.req.param("id")).success) return notFound(c, "Discovery not found.");
+    await acknowledgeDiscovery(c.env.storage.db, scopeFor(c), c.req.param("id"), operation === "dismiss");
+    return c.json({ ok: true });
+  });
+  app.get("/api/v1/companion/actions", async c => c.json({ actions: await listCompanionActions(c.env.storage.db, scopeFor(c)) }));
+  // Not exposed as model tools. The client submits only the persisted proposal
+  // ID; source notes, tags and ordering cannot be replaced at confirmation time.
+  app.post("/api/v1/companion/actions/:id/apply", async c => {
+    if (!CompanionIdSchema.safeParse(c.req.param("id")).success) return notFound(c, "Suggestion not found.");
+    return c.json({ action: await applyCompanionAction(c.env.storage.db, scopeFor(c), c.req.param("id"), c) });
+  });
+  app.post("/api/v1/companion/actions/:id/dismiss", async c => {
+    if (!CompanionIdSchema.safeParse(c.req.param("id")).success) return notFound(c, "Suggestion not found.");
+    return c.json({ action: await dismissCompanionAction(c.env.storage.db, scopeFor(c), c.req.param("id")) });
+  });
   app.post("/api/v1/companion/memories", zValidator("json", CompanionMemoryInputSchema), async c => {
     return c.json({ memory: await saveCompanionMemory(c.env.storage.db, scopeFor(c), c.req.valid("json")) }, 201);
   });
@@ -74,7 +115,11 @@ export const registerCompanionRoutes = (parent: Hono<AppEnv>, dependencies: {
     const rows = await c.env.storage.db.prepare("SELECT * FROM companion_turns WHERE workspace_id = ? AND owner_id = ? ORDER BY created_at")
       .bind(scope.workspaceId, scope.ownerId).all<import("./companion-service").TurnRow>();
     return c.json({ version: 1, exportedAt: new Date().toISOString(),
-      memories: await listCompanionMemories(c.env.storage.db, scope), turns: rows.results.map(mapCompanionTurn) });
+      memories: await listCompanionMemories(c.env.storage.db, scope), turns: rows.results.map(mapCompanionTurn),
+      actions: await listCompanionActions(c.env.storage.db, scope, 1500),
+      discoverySettings: await getDiscoverySettings(c.env.storage.db, scope),
+      discoveries: (await c.env.storage.db.prepare("SELECT * FROM companion_discoveries WHERE workspace_id = ? AND owner_id = ? ORDER BY created_at")
+        .bind(scope.workspaceId, scope.ownerId).all()).results });
   });
   app.post("/api/v1/companion/import-memories", zValidator("json", CompanionMemoryImportSchema), async c => {
     const scope = scopeFor(c);
@@ -112,7 +157,7 @@ export const registerCompanionRoutes = (parent: Hono<AppEnv>, dependencies: {
           const [memories, history] = await Promise.all([listCompanionMemories(db, scope), listCompanionTurns(db, scope, input.threadId)]);
           const stream = dependencies.stream ?? (await import("./companion-runtime")).streamCompanion;
           await assertActive();
-          const result = await stream({ db, scope, input, model, memories, history, revision: row.memory_revision, signal, sources, assertActive });
+          const result = await stream({ db, scope, input, model, memories, history, revision: row.memory_revision, signal, sources, assertActive, context: c });
           for await (const part of result.fullStream) {
             signal.throwIfAborted();
             if (part.type === "error") throw part.error;

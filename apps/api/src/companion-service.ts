@@ -37,7 +37,7 @@ export const listCompanionTurns = async (db: DatabaseAdapter, scope: CompanionSc
   await db.prepare("UPDATE companion_turns SET status = 'interrupted' WHERE workspace_id = ? AND owner_id = ? AND status = 'running' AND expires_at < ?")
     .bind(...bindScope(scope), new Date().toISOString()).run();
   return (await db.prepare(`SELECT * FROM companion_turns WHERE workspace_id = ? AND owner_id = ?
-    ${threadId ? "AND thread_id = ?" : ""} ORDER BY created_at DESC, id DESC LIMIT 100`)
+    AND origin = 'chat' ${threadId ? "AND thread_id = ?" : ""} ORDER BY created_at DESC, id DESC LIMIT 100`)
     .bind(...bindScope(scope), ...(threadId ? [threadId] : [])).all<TurnRow>()).results;
 };
 
@@ -152,6 +152,7 @@ export const clearCompanionHistory = async (db: DatabaseAdapter, scope: Companio
   await db.batch([
     db.prepare("UPDATE companion_memories SET source_turn_id = NULL, version = version + 1 WHERE workspace_id = ? AND owner_id = ? AND source_turn_id IS NOT NULL").bind(...bindScope(scope)),
     db.prepare("DELETE FROM companion_turns WHERE workspace_id = ? AND owner_id = ?").bind(...bindScope(scope)),
+    db.prepare("UPDATE companion_discovery_settings SET last_input_hash = NULL WHERE workspace_id = ? AND owner_id = ?").bind(...bindScope(scope)),
     ...invalidateContext(db, scope),
   ]);
 };

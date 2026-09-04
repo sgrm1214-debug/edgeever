@@ -1,5 +1,10 @@
+import { createPluginCapabilities } from './plugin-capabilities';
 import type {
   CompanionMemory,
+  CompanionDiscoverySettings,
+  CompanionDiscoverySettingsInput,
+  CompanionDiscoveryItem,
+  CompanionAction,
   CompanionTurn,
   CompanionTurnInput,
   CompanionEvent,
@@ -43,6 +48,9 @@ import type {
   SyncBootstrapResponse,
   SyncChange,
   SyncChangesResponse,
+  DeploymentMetadata,
+  PluginPublicFetchRequest,
+  PluginPublicFetchResponse,
 } from "@edgeever/shared";
 
 const MAX_SINGLE_REQUEST_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -96,6 +104,7 @@ export type InstanceHealth = {
   containerImageSource?: "official-ghcr" | "official-cn-mirror" | "custom" | "unknown" | string | null;
   authMode?: string | null;
   build?: string | null;
+  deployment?: DeploymentMetadata | null;
   migration?: string | null;
   storage?: {
     database?: "d1" | "sqlite" | string | null;
@@ -380,6 +389,30 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
     return response.json() as Promise<T>;
   };
 
+  const requestPluginPublic = async (input: PluginPublicFetchRequest, signal?: AbortSignal): Promise<PluginPublicFetchResponse> => {
+    const { context, response } = await send("/api/v1/plugins/network/fetch", {
+      method: "POST",
+      body: JSON.stringify(input),
+      signal,
+    });
+    const upstreamStatus = response.headers.get("x-edgeever-upstream-status");
+    if (!response.ok || !upstreamStatus) await throwRequestError(context, response, "Public network request failed");
+    const status = Number(upstreamStatus);
+    if (!Number.isInteger(status) || status < 100 || status > 599) throw new Error("Invalid public network response status");
+    const headers: Record<string, string> = {};
+    for (const [key, value] of response.headers) {
+      const prefix = "x-edgeever-upstream-header-";
+      if (key.startsWith(prefix)) headers[key.slice(prefix.length)] = value;
+    }
+    return {
+      url: input.url,
+      status,
+      statusText: decodeURIComponent(response.headers.get("x-edgeever-upstream-status-text") ?? ""),
+      headers,
+      body: await response.arrayBuffer(),
+    };
+  };
+
   const requestResourceResponse = async (path: string, init?: RequestInit) => {
     const isAbsolute = isAbsoluteHttpUrl(path);
     const { context, response } = await send(path, init, {
@@ -558,6 +591,7 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
 
   return {
     getInstanceHealth: () => request<InstanceHealth>("/api/health"),
+    ...createPluginCapabilities(request, requestPluginPublic),
 
     getInstanceRelease: () => request<InstanceRelease>("/api/release"),
 
@@ -729,6 +763,14 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
       }),
 
     listCompanionMemories: () => request<{ memories: CompanionMemory[] }>("/api/v1/companion/memories"),
+    getCompanionDiscoverySettings: () => request<{ settings: CompanionDiscoverySettings }>("/api/v1/companion/discovery/settings"),
+    saveCompanionDiscoverySettings: (input: CompanionDiscoverySettingsInput) => request<{ settings: CompanionDiscoverySettings }>("/api/v1/companion/discovery/settings", { method: "PUT", body: JSON.stringify(input) }),
+    listCompanionDiscoveries: () => request<{ items: CompanionDiscoveryItem[] }>("/api/v1/companion/discovery"),
+    checkCompanionDiscoveries: (locale: string, signal?: AbortSignal) => request<{ items: CompanionDiscoveryItem[] }>(`/api/v1/companion/discovery/check?locale=${encodeURIComponent(locale)}`, { method: "POST", body: "{}", signal }),
+    acknowledgeCompanionDiscovery: (id: string, dismiss = false) => request<{ ok: true }>(`/api/v1/companion/discovery/${encodeURIComponent(id)}/${dismiss ? "dismiss" : "seen"}`, { method: "POST", body: "{}" }),
+    listCompanionActions: () => request<{ actions: CompanionAction[] }>("/api/v1/companion/actions"),
+    applyCompanionAction: (id: string) => request<{ action: CompanionAction }>(`/api/v1/companion/actions/${encodeURIComponent(id)}/apply`, { method: "POST", body: "{}" }),
+    dismissCompanionAction: (id: string) => request<{ action: CompanionAction }>(`/api/v1/companion/actions/${encodeURIComponent(id)}/dismiss`, { method: "POST", body: "{}" }),
     saveCompanionMemory: (content: string, sourceTurnId?: string) => request<{ memory: CompanionMemory }>("/api/v1/companion/memories", {
       method: "POST", body: JSON.stringify({ content, sourceTurnId }),
     }),
@@ -740,7 +782,7 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
     getCompanionTurn: (id: string) => request<{ turn: CompanionTurn }>(`/api/v1/companion/turns/${encodeURIComponent(id)}`),
     cancelCompanionTurn: (id: string) => request<{ ok: true }>(`/api/v1/companion/turns/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" }),
     clearCompanionHistory: () => request<{ ok: true }>("/api/v1/companion/history", { method: "DELETE" }),
-    exportCompanion: () => request<{ version: 1; exportedAt: string; memories: CompanionMemory[]; turns: CompanionTurn[] }>("/api/v1/companion/export"),
+    exportCompanion: () => request<{ version: 1; exportedAt: string; memories: CompanionMemory[]; turns: CompanionTurn[]; actions: CompanionAction[] }>("/api/v1/companion/export"),
     importCompanionMemories: (memories: { content: string }[]) => request<{ memories: CompanionMemory[] }>("/api/v1/companion/import-memories", {
       method: "POST", body: JSON.stringify({ version: 1, memories }),
     }),

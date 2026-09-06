@@ -1,3 +1,5 @@
+import { Base64 } from "js-base64";
+
 export const DIAGRAM_SCHEMA_VERSION = 1 as const;
 export const ARCHITECTURE_DIAGRAM_SCHEMA_VERSION = 2 as const;
 
@@ -48,21 +50,14 @@ export type DiagramDocument = {
 };
 
 const DIAGRAM_MARKER = "edgeever-diagram-v1";
-const DIAGRAM_COMMENT = new RegExp(`<!--\\s*${DIAGRAM_MARKER}:([A-Za-z0-9_-]+)\\s*-->`);
+const DIAGRAM_COMMENT = new RegExp(`<!--\\s*${DIAGRAM_MARKER}:([\\s\\S]*?)\\s*-->`);
 
-const encodeBase64Url = (value: string) => {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-};
+// Keep the persisted envelope portable across browsers, Node/Bun, and React
+// Native's Hermes runtime. Hermes does not guarantee the browser globals used
+// by atob/btoa/TextEncoder/TextDecoder.
+const encodeBase64Url = (value: string) => Base64.encodeURI(value);
 
-const decodeBase64Url = (value: string) => {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-  const binary = atob(padded);
-  return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
-};
+const decodeBase64Url = (value: string) => Base64.decode(value);
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -125,8 +120,8 @@ const parseEdge = (value: unknown): DiagramEdge | null => {
 };
 
 export const parseDiagramDocument = (markdown: string | null | undefined): DiagramDocument | null => {
-  const encoded = markdown?.match(DIAGRAM_COMMENT)?.[1];
-  if (!encoded) return null;
+  const encoded = markdown?.match(DIAGRAM_COMMENT)?.[1]?.replace(/\s+/g, "");
+  if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded)) return null;
   try {
     const value = JSON.parse(decodeBase64Url(encoded)) as Record<string, unknown>;
     if (!DIAGRAM_KINDS.includes(value.kind as DiagramKind)) return null;
@@ -167,6 +162,12 @@ export const parseDiagramDocument = (markdown: string | null | undefined): Diagr
     return null;
   }
 };
+
+export const hasDiagramDocumentMarker = (markdown: string | null | undefined) =>
+  Boolean(markdown?.match(DIAGRAM_COMMENT));
+
+export const stripDiagramDocumentMarker = (markdown: string | null | undefined) =>
+  (markdown ?? "").replace(DIAGRAM_COMMENT, "").trimEnd();
 
 export const diagramFallbackMarkdown = (document: DiagramDocument) => {
   const title = document.kind === "mind-map" ? "思维导图" : document.kind === "architecture" ? "架构图" : "流程图";

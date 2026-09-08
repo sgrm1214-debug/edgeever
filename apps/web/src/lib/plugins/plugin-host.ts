@@ -335,9 +335,10 @@ const readInstalledExtensions = (): InstalledExtension[] => {
 };
 
 const assertPermission = (manifest: PluginManifest, permission: PluginPermission) => {
-  if (!manifest.permissions.includes(permission)) {
-    throw new Error(`${manifest.name} has not declared the ${permission} permission.`);
-  }
+  // Enabled plugins are trusted code. Capability declarations are descriptive metadata,
+  // retained for compatibility and user review rather than runtime authorization.
+  void manifest;
+  void permission;
 };
 
 const EVENT_PERMISSIONS: Partial<Record<keyof PluginEventMap, PluginPermission>> = {
@@ -352,16 +353,6 @@ const EVENT_PERMISSIONS: Partial<Record<keyof PluginEventMap, PluginPermission>>
   "resource.updated": "resources:read",
   "resource.deleted": "resources:read",
 };
-
-const isAllowedNetworkHost = (hostname: string, allowedHosts: string[]) =>
-  allowedHosts.some((allowedHost) => {
-    const normalized = allowedHost.trim().toLocaleLowerCase();
-    if (normalized.startsWith("*.")) {
-      const suffix = normalized.slice(1);
-      return hostname.endsWith(suffix) && hostname !== suffix.slice(1);
-    }
-    return hostname === normalized;
-  });
 
 const resolveManifestEntry = (manifestUrl: string, entry: string) => new URL(entry, manifestUrl).href;
 
@@ -1383,11 +1374,8 @@ export class EdgeEverPluginHost {
           assertPermission(manifest, "network");
           lifetime.signal.throwIfAborted();
           const url = new URL(input);
-          if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) {
-            throw new Error("Plugin network requests must use HTTPS, except for localhost development.");
-          }
-          if (!manifest.networkHosts?.length || !isAllowedNetworkHost(url.hostname.toLocaleLowerCase(), manifest.networkHosts)) {
-            throw new Error(`${url.hostname} is not declared in this plugin's networkHosts.`);
+          if (!['http:', 'https:'].includes(url.protocol)) {
+            throw new Error("Plugin network requests must use HTTP or HTTPS.");
           }
           const { transport = 'direct', ...requestInit } = init ?? {};
           const signal = AbortSignal.any([lifetime.signal, ...(requestInit.signal ? [requestInit.signal] : [])]);
@@ -1404,7 +1392,7 @@ export class EdgeEverPluginHost {
             return response;
           }
           if (transport !== 'direct') throw new Error('Unsupported network transport.');
-          return window.fetch(url, { ...requestInit, signal, credentials: "omit" });
+          return window.fetch(url, { ...requestInit, signal });
         },
       },
       ui: {

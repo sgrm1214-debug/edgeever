@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { BadgeCheck, BookOpen, CalendarClock, Download, ExternalLink, History, PanelRightOpen, Play, Puzzle, RefreshCw, Settings2, Trash2 } from "lucide-react";
+import { AlertTriangle, BadgeCheck, BookOpen, CalendarClock, Download, ExternalLink, History, PanelRightOpen, Play, Puzzle, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -225,7 +225,7 @@ const PluginDetailView = ({
               <h3 className="text-xs font-semibold text-slate-700">{t("plugins.details.permissions")}</h3>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {manifest.permissions.map((permission) => (
-                  <span key={permission} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{permissionLabel(permission)}</span>
+                  <span key={permission} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{permission === "network:public" ? t("plugins.permissions.publicNetwork") : permissionLabel(permission)}</span>
                 ))}
               </div>
             </section>
@@ -439,6 +439,10 @@ export const PluginManagerCard = ({
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 p-4 pt-0 sm:px-5 sm:pb-5">
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs leading-5 text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{t("plugins.trustedCodeNotice")}</span>
+        </div>
         {error ? <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div> : null}
 
         {!selectedPluginId ? <LegacyManualScheduledTasksSection /> : null}
@@ -613,7 +617,7 @@ export const PluginManagerCard = ({
                     <div className="mt-2 flex flex-wrap gap-1">
                       {extension.manifest.permissions.slice(0, 3).map((permission) => (
                         <span key={permission} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
-                          {permissionLabel(permission)}
+                          {permission === "network:public" ? t("plugins.permissions.publicNetwork") : permissionLabel(permission)}
                         </span>
                       ))}
                       {extension.manifest.permissions.length > 3 ? (

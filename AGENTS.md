@@ -15,6 +15,10 @@
 - **核心链路从严**：安装器、自动升级、数据存储、认证及迁移的机制或配置变化一律按高风险变更处理，必须验证真实的旧版本到新版本链路，不能只验证新版本自身。
 - **禁止无依据保证**：未完成对应平台及跨版本验证时，必须明确标注风险，严禁声称“不影响现有用户”或“不影响自动升级”。
 
+## Android 调测约束
+
+- **USB 真机优先**：Android 功能调测必须使用通过 USB 连接的真实设备和 `adb`，不得启动或使用 QEMU、AVD 等 Android 模拟器；未连接可用真机时，明确标注真机验证未完成，不得以模拟器结果替代。
+
 ## GitHub Actions 与 Release 约束及流程
 
 1. **Fork 工作流边界**：配置 GitHub Actions 时必须考虑大量用户会 Fork 仓库进行自部署；仅官方仓库需要的 Job 必须使用 `github.repository == 'tianma-if/edgeever'` 门禁，严禁在下游 Fork 中分配 Runner 或执行。
@@ -50,7 +54,7 @@ Related Issue: #<issue-number>
 - **Cloudflare 部署**：严格按 `docs/agent-deploy-cloudflare.md` 执行。
 - **跨运行时架构**：项目未来将正式支持 Docker 自托管；实现新功能时必须保持业务逻辑与 Cloudflare 解耦，并为其他运行时预留扩展边界。Cloudflare 与 Docker 必须共用同一套业务代码，仅允许保留薄且稳定、不包含业务判断的运行入口和基础设施驱动适配器。
 - **数据库 Migration**：数据库或种子变化时，在 `migrations/` 下新增递增编号 SQL，禁止修改已执行的旧 Migration。
-- **本地启动**：默认 `bun run dev`（纯本地环境）；指定远程实例用 `EDGE_EVER_INSTANCE=<实例名> bun run dev:remote`；纯前端用 `bun run dev:web`。
+- **本地启动**：默认 `bun run dev`（纯本地环境）。用户要求“启动/重启 Web 端”时，默认含 Web 与 API，必须使用 `bun run dev`；只有用户明确要求“纯前端”或明确指定 `dev:web` 时，才使用 `bun run dev:web`。指定远程实例用 `EDGE_EVER_INSTANCE=<实例名> bun run dev:remote`。
 - **Demo 示例同步**：修改示例笔记后，在 `main` 分支干净状态下执行 `bun run demo:sync` 重置公开 Demo。
 - **禁止重复造轮子**：严禁重复实现已有成熟方案；优先采用维护活跃、广泛验证的开源组件与依赖，并优先复用 `shadcn/ui`；复杂或重复模块封装为独立组件。
 - UI和交互的原则是，产品始终表现得可靠、可预测、确定、被接住。

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { release as operatingSystemRelease } from "node:os";
 import { SidecarRpcClient } from "./rpc.mjs";
 import { resourceRequestHeaders } from "./resource-request.mjs";
-import { isSafeResourceId, parseByteRangeHeader, resourceIdFromRequest } from "./resource-url.mjs";
+import { downloadContentDispositionFromRequest, isSafeResourceId, parseByteRangeHeader, resourceIdFromRequest } from "./resource-url.mjs";
 import { isSupportedAssociatedFile } from "./file-association.mjs";
 import { accountDataDirectory, accountScopeKey } from "./account-scope.mjs";
 import { rotateDiagnosticLog } from "./diagnostic-log.mjs";
@@ -581,6 +581,7 @@ const createTray = () => {
 const handleResourceProtocolRequest = async (request) => {
   const resourceId = resourceIdFromRequest(request.url);
   if (!resourceId) return new Response("Invalid resource", { status: 400 });
+  const downloadDisposition = downloadContentDispositionFromRequest(request.url);
 
   const directory = resourceCacheDirectory();
   const bytesPath = join(directory, `${resourceId}.bin`);
@@ -594,6 +595,7 @@ const handleResourceProtocolRequest = async (request) => {
       "Cache-Control": "no-store",
       "Content-Type": contentType || "application/octet-stream",
     });
+    if (downloadDisposition) headers.set("Content-Disposition", downloadDisposition);
     if (range.kind === "invalid") {
       headers.set("Content-Range", `bytes */${size}`);
       return new Response(null, { status: 416, headers });
@@ -640,6 +642,7 @@ const handleResourceProtocolRequest = async (request) => {
         const value = response.headers.get(name);
         if (value) responseHeaders.set(name, value);
       }
+      if (downloadDisposition) responseHeaders.set("Content-Disposition", downloadDisposition);
       return new Response(response.body, { status: 206, headers: responseHeaders });
     }
     if (!response.body) return new Response("Resource response body is empty", { status: 502 });
@@ -684,6 +687,7 @@ const handleResourceProtocolRequest = async (request) => {
     });
     const responseHeaders = new Headers(response.headers);
     responseHeaders.set("Cache-Control", "no-store");
+    if (downloadDisposition) responseHeaders.set("Content-Disposition", downloadDisposition);
     return new Response(streamedBody, { status: 200, headers: responseHeaders });
   } catch (error) {
     void writeDiagnostic("resource.cache-failed", { resourceId, message: error.message });
@@ -704,12 +708,15 @@ const registerResourceProtocol = () => {
       const path = join(directory, `${stagedId}.bin`);
       const { size } = await stat(path);
       const stream = createReadStream(path);
+      const headers = new Headers({
+        "Content-Type": metadata.type || "application/octet-stream",
+        "Content-Length": String(size),
+        "Cache-Control": "no-store",
+      });
+      const downloadDisposition = downloadContentDispositionFromRequest(request.url);
+      if (downloadDisposition) headers.set("Content-Disposition", downloadDisposition);
       return new Response(Readable.toWeb(stream), {
-        headers: {
-          "Content-Type": metadata.type || "application/octet-stream",
-          "Content-Length": String(size),
-          "Cache-Control": "no-store",
-        },
+        headers,
       });
     } catch (error) {
       void writeDiagnostic("resource.staged-read-failed", { stagedId, message: error.message });

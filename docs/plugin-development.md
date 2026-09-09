@@ -8,6 +8,8 @@ Theme packages contain only a validated manifest and documented design tokens. T
 
 Client plugins use an Obsidian-style trusted-code model. Enabling a plugin trusts it with the full EdgeEver plugin context; declared capabilities are optional descriptive metadata and do not gate API calls. The plugin module runs in the client JavaScript environment, so users must install plugins only from developers they trust.
 
+The first time a user enables a client plugin on a device, EdgeEver presents a community-plugin trust confirmation. Once acknowledged, it is not shown for every plugin. Theme packages do not trigger the confirmation because they cannot execute JavaScript.
+
 Plugins never receive EdgeEver's repository, IndexedDB database, Cloudflare bindings, or internal React state through the public API.
 
 ## Plugin manifest
@@ -18,7 +20,8 @@ Plugins never receive EdgeEver's repository, IndexedDB database, Cloudflare bind
   "id": "com.example.recent-notes",
   "name": "Recent Notes",
   "version": "1.0.0",
-  "apiVersion": "1",
+  "apiVersion": "2",
+  "settingsUi": "host",
   "description": "Adds a command for recent notes.",
   "entry": "./main.js",
   "platforms": ["web", "desktop"],
@@ -42,7 +45,7 @@ styles.css (optional)
 
 GitHub plugins must use `./main.js` as `entry`, and `main.js` must be a single-file bundle without relative module imports. EdgeEver reads the default-branch manifest, locates the matching Release, downloads assets in parallel, verifies GitHub's SHA-256 digest when present, and caches the verified package in device-local IndexedDB. `main.js` is limited to 5 MB and `styles.css` to 1 MB.
 
-EdgeEver checks for updates when the Plugin Marketplace opens, when the window regains focus, and every 30 minutes, but never installs silently. The user must click Update and confirm. If a new version changes declared capabilities or legacy network-host metadata, the confirmation lists those changes for review. For GitHub distribution, the Release `manifest.json` must exactly match the default-branch manifest used for the update prompt or installation is rejected. Marketplace installs only follow newer versions verified in the Registry.
+EdgeEver checks for updates when the Plugin Marketplace opens, when the window regains focus, and every 30 minutes. Marketplace installs whose Registry entry declares `"publisher": "edgeever"` are official EdgeEver extensions and update automatically to the latest checksum-pinned Registry version. Community Marketplace extensions and extensions installed directly from GitHub or a Manifest URL are never updated silently: the user must click Update and confirm. If a manually confirmed version changes declared capabilities or legacy network-host metadata, the confirmation lists those changes for review. For GitHub distribution, the Release `manifest.json` must exactly match the default-branch manifest used for the update prompt or installation is rejected. Marketplace installs only follow newer versions verified in the Registry.
 
 Updates use a rollback-capable switch. Old and new package versions are cached separately. If the new version cannot activate, EdgeEver restores the previous manifest, enabled state, and package instead of leaving the plugin broken or disabled.
 
@@ -56,7 +59,9 @@ Only public GitHub repositories are supported for now; private-repository tokens
 
 ## Verified plugin marketplace
 
-The marketplace is a verified Registry and does not take ownership of plugin files. For each version, the Registry pins the plugin ID, GitHub repository, version, and SHA-256 hashes for `manifest.json`, `main.js`, and optional `styles.css`. Installation still downloads from the developer's GitHub Release or registered public URL and verifies those hashes again.
+The official marketplace only lists free and open-source plugins. Complete human-readable source, an accepted open-source license, build information, and a traceable public source revision are required for every listed version. This requirement applies only to official marketplace admission; users remain free to install other plugins from GitHub or a Manifest URL. See the [Plugin Marketplace Submission Policy](plugin-marketplace-policy.md) for the complete requirements.
+
+The marketplace is a verified Registry and does not take ownership of plugin files. For each version, the Registry pins the plugin ID, GitHub repository, version, and SHA-256 hashes for `manifest.json`, `main.js`, and optional `styles.css`. Installation still downloads from the developer's GitHub Release or registered public URL and verifies those hashes again. The optional `"publisher": "edgeever"` marker is reserved for Registry entries maintained by the EdgeEver project; it enables automatic updates and must not be used for community submissions.
 
 Registry format:
 
@@ -68,7 +73,8 @@ Registry format:
     "id": "com.example.recent-notes",
     "name": "Recent Notes",
     "description": "Shows recently updated notes.",
-    "author": "Example",
+    "author": "EdgeEver",
+    "publisher": "edgeever",
     "category": "Productivity",
     "repositoryUrl": "https://github.com/example/edgeever-recent-notes",
     "distribution": {
@@ -277,7 +283,7 @@ context.events.on("template.updated", ({ template }) => console.log(template.nam
 
 Plugins can declare settings that EdgeEver renders consistently on a dedicated Plugin settings page within plugin details. Installed plugin cards and the plugin toolbar menu link directly to this page. Plugins without settings fields have no settings entry, while disabled plugins remain configurable. Settings are stored on the current device only. Put defaults and credentials in settings, and use plugin commands or functional panels for actual operations; ordinary configuration does not need a separate custom panel. Supported field types are `text`, `secret`, `number`, `boolean`, and `select`:
 
-The settings Schema is deliberately declarative. EdgeEver owns field layout, controls, spacing, validation, responsive behavior, accessibility, save states, and secret presentation. Presentation properties such as HTML, components, CSS classes, inline styles, colors, typography, or custom setting-page navigation are ignored. A plugin decides what can be configured, not how the settings page looks. Use commands or a clearly named functional panel for complex workflows such as authorization, connectivity tests, migrations, and index rebuilding; do not recreate ordinary settings in a custom panel.
+Plugin API v2 requires `settingsUi: "host"`. The settings Schema is deliberately declarative: EdgeEver owns field layout, controls, spacing, validation, responsive behavior, accessibility, save states, and secret presentation. Presentation properties such as HTML, components, CSS classes, inline styles, colors, typography, or custom setting-page navigation are ignored. A plugin decides what can be configured, not how the settings page looks. Custom settings pages are rejected by the host. Use commands or a clearly named functional panel for workflows such as authorization, connectivity tests, migrations, and index rebuilding; do not recreate ordinary settings in a custom panel.
 
 ```json
 {
@@ -301,6 +307,16 @@ const endpoint = await context.settings.get("endpoint");
 const token = await context.settings.get("token");
 await context.settings.set("format", "html");
 await context.settings.remove("token");
+```
+
+Plugins can listen for changes to their own settings and then read the host-validated value again. The event is delivered only to the plugin that owns the setting and does not include the value, keeping secrets and other configuration out of event payloads:
+
+```ts
+context.events.on("settings.changed", async ({ key }) => {
+  if (key !== "format") return;
+  const format = await context.settings.get("format");
+  // Apply the updated format.
+});
 ```
 
 ## Storage and network
@@ -401,6 +417,7 @@ Plugins can register framework-independent DOM panels. Users open them from the 
 context.ui.panels.register({
   id: "dashboard",
   title: "Dashboard",
+  purpose: "dashboard",
   presentation: "fullscreen",
   mount(container, { state, requestClose }) {
     const heading = document.createElement("h2");
@@ -417,6 +434,8 @@ context.ui.panels.register({
 
 await context.ui.panels.open("dashboard", { state: { resourceId } });
 ```
+
+Every API v2 panel must declare one business purpose: `workflow`, `dashboard`, `preview`, or `onboarding`. A panel is not an alternative settings surface. Persistent booleans, text, numbers, secrets, and fixed-option selections belong in the Manifest settings Schema. Workspace-backed choices that are meaningful only while performing an operation may remain workflow controls until the host settings Schema supports them.
 
 `presentation` accepts `dialog` (the default) or `fullscreen`. `panels.open()` can only open a panel registered by the calling plugin; its optional JSON state is limited to 64 KiB and is delivered through the mount context. `beforeClose()` may return `true` to close, `false` to stay open, or confirmation copy for a host-rendered dialog. The mount context's `requestClose()` follows the same guard.
 

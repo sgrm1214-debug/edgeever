@@ -8,6 +8,8 @@ EdgeEver P0 扩展 API 支持受信任的客户端插件和无代码主题包。
 
 客户端插件采用类似 Obsidian 的受信任代码模型。启用插件即代表信任它使用完整的 EdgeEver 插件上下文；能力声明只是可选的描述性元数据，不限制 API 调用。插件模块运行在客户端 JavaScript 环境中，因此用户只能安装来自可信开发者的插件。
 
+用户在一台设备上首次启用客户端插件时，EdgeEver 会显示一次社区插件信任确认；确认后不会对每个插件重复提示。主题包不能执行 JavaScript，因此不会触发该确认。
+
 公开 API 不会向插件暴露 EdgeEver Repository、IndexedDB 数据库、Cloudflare Binding 或 React 内部状态。
 
 ## 插件 Manifest
@@ -18,7 +20,8 @@ EdgeEver P0 扩展 API 支持受信任的客户端插件和无代码主题包。
   "id": "com.example.recent-notes",
   "name": "Recent Notes",
   "version": "1.0.0",
-  "apiVersion": "1",
+  "apiVersion": "2",
+  "settingsUi": "host",
   "description": "Adds a command for recent notes.",
   "entry": "./main.js",
   "platforms": ["web", "desktop"],
@@ -42,7 +45,7 @@ styles.css（可选）
 
 GitHub 插件的 `entry` 固定为 `./main.js`，`main.js` 必须是无需相对模块导入的单文件 Bundle。EdgeEver 会读取默认分支 Manifest、查找相同版本的 Release、并行下载资产、验证 GitHub 提供的 SHA-256 Digest（如果存在），然后把验证后的包缓存到当前设备的 IndexedDB。`main.js` 上限为 5 MB，`styles.css` 上限为 1 MB。
 
-EdgeEver 会在插件市场页面打开、窗口重新获得焦点及每 30 分钟检查一次更新，但不会静默安装。用户必须点击「更新」并确认；如果新版改变能力声明或旧版网络域名元数据，确认框会列出这些变化供用户查看。GitHub 分发的 Release `manifest.json` 必须与默认分支中用于提示更新的 Manifest 完全一致，否则安装会被拒绝。市场安装只跟随 Registry 中已经验证的新版本。
+EdgeEver 会在插件市场页面打开、窗口重新获得焦点及每 30 分钟检查一次更新。Registry 条目声明 `"publisher": "edgeever"` 的市场安装属于 EdgeEver 官方扩展，会自动更新到 Registry 中通过校验和固定的最新版本。社区市场扩展以及从 GitHub 或 Manifest 地址直接安装的扩展绝不会静默更新，用户必须点击「更新」并确认；如果手动确认的新版改变能力声明或旧版网络域名元数据，确认框会列出这些变化供用户查看。GitHub 分发的 Release `manifest.json` 必须与默认分支中用于提示更新的 Manifest 完全一致，否则安装会被拒绝。市场安装只跟随 Registry 中已经验证的新版本。
 
 升级采用可回滚切换：新旧版本的包会分别缓存；如果新版无法激活，EdgeEver 会恢复原 Manifest、原启用状态和上一版本代码，而不是留下一个被破坏或被停用的插件。
 
@@ -56,7 +59,9 @@ https://github.com/owner/edgeever-plugin
 
 ## 已验证插件市场
 
-插件市场是一个经过校验的 Registry，不接管插件所有权。Registry 为每个版本固定插件 ID、GitHub 仓库、版本号及 `manifest.json`/`main.js`/`styles.css` 的 SHA-256；安装时仍从开发者的 GitHub Release 或登记的公开地址下载，并再次核对校验和。
+官方插件市场仅收录自由及开源插件。每个上架版本都必须提供完整且人类可读的源码、认可的开源许可证、构建信息，以及可追溯的公开源码版本。该要求仅适用于官方市场准入；用户仍可自由通过 GitHub 或 Manifest 地址安装其他插件。完整要求参阅[官方插件市场上架政策](plugin-marketplace-policy.zh-CN.md)。
+
+插件市场是一个经过校验的 Registry，不接管插件所有权。Registry 为每个版本固定插件 ID、GitHub 仓库、版本号及 `manifest.json`/`main.js`/`styles.css` 的 SHA-256；安装时仍从开发者的 GitHub Release 或登记的公开地址下载，并再次核对校验和。可选的 `"publisher": "edgeever"` 标记仅保留给 EdgeEver 项目维护的 Registry 条目；它会启用自动更新，社区投稿不得使用。
 
 Registry 格式：
 
@@ -68,7 +73,8 @@ Registry 格式：
     "id": "com.example.recent-notes",
     "name": "Recent Notes",
     "description": "Shows recently updated notes.",
-    "author": "Example",
+    "author": "EdgeEver",
+    "publisher": "edgeever",
     "category": "Productivity",
     "repositoryUrl": "https://github.com/example/edgeever-recent-notes",
     "distribution": {
@@ -277,7 +283,7 @@ context.events.on("template.updated", ({ template }) => console.log(template.nam
 
 插件可以在 Manifest 中声明设置，由 EdgeEver 在插件详情的独立「插件设置」页面统一渲染。已安装插件卡片和插件工具菜单均可直达该页面；未声明配置项的插件不显示设置入口，停用的插件仍可配置。设置仅保存在当前设备。默认行为和凭据应放在设置中，实际操作使用插件命令或功能面板，无需为普通配置另建面板。目前支持 `text`、`secret`、`number`、`boolean` 和 `select`：
 
-设置 Schema 有意保持为声明式结构。字段布局、控件、间距、校验、响应式行为、无障碍、保存状态和密钥呈现均由 EdgeEver 管理；Manifest 中的 HTML、组件、CSS class、内联样式、颜色、字体以及自定义设置页导航等展示属性会被忽略。插件决定“配置什么”，而不是“设置页长什么样”。授权、连通性测试、数据迁移、索引重建等复杂流程应使用命令或命名清晰的功能面板，不要在自定义面板中重复实现普通设置。
+插件 API v2 强制要求 `settingsUi: "host"`。设置 Schema 有意保持为声明式结构：字段布局、控件、间距、校验、响应式行为、无障碍、保存状态和密钥呈现均由 EdgeEver 管理；Manifest 中的 HTML、组件、CSS class、内联样式、颜色、字体以及自定义设置页导航等展示属性会被忽略。插件决定“配置什么”，而不是“设置页长什么样”。宿主会拒绝自定义设置页。授权、连通性测试、数据迁移、索引重建等流程应使用命令或命名清晰的功能面板，不要在自定义面板中重复实现普通设置。
 
 ```json
 {
@@ -301,6 +307,16 @@ const endpoint = await context.settings.get("endpoint");
 const token = await context.settings.get("token");
 await context.settings.set("format", "html");
 await context.settings.remove("token");
+```
+
+插件可以监听自己设置的变化，并重新读取宿主已经校验过的值。事件只会发送给拥有该设置的插件，且不会携带设置值，避免 secret 或其他配置进入事件载荷：
+
+```ts
+context.events.on("settings.changed", async ({ key }) => {
+  if (key !== "format") return;
+  const format = await context.settings.get("format");
+  // 应用更新后的格式。
+});
 ```
 
 ## 插件存储与网络
@@ -401,6 +417,7 @@ await context.ui.openNote(noteId, { search: "- [ ] 发布版本" });
 context.ui.panels.register({
   id: "dashboard",
   title: "Dashboard",
+  purpose: "dashboard",
   presentation: "fullscreen",
   mount(container, { state, requestClose }) {
     const heading = document.createElement("h2");
@@ -417,6 +434,8 @@ context.ui.panels.register({
 
 await context.ui.panels.open("dashboard", { state: { resourceId } });
 ```
+
+每个 API v2 面板必须声明一种业务用途：`workflow`、`dashboard`、`preview` 或 `onboarding`。面板不能作为另一套设置入口。持久化的布尔值、文本、数字、密钥和固定选项必须放进 Manifest 设置 Schema。只有在执行某项操作时才有意义的工作区动态选项，可在宿主设置 Schema 尚不支持时保留为工作流控件。
 
 `presentation` 可以使用 `dialog`（默认）或 `fullscreen`。`panels.open()` 只能打开调用插件自己注册的面板；可选 JSON 状态上限为 64 KiB，并通过挂载上下文传入。`beforeClose()` 可以返回 `true` 关闭、返回 `false` 保持打开，或返回由宿主显示确认框所需的文案。挂载上下文中的 `requestClose()` 同样会经过这项保护。
 

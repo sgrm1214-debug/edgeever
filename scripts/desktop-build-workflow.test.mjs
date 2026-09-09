@@ -108,6 +108,9 @@ describe("desktop release workflow", () => {
     expect(workflow).toContain("name: Linux x64 AppImage Preview");
     expect(workflow).toContain("runs-on: ubuntu-22.04");
     expect(workflow).toContain("EDGE_EVER_DESKTOP_TARGET: linux");
+    expect(desktopBuilderConfig).toContain(
+      "artifactName: EdgeEver-${version}-linux-x64.${ext}",
+    );
     expect(workflow).toContain("name: Run packaged Linux sidecar integration tests");
     expect(workflow).toContain("name: Verify packaged Linux first launch");
     expect(workflow).toContain("xvfb-run -a bun run verify:packaged-desktop-startup");

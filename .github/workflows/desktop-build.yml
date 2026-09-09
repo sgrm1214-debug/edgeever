@@ -132,9 +132,10 @@ jobs:
             --pattern 'latest-windows.json.sig' \
             --pattern 'SHA256SUMS-windows.txt' \
             --pattern 'EdgeEver-*-linux-x64.AppImage' \
+            --pattern 'latest-linux.yml' \
             --pattern 'SHA256SUMS-linux.txt' \
             --dir "$RUNNER_TEMP/native-assets"
-          test "$(find "$RUNNER_TEMP/native-assets" -type f | wc -l | tr -d ' ')" = "16"
+          test "$(find "$RUNNER_TEMP/native-assets" -type f | wc -l | tr -d ' ')" = "17"
           gh release upload "$CURRENT_TAG" "$RUNNER_TEMP/native-assets/"* \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
@@ -279,6 +280,10 @@ jobs:
         if: matrix.shared_validation
         run: bun run test:desktop
 
+      - name: Verify renderer origin storage migration
+        if: matrix.shared_validation
+        run: bun run verify:renderer-origin-migration
+
       - name: Verify packaged renderer startup
         if: matrix.shared_validation
         run: bun run verify:desktop-renderer
@@ -315,6 +320,49 @@ jobs:
         env:
           EDGE_EVER_DESKTOP_ARCH: ${{ matrix.arch }}
         run: bun scripts/run-desktop-builder.mjs --publish never
+
+      - name: Verify packaged macOS cross-version startup
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.release-plan.outputs.previous_tag }}
+        run: |
+          previous_directory="$RUNNER_TEMP/edgeever-previous-${{ matrix.arch }}"
+          mkdir -p "$previous_directory/archive" "$previous_directory/app"
+          gh release download "$PREVIOUS_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'EdgeEver-*-mac-${{ matrix.arch }}.zip' \
+            --dir "$previous_directory/archive"
+          previous_archive="$(find "$previous_directory/archive" -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$previous_archive"
+          ditto -x -k "$previous_archive" "$previous_directory/app"
+          previous_executable="$previous_directory/app/EdgeEver.app/Contents/MacOS/EdgeEver"
+          unpacked_directory="mac-${{ matrix.arch }}"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            unpacked_directory="mac"
+          fi
+          current_executable="release/desktop/$unpacked_directory/EdgeEver.app/Contents/MacOS/EdgeEver"
+          bun run verify:desktop-cross-version-startup -- "$previous_executable" "$current_executable"
+
+      - name: Verify packaged macOS first launch
+        env:
+          EDGE_EVER_DESKTOP_ARCH: ${{ matrix.arch }}
+        run: |
+          unpacked_directory="mac-${{ matrix.arch }}"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            unpacked_directory="mac"
+          fi
+          bun run verify:packaged-desktop-startup -- "release/desktop/$unpacked_directory/EdgeEver.app/Contents/MacOS/EdgeEver"
+
+      - name: Verify packaged macOS private protocol file flows
+        env:
+          EDGE_EVER_DESKTOP_ARCH: ${{ matrix.arch }}
+        run: |
+          unpacked_directory="mac-${{ matrix.arch }}"
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            unpacked_directory="mac"
+          fi
+          bun run verify:desktop-protocol-e2e -- "release/desktop/$unpacked_directory/EdgeEver.app/Contents/MacOS/EdgeEver"
 
       - name: Verify desktop installer
         env:
@@ -414,6 +462,34 @@ jobs:
           EDGE_EVER_DESKTOP_TARGET: win
         run: bun scripts/run-desktop-builder.mjs --publish never
 
+      - name: Verify packaged Windows cross-version startup
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.release-plan.outputs.previous_tag }}
+        run: |
+          $previousDirectory = Join-Path $env:RUNNER_TEMP "edgeever-previous-windows-x64"
+          New-Item -ItemType Directory -Force -Path $previousDirectory | Out-Null
+          gh release download $env:PREVIOUS_TAG `
+            --repo $env:GITHUB_REPOSITORY `
+            --pattern 'EdgeEver-*-windows-x64.exe' `
+            --dir $previousDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $previousInstaller = Get-ChildItem -LiteralPath $previousDirectory -Filter '*.exe' | Select-Object -First 1
+          if (-not $previousInstaller) { throw "Previous Windows installer was not downloaded" }
+          $installerProcess = Start-Process -FilePath $previousInstaller.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($installerProcess.ExitCode -ne 0) {
+            throw "Previous Windows installer exited with code $($installerProcess.ExitCode)"
+          }
+          Get-Process -Name EdgeEver -ErrorAction SilentlyContinue | Stop-Process -Force
+          $previousExecutable = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'Programs') `
+            -Filter 'EdgeEver.exe' -File -Recurse | Select-Object -First 1
+          if (-not $previousExecutable) { throw "Previous installed EdgeEver executable was not found" }
+          bun run verify:desktop-cross-version-startup -- `
+            $previousExecutable.FullName `
+            (Resolve-Path 'release/desktop/win-unpacked/EdgeEver.exe').Path
+
       - name: Verify Windows package contents and architecture
         env:
           EDGE_EVER_DESKTOP_ARCH: x64
@@ -429,6 +505,9 @@ jobs:
 
       - name: Verify packaged Windows first launch
         run: bun run verify:packaged-desktop-startup -- release/desktop/win-unpacked/EdgeEver.exe
+
+      - name: Verify packaged Windows private protocol file flows
+        run: bun run verify:desktop-protocol-e2e -- release/desktop/win-unpacked/EdgeEver.exe
 
       - name: Verify that Preview executables are unsigned
         shell: pwsh
@@ -495,6 +574,11 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install AppImage runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libfuse2
+
       - name: Cache Bun dependencies
         uses: actions/cache@v5
         with:
@@ -540,6 +624,43 @@ jobs:
       - name: Build x64 Rust sidecar
         run: cargo build --manifest-path crates/desktop-sidecar/Cargo.toml --release
 
+      - name: Build Linux automatic update predecessor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_TAG: ${{ needs.release-plan.outputs.previous_tag }}
+        run: |
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            git fetch --depth=1 origin "refs/tags/${PREVIOUS_TAG}:refs/tags/${PREVIOUS_TAG}"
+            if git show "${PREVIOUS_TAG}:apps/desktop/src/main/index.mjs" | grep -q 'linuxUpdateTestMode'; then
+              previous_directory="$RUNNER_TEMP/edgeever-previous-linux-x64"
+              mkdir -p "$previous_directory"
+              gh release download "$PREVIOUS_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --pattern 'EdgeEver-*-linux-x64.AppImage' \
+                --dir "$previous_directory"
+              previous_app_image="$(find "$previous_directory" -maxdepth 1 -name 'EdgeEver-*-linux-x64.AppImage' -type f -print -quit)"
+              test -n "$previous_app_image"
+              test "$(find "$previous_directory" -maxdepth 1 -name 'EdgeEver-*-linux-x64.AppImage' -type f | wc -l | tr -d ' ')" = "1"
+              mv "$previous_app_image" "$RUNNER_TEMP/EdgeEver-linux-update-source.AppImage"
+              chmod +x "$RUNNER_TEMP/EdgeEver-linux-update-source.AppImage"
+              exit 0
+            fi
+          fi
+
+          # The first release that enables Linux updates has no update-capable
+          # predecessor in the wild. Build the same packaged updater at an older
+          # version so the bootstrap release still exercises a real replacement.
+          package_backup="$RUNNER_TEMP/edgeever-desktop-package.json"
+          cp apps/desktop/package.json "$package_backup"
+          trap 'cp "$package_backup" apps/desktop/package.json' EXIT
+          node -e "const fs=require('fs');const path='apps/desktop/package.json';const value=JSON.parse(fs.readFileSync(path,'utf8'));value.version='0.0.1';fs.writeFileSync(path, JSON.stringify(value, null, 2)+'\n')"
+          EDGE_EVER_DESKTOP_ARCH=x64 EDGE_EVER_DESKTOP_TARGET=linux \
+            bun scripts/run-desktop-builder.mjs --publish never
+          mv release/desktop/EdgeEver-0.0.1-linux-x64.AppImage \
+            "$RUNNER_TEMP/EdgeEver-linux-update-source.AppImage"
+          cp "$package_backup" apps/desktop/package.json
+          trap - EXIT
+
       - name: Package Linux AppImage
         env:
           EDGE_EVER_DESKTOP_ARCH: x64
@@ -570,6 +691,18 @@ jobs:
           test -n "$executable"
           xvfb-run -a bun run verify:packaged-desktop-startup -- "$executable"
 
+      - name: Verify packaged Linux private protocol file flows
+        run: |
+          executable=""
+          for candidate in release/desktop/linux-unpacked/EdgeEver release/desktop/linux-unpacked/edgeever; do
+            if [[ -x "$candidate" ]]; then
+              executable="$candidate"
+              break
+            fi
+          done
+          test -n "$executable"
+          xvfb-run -a bun run verify:desktop-protocol-e2e -- "$executable"
+
       - name: Create Linux checksum
         run: |
           version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
@@ -577,12 +710,26 @@ jobs:
           sha256sum "EdgeEver-${version}-linux-x64.AppImage" > SHA256SUMS-linux.txt
           sha256sum --check SHA256SUMS-linux.txt
 
+      - name: Verify Linux automatic update metadata
+        run: |
+          version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
+          node scripts/verify-linux-update-release.mjs release/desktop "$version"
+
+      - name: Verify real Linux AppImage automatic update
+        run: |
+          version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
+          xvfb-run -a bun scripts/verify-linux-appimage-update.mjs \
+            "$RUNNER_TEMP/EdgeEver-linux-update-source.AppImage" \
+            "release/desktop/EdgeEver-${version}-linux-x64.AppImage" \
+            "$version"
+
       - name: Stage Linux Preview assets
         uses: actions/upload-artifact@v6
         with:
           name: edgeever-desktop-Linux-x64-staging
           path: |
             release/desktop/EdgeEver-*-linux-x64.AppImage
+            release/desktop/latest-linux.yml
             release/desktop/SHA256SUMS-linux.txt
           if-no-files-found: error
           retention-days: 14
@@ -660,7 +807,7 @@ jobs:
         run: |
           version="$(node -p "JSON.parse(require('fs').readFileSync('apps/desktop/package.json', 'utf8')).version")"
           node scripts/create-mac-update-metadata.mjs release/desktop "$version"
-          (cd release/desktop && sha256sum --check SHA256SUMS-linux.txt)
+          node scripts/verify-linux-update-release.mjs release/desktop "$version"
           asset_ready="$(
             find release/desktop -maxdepth 1 -type f -exec basename {} \; |
               node scripts/check-native-release-assets.mjs desktop true "v${version}" "$version" allow-missing-windows-signature
@@ -747,12 +894,9 @@ jobs:
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern 'EdgeEver-*-linux-x64.AppImage' \
+            --pattern 'latest-linux.yml' \
             --pattern 'SHA256SUMS-linux.txt' \
             --dir release/desktop
 
-      - name: Verify Linux checksum
-        run: |
-          app_image="$(find release/desktop -maxdepth 1 -name 'EdgeEver-*-linux-x64.AppImage' -type f -print -quit)"
-          test -n "$app_image"
-          test "$(find release/desktop -maxdepth 1 -name 'EdgeEver-*-linux-x64.AppImage' -type f | wc -l | tr -d ' ')" = "1"
-          (cd release/desktop && sha256sum --check SHA256SUMS-linux.txt)
+      - name: Verify Linux automatic update release
+        run: node scripts/verify-linux-update-release.mjs release/desktop

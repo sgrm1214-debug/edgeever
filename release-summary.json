@@ -1,21 +1,21 @@
 {
-  "version": "1.62.0",
+  "version": "1.63.0",
   "changes": {
     "en-US": [
-      "Diagrams now offer smoother canvas navigation, clearer multi-selection feedback, refined mind-map and flowchart styling, ten color schemes, and new organization, timeline, and fishbone layouts.",
-      "Extensions now use clearer trusted-code and network permissions, host-rendered settings, settings-change notifications, automatic updates for official plugins, and a new official AI RSS plugin.",
-      "Android and iOS users can filter notes by tag from the native workspace.",
-      "Linux x64 is now available as an AppImage Preview download.",
-      "Desktop attachment downloads preserve their original filenames.",
-      "Docker self-hosting starts more reliably across supported Linux environments and now packages all runtime dependencies correctly."
+      "Import Markdown notes by dragging and dropping files, with more reliable note creation and sync handling.",
+      "Render visual notes consistently in shared pages and native viewers.",
+      "Add Linux AppImage automatic updates and make Linux downloads easier to find.",
+      "Improve desktop reliability with diagnostics for issue reports, safer file rendering, and dependable bundled plugin loading.",
+      "Refresh marketplace cards and add a Product Hunt support link in the personal center.",
+      "Reduce Docker runtime overhead with a bundled production runtime."
     ],
     "zh-CN": [
-      "图表现已支持更顺畅的画布导航、更清晰的多选反馈、优化的思维导图与流程图样式、十种配色方案，以及组织架构图、时间线和鱼骨图布局。",
-      "扩展现采用更清晰的受信任代码与网络权限、宿主渲染设置和设置变更通知；官方插件可自动更新，并新增官方 AI RSS 插件。",
-      "Android 与 iOS 用户现在可以在原生工作区中按标签筛选笔记。",
-      "现已提供 Linux x64 AppImage Preview 下载。",
-      "桌面端下载附件时会保留原始文件名。",
-      "Docker 自托管在受支持的 Linux 环境中启动更可靠，并会正确打包全部运行时依赖。"
+      "支持拖放导入 Markdown 笔记，并提升新建笔记与同步异常处理的可靠性。",
+      "在分享页面和原生客户端中一致呈现可视化笔记。",
+      "新增 Linux AppImage 自动更新，并让 Linux 下载入口更易发现。",
+      "通过问题反馈诊断信息、更安全的文件渲染和稳定的内置插件加载，提升桌面端可靠性。",
+      "优化插件市场卡片，并在个人中心加入 Product Hunt 支持入口。",
+      "通过内置生产运行时降低 Docker 运行开销。"
     ]
   }
 }

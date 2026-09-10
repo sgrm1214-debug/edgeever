@@ -17,7 +17,7 @@ COPY packages/wrangler/package.json packages/wrangler/package.json
 COPY patches patches
 
 FROM manifests AS dependencies
-RUN bun install --frozen-lockfile --linker hoisted \
+RUN bun install --frozen-lockfile \
   --filter edgeever \
   --filter @edgeever/api \
   --filter @edgeever/public-network \

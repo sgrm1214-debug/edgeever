@@ -885,6 +885,9 @@ jobs:
     name: Audit Linux Preview asset
     runs-on: ubuntu-22.04
     steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
       - name: Download Linux release assets
         env:
           GH_TOKEN: ${{ github.token }}

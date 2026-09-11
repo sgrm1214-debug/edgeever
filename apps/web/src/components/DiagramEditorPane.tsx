@@ -84,6 +84,7 @@ import {
   parseDiagramDocument,
   resolveDiagramStructure,
   resolveDiagramTheme,
+  resolveFlowchartTheme,
   serializeDiagramDocument,
   architectureEdgeVisual,
   architectureIconOffset,
@@ -1356,7 +1357,9 @@ export const DiagramEditorPane = ({
   const editSessionRef = useRef<MemoEditSession | null>(null);
   const saveRef = useRef<() => void>(() => undefined);
   const document = parseDiagramDocument(memo.contentMarkdown);
-  const documentTheme = resolveDiagramTheme(document?.theme);
+  const documentTheme = document?.kind === "flowchart"
+    ? resolveFlowchartTheme(document.theme)
+    : resolveDiagramTheme(document?.theme);
   const documentStructure = resolveDiagramStructure(document?.structure);
   const [title, setTitle] = useState(memo.title ?? "");
   const [tagsText, setTagsText] = useState(memo.tags.join(", "));
@@ -2475,20 +2478,23 @@ export const DiagramEditorPane = ({
 
   const applyTheme = (nextTheme: DiagramTheme) => {
     const graph = graphRef.current;
-    if (nextTheme === theme) return;
-    themeRef.current = nextTheme;
-    setTheme(nextTheme);
+    const nextResolvedTheme = document?.kind === "flowchart"
+      ? resolveFlowchartTheme(nextTheme)
+      : resolveDiagramTheme(nextTheme);
+    if (nextResolvedTheme === theme) return;
+    themeRef.current = nextResolvedTheme;
+    setTheme(nextResolvedTheme);
     if (!graph || readOnly) return;
     applyGraphPalette(
       graph,
-      nextTheme,
+      nextResolvedTheme,
       document?.kind ?? "flowchart",
       appearanceRef.current,
       structureRef.current,
     );
     setDirty(savedSnapshotRef.current !== diagramEditorSnapshot(
       titleRef.current,
-      graphToDocument(graph, document?.kind ?? "flowchart", nextTheme, structureRef.current),
+      graphToDocument(graph, document?.kind ?? "flowchart", nextResolvedTheme, structureRef.current),
     ));
   };
 

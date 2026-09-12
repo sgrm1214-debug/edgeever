@@ -206,6 +206,11 @@ import {
 } from "@/lib/ai-selection-replacement";
 import { getAttachmentFilenameFromLabel, getAttachmentResourceId } from "@/lib/attachment-links";
 import {
+  getAttachmentHoverTarget,
+  getAttachmentLinkFromEventTarget,
+  isInsideAttachmentHoverRegion,
+} from "./editor/attachment-resource-menu";
+import {
   IMAGE_MENU_HIDE_EVENT,
   IMAGE_MENU_SHOW_EVENT,
   IMAGE_PREVIEW_SHOW_EVENT,
@@ -279,13 +284,6 @@ type AiInsertionTarget = {
   kind: "markdown" | "plain" | "rich";
   position: number;
 };
-
-const getAttachmentLinkFromEventTarget = (target: EventTarget | null) =>
-  target instanceof Element
-    ? target.closest<HTMLAnchorElement>(
-        'a.edgeever-attachment-link, a[href*="/api/v1/resources/"], a[href^="edgeever-resource://"]'
-      )
-    : null;
 
 const getNoteLinkFromEventTarget = (target: EventTarget | null) =>
   target instanceof Element
@@ -1608,18 +1606,19 @@ const RichEditorPane = ({
 
   const showAttachmentMenu = useCallback((target: EventTarget | null) => {
     if (isMobileViewport) return false;
-    const link = getAttachmentLinkFromEventTarget(target);
-    if (!link) return false;
+    const hover = getAttachmentHoverTarget(target);
+    if (!hover) return false;
 
-    const href = link.getAttribute("href") || "";
+    const href = hover.link.getAttribute("href") || "";
     cancelResourceMenuHide();
     setNoteLinkHintPosition(null);
     showResourceMenu({
       kind: "attachment",
+      element: hover.toolbar ?? undefined,
       url: href,
-      filename: getAttachmentFilenameFromLabel(link.textContent || "") || getAttachmentResourceId(href) || "attachment",
+      filename: getAttachmentFilenameFromLabel(hover.link.textContent || "") || getAttachmentResourceId(href) || "attachment",
       resourceId: getAttachmentResourceId(href),
-      position: getNoteLinkHintPosition(link),
+      position: hover.toolbar ? { left: 0, top: 0, placement: "above" } : getNoteLinkHintPosition(hover.link),
     });
     return true;
   }, [cancelResourceMenuHide, isMobileViewport, showResourceMenu]);
@@ -1648,16 +1647,9 @@ const RichEditorPane = ({
   }, [showAttachmentMenu, showEditorLinkOpenHint]);
 
   const handleEditorMouseOut = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const attachmentLink = getAttachmentLinkFromEventTarget(event.target);
-    if (attachmentLink) {
-      const relatedTarget = event.relatedTarget;
-      if (
-        relatedTarget instanceof Node &&
-        (attachmentLink.contains(relatedTarget) ||
-          (relatedTarget instanceof Element && relatedTarget.closest("[data-edgeever-resource-menu]")))
-      ) {
-        return;
-      }
+    const attachmentHover = getAttachmentHoverTarget(event.target);
+    if (attachmentHover) {
+      if (isInsideAttachmentHoverRegion(attachmentHover, event.relatedTarget)) return;
       scheduleResourceMenuHide();
       return;
     }

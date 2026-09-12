@@ -1529,6 +1529,10 @@ export const enUS = {
     label: "Audio player: {{filename}}",
     unavailable: "This audio format cannot be played on this device. You can still download it or open it externally.",
   },
+  videoPlayer: {
+    label: "Video player: {{filename}}",
+    unavailable: "This video format cannot be played on this device. You can still download it or open it externally.",
+  },
   editor: {
     imageScale: "Image scale",
     scaleTo: "Scale to {{percent}}%",

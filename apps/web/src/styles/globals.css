@@ -949,7 +949,8 @@ textarea {
 }
 
 .ProseMirror .edgeever-pdf-viewer a.pdf-viewer-action:hover,
-.ProseMirror .edgeever-file-viewer a.pdf-viewer-action:hover {
+.ProseMirror .edgeever-file-viewer a.pdf-viewer-action:hover,
+.ProseMirror .edgeever-file-viewer button.pdf-viewer-action:hover {
   background: var(--brand-green-soft);
   color: var(--brand-green-text);
 }

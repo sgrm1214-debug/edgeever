@@ -20,10 +20,9 @@ import {
   canReplaceAiSource,
   createNativeUnsupportedContentExtensions,
   docToMarkdown,
-  getDefaultAiAction,
   getDefaultAiTargetLanguage,
   readStoredAiAssistantLastActionPreference,
-  resolveAiAssistantLastAction,
+  resolveAiAssistantOpenAction,
   writeStoredAiAssistantLastActionPreference,
   getAiDocumentFingerprint,
   getRichTextAiSelectionContext,
@@ -1071,8 +1070,8 @@ function LocalTiptapEditorImpl(props: LocalTiptapEditorProps) {
       content: editor.state.doc.slice(from, to).content.toJSON(),
     } as EditorDoc, props.baseUrl)).trim();
     if (!markdown) return false;
-    const resolved = resolveAiAssistantLastAction({
-      fallbackAction: getDefaultAiAction(!wholeNote),
+    const resolved = resolveAiAssistantOpenAction({
+      hasSelection: !wholeNote,
       preference: readStoredAiAssistantLastActionPreference(wholeNote ? "wholeNote" : "selected"),
       prompts: aiPrompts,
     });
@@ -1740,16 +1739,16 @@ const MobileSelectionAiPanel = ({
   const english = locale === "en-US";
   const [picker, setPicker] = useState<MobileAiPickerKind | null>(null);
   const actionLabels: Record<AiAction, string> = {
-    summarize: english ? "Summarize" : "总结",
+    summarize: english ? "Summarize" : "精简总结",
     "extract-key-points": english ? "Key points" : "提炼要点",
     "extract-todos": english ? "Extract tasks" : "提取待办",
-    "rewrite-proofread": english ? "Convert to Xiaohongshu style" : "转为小红书风格",
-    translate: english ? "Translate" : "翻译",
-    "improve-writing": english ? "Improve writing" : "改进写作",
+    "rewrite-proofread": english ? "Rewrite & proofread" : "改写与校对",
+    translate: english ? "Translate" : "全文翻译",
+    "improve-writing": english ? "Polish" : "润色表达",
     "fix-spelling-grammar": english ? "Fix spelling & grammar" : "修正拼写与语法",
     "make-shorter": english ? "Make concise" : "精炼表达",
     "make-longer": english ? "Make longer" : "扩写内容",
-    "simplify-language": english ? "Convert to X (Twitter) style" : "转为推特风格",
+    "simplify-language": english ? "Simplify language" : "简化表达",
     "change-tone": english ? "Change tone" : "调整语气",
     "continue-writing": english ? "Continue writing" : "继续写作",
     custom: english ? "Custom prompt" : "自定义指令",

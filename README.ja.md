@@ -170,7 +170,7 @@ EdgeEver の Web とデスクトップはプラグインと、コードなしテ
 - iOS アプリ: `apps/ios` のネイティブ SwiftUI（iOS 17+）。同梱の TipTap EditorBundle、GRDB のローカルミラー / outbox、Android に揃えたシェル。
 - ネイティブデスクトップ: Electron + Rust sidecar。横断プラットフォームの操作感と、速いローカルデータ。SQLite でオフライン編集、復帰後の差分同期、ローカルバックアップ。
 - Web Clipper: Manifest V3、Mozilla Readability、Turndown。Chrome、Microsoft Edge、Firefox。
-- バックエンド: Hono / Zod の業務アプリ 1 式。REST API、OpenAPI、Remote MCP。Cloudflare は Workers / D1 / R2、Docker は Bun / SQLite / ローカルファイルまたは S3。
+- バックエンド: Hono / Zod の業務アプリ 1 式。REST API と Remote MCP。Cloudflare は Workers / D1 / R2、Docker は Bun / SQLite / ローカルファイルまたは S3。
 - 公式サイト: `apps/site` の Astro 静的サイト。Cloudflare Pages に出せます。
 
 ## クイックスタート
@@ -187,7 +187,7 @@ bun run dev
 ```text
 apps/web          Vite + React フロントエンド、PWA、オフライン下書き、同期キュー
 apps/extension    Chrome/Edge/Firefox Manifest V3 Web Clipper
-apps/api          Cloudflare Worker + Hono API、OpenAPI、MCP
+apps/api          Cloudflare Worker + Hono API、MCP
 apps/mobile       Expo + React Native の Android アプリ
 apps/ios          ネイティブ SwiftUI の iOS アプリ（TipTap EditorBundle、GRDB）
 apps/desktop      Electron のデスクトップシェル、preload、ネイティブ梱包
@@ -198,7 +198,7 @@ crates/desktop-sidecar
                    ローカル SQLite、オフラインデータ、バックアップ、リソースの Rust sidecar
 scripts           Wrangler ラッパ、パスワード hash、CLI、MCP stdio、Evernote ENEX 取り込み
 migrations        D1/SQLite 共用の、追加のみの migration
-docs              OpenAPI、アーキテクチャ、移行、導入の文書
+docs              アーキテクチャ、移行、導入の文書
 .github/workflows Web、モバイル、iOS、デスクトップ梱包、導入、Release の CI
 wrangler.toml     Cloudflare Workers、Assets、D1、R2 の設定
 ```
@@ -214,16 +214,6 @@ content_text      検索、要約、索引
 ```
 
 **プロフィール** -> **インポートとエクスポート** から EdgeEver ZIP を書き出し、または取り込めます。`notes/` は Markdown として読め、持ち出せます。構造化データは EdgeEver インスタンス間の完全復元に使います。取り込みは関係ない対象データを残し、同じ EdgeEver ID の記録は上書きします。
-
-## API
-
-OpenAPI schema:
-
-```text
-https://your-domain/api/openapi.json
-```
-
-リポジトリ内: [docs/openapi.json](docs/openapi.json)。
 
 ## MCP
 

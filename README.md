@@ -178,7 +178,7 @@ EdgeEver supports plugins and code-free themes on Web and desktop, installable f
 - iOS app: Native SwiftUI in `apps/ios` (iOS 17+), with a packaged TipTap EditorBundle, GRDB local mirror/outbox, and Android-aligned shell chrome.
 - Native desktop app: Electron + Rust sidecar combines a consistent cross-platform experience with high-performance local data services; SQLite enables offline editing, incremental sync when back online, and local backups.
 - Web clipper: Manifest V3, Mozilla Readability, and Turndown for Chrome, Microsoft Edge, and Firefox.
-- Backend: one Hono/Zod business application with REST API, OpenAPI, and Remote MCP; Cloudflare uses Workers/D1/R2, while Docker uses Bun/SQLite/local files or S3.
+- Backend: one Hono/Zod business application with REST API and Remote MCP; Cloudflare uses Workers/D1/R2, while Docker uses Bun/SQLite/local files or S3.
 - Official site: Astro static site in `apps/site`, deployable to Cloudflare Pages.
 
 ## Quick Start
@@ -195,7 +195,7 @@ Local development signs in automatically; fresh databases use `owner` / `edgeeve
 ```text
 apps/web          Vite + React frontend, PWA, offline drafts, and sync queue
 apps/extension    Chrome/Edge/Firefox Manifest V3 web clipper
-apps/api          Cloudflare Worker + Hono API, OpenAPI, MCP endpoint
+apps/api          Cloudflare Worker + Hono API, MCP endpoint
 apps/mobile       Expo + React Native Android app
 apps/ios          Native SwiftUI iOS app (TipTap EditorBundle, GRDB)
 apps/desktop      Electron desktop shell, preload bridge, and native packaging
@@ -206,7 +206,7 @@ crates/desktop-sidecar
                    Rust sidecar for local SQLite, offline data, backups, and resources
 scripts           Wrangler wrapper, password hash, CLI, MCP stdio bridge, Evernote ENEX import
 migrations        Shared append-only D1/SQLite database migrations
-docs              OpenAPI schema, architecture, migration, and deployment docs
+docs              Architecture, migration, and deployment docs
 .github/workflows CI for web, mobile, iOS, desktop packaging, deployment, and releases
 wrangler.toml     Cloudflare Workers, Assets, D1, R2 configuration
 ```
@@ -222,16 +222,6 @@ content_text      Search, summary, and indexing text
 ```
 
 Open **Profile** -> **Import and export** to export or import an EdgeEver ZIP. Its `notes/` directory is directly readable and portable as Markdown, while its structured data supports complete recovery between EdgeEver instances. Import preserves unrelated target data and overwrites records with matching EdgeEver IDs.
-
-## API
-
-OpenAPI schema:
-
-```text
-https://your-domain/api/openapi.json
-```
-
-Repository file: [docs/openapi.json](docs/openapi.json).
 
 ## MCP
 

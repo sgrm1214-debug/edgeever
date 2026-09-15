@@ -60,13 +60,28 @@ const writeResizedPng = async (sourceBuffer, size, destination) => {
     .toFile(destination);
 };
 
+const TRAY_TEMPLATE_ALPHA_THRESHOLD = 80;
+const TRAY_MARK_CENTER = { x: 627, y: 580 };
+const TRAY_MARK_SCALE = 1.22;
+
+export const buildMacTrayTemplateSvg = (markSvg) => {
+  const pathMatch = markSvg.match(/<path\b[^>]*\sd="([^"]+)"/);
+  if (!pathMatch) throw new Error("Brand mark is missing a path");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="EdgeEver">
+  <g transform="translate(512 512) scale(${TRAY_MARK_SCALE}) translate(-${TRAY_MARK_CENTER.x} -${TRAY_MARK_CENTER.y})">
+    <path fill="#000000" fill-rule="evenodd" d="${pathMatch[1]}" />
+  </g>
+</svg>
+`;
+};
+
 export const prepareTrayIcons = async ({
   markPath = brandMarkPath,
   assetsDirectory = assetsDir,
 } = {}) => {
   await mkdir(assetsDirectory, { recursive: true });
   const markSvg = await readFile(markPath, "utf8");
-  const templateSvg = markSvg.replaceAll("#07130b", "#000000");
+  const templateSvg = buildMacTrayTemplateSvg(markSvg);
   await writeFile(join(assetsDirectory, "trayTemplate.svg"), templateSvg);
 
   const sourceBuffer = Buffer.from(templateSvg);
@@ -84,6 +99,7 @@ export const prepareTrayIcons = async ({
       data[offset] = 0;
       data[offset + 1] = 0;
       data[offset + 2] = 0;
+      data[offset + 3] = data[offset + 3] >= TRAY_TEMPLATE_ALPHA_THRESHOLD ? 255 : 0;
     }
     await sharp(data, {
       raw: { width: info.width, height: info.height, channels: 4 },

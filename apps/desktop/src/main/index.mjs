@@ -29,7 +29,7 @@ import { isAllowedPrintPreviewUrl } from "./window-open-policy.mjs";
 import { showWindow } from "./window-visibility.mjs";
 import { trayIconPath } from "./tray-icon.mjs";
 import { writeRichClipboard } from "./clipboard-write.mjs";
-import { captureScreenToNote, screenshotImportIpcPayload, writeScreenshotTempPath } from "./screenshot-capture.mjs";
+import { captureScreenToNote, createScreenshotCaptureGuard, screenshotImportIpcPayload, writeScreenshotTempPath } from "./screenshot-capture.mjs";
 import { LocalDataResetError, scheduleMacLocalDataReset } from "./local-data-reset.mjs";
 import { buildDesktopDiagnosticIssueUrl, normalizeDesktopDiagnostic } from "./desktop-diagnostics.mjs";
 import { createRendererStartupGuard } from "./renderer-startup-guard.mjs";
@@ -508,7 +508,7 @@ const importMarkdownFile = async (filePath) => {
 
 let pendingMarkdownImport = null;
 let pendingScreenshotImport = null;
-let screenshotCaptureInFlight = false;
+const screenshotCaptureGuard = createScreenshotCaptureGuard();
 let rendererReady = false;
 
 const flushPendingMarkdownImport = () => {
@@ -525,6 +525,7 @@ const sendScreenshotImport = (payload) => {
     pendingScreenshotImport = ipcPayload;
     return;
   }
+  pendingScreenshotImport = null;
   mainWindow.webContents.send("desktop:import-screenshot", ipcPayload);
 };
 
@@ -537,8 +538,7 @@ const flushPendingScreenshotImport = () => {
 };
 
 const captureScreenshotToNote = async () => {
-  if (screenshotCaptureInFlight) return;
-  screenshotCaptureInFlight = true;
+  if (!screenshotCaptureGuard.tryBegin()) return;
   const copy = desktopMenuCopy(app.getLocale());
   const wasVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible());
   const revealWindow = () => {
@@ -572,7 +572,7 @@ const captureScreenshotToNote = async () => {
       message: copy.screenshotFailed,
     });
   } finally {
-    screenshotCaptureInFlight = false;
+    screenshotCaptureGuard.end();
   }
 };
 

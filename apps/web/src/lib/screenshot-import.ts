@@ -32,6 +32,36 @@ export const screenshotFileFromImportPayload = (payload: {
   return new File([blobPart], payload.name || "screenshot.png", { type: payload.type || "image/png" });
 };
 
+export const screenshotImportDedupeKey = (payload: {
+  name?: string;
+  title?: string;
+  bytes?: { byteLength?: number } | null;
+}) => [payload.title?.trim() || "", payload.name || "", String(payload.bytes?.byteLength ?? 0)].join("\u0000");
+
+export const createScreenshotImportGate = (cooldownMs = 2000) => {
+  let inFlightKey: string | null = null;
+  let lastKey: string | null = null;
+  let lastAt = 0;
+  return {
+    tryBegin(key: string, now = Date.now()) {
+      if (inFlightKey) return false;
+      if (lastKey === key && now - lastAt < cooldownMs) return false;
+      inFlightKey = key;
+      return true;
+    },
+    finish(key: string, now = Date.now()) {
+      if (inFlightKey === key) inFlightKey = null;
+      lastKey = key;
+      lastAt = now;
+    },
+    fail(key: string) {
+      if (inFlightKey === key) inFlightKey = null;
+    },
+  };
+};
+
+export const screenshotImportGate = createScreenshotImportGate();
+
 const escapeMarkdownImageAlt = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("]", "\\]");
 
 export const screenshotNoteContent = (filename: string, url: string) => {

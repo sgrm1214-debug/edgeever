@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createScreenshotImportGate,
   createScreenshotMemo,
   normalizeScreenshotBytes,
   screenshotFileFromImportPayload,
+  screenshotImportDedupeKey,
   screenshotNoteContent,
 } from "./screenshot-import.ts";
 
@@ -118,5 +120,39 @@ describe("screenshot note content", () => {
       },
     })).rejects.toThrow("offline");
     expect(deleted).toEqual(["memo_failed"]);
+  });
+});
+
+describe("screenshot import gate", () => {
+  test("builds a stable key from the title, filename, and byte length", () => {
+    expect(screenshotImportDedupeKey({
+      name: "screenshot-20260915-222604.png",
+      title: "截图 2026-09-15 22:26",
+      bytes: new Uint8Array(4),
+    })).toBe(["截图 2026-09-15 22:26", "screenshot-20260915-222604.png", "4"].join("\u0000"));
+  });
+
+  test("drops a second import while the first screenshot is still being saved", () => {
+    const gate = createScreenshotImportGate(1000);
+    expect(gate.tryBegin("a")).toBe(true);
+    expect(gate.tryBegin("a")).toBe(false);
+    expect(gate.tryBegin("b")).toBe(false);
+  });
+
+  test("ignores the same screenshot payload during the cooldown after a successful import", () => {
+    const gate = createScreenshotImportGate(1000);
+    expect(gate.tryBegin("a")).toBe(true);
+    gate.finish("a", 0);
+    expect(gate.tryBegin("a", 500)).toBe(false);
+    expect(gate.tryBegin("b", 500)).toBe(true);
+    gate.fail("b");
+    expect(gate.tryBegin("a", 1500)).toBe(true);
+  });
+
+  test("allows a retry after a failed import", () => {
+    const gate = createScreenshotImportGate(1000);
+    expect(gate.tryBegin("a")).toBe(true);
+    gate.fail("a");
+    expect(gate.tryBegin("a")).toBe(true);
   });
 });

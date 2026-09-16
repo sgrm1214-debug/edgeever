@@ -2,8 +2,9 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/tianma-if/edgeever?style=social)](https://github.com/tianma-if/edgeever/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/tianma-if/edgeever?style=social)](https://github.com/tianma-if/edgeever/network/members)
+[![Docker Pulls](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Ftianma-if%2Fedgeever%2Fedgeever&query=downloadCount&style=social&logo=docker&label=Docker%20Pulls)](https://github.com/tianma-if/edgeever/pkgs/container/edgeever)
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-ea532a?style=social&logo=product-hunt)](https://www.producthunt.com/products/edgeever?utm_source=other&utm_medium=social)
-[![爱发电赞助](https://img.shields.io/badge/爱发电-赞助支持-946ce6?style=social&logo=github-sponsors)](https://afdian.com/a/tianma-if)
+[![爱发电赞助](https://img.shields.io/badge/爱发电-946ce6?style=social&logo=github-sponsors)](https://afdian.com/a/tianma-if)
 
 简体中文 | [繁體中文](README.zh-TW.md) | [English](README.md) | [日本語](README.ja.md)
 

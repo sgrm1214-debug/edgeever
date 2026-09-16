@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   captureDisplayScreenshot,
+  createScreenshotCaptureGuard,
   isScreenshotCancelledExit,
   macScreencaptureArgs,
   normalizeIpcBytes,
@@ -85,18 +86,42 @@ describe("screenshot capture helpers", () => {
   });
 });
 
+describe("screenshot capture guard", () => {
+  test("rejects a second capture until the cooldown elapses", () => {
+    const timers = [];
+    const guard = createScreenshotCaptureGuard({
+      cooldownMs: 20,
+      schedule: (fn) => {
+        timers.push(fn);
+        return timers.length;
+      },
+      cancel: () => {},
+    });
+    expect(guard.tryBegin()).toBe(true);
+    expect(guard.tryBegin()).toBe(false);
+    guard.end();
+    expect(guard.tryBegin()).toBe(false);
+    timers.at(-1)();
+    expect(guard.tryBegin()).toBe(true);
+  });
+});
+
 describe("desktop screenshot to note wiring", () => {
   test("replaces the tray sync and backup actions with screenshot capture", () => {
     expect(mainSource).toContain("captureScreenshotToNote");
     expect(mainSource).toContain("captureScreenToNote");
+    expect(mainSource).toContain("createScreenshotCaptureGuard");
+    expect(mainSource).toContain("pendingScreenshotImport = null");
     expect(mainSource).not.toContain("overlay.html");
     expect(mainSource).toContain("copy.screenshotToNote");
     expect(mainSource).not.toContain('label: copy.syncNow, click: () => sendDesktopCommand("sync-now")');
     expect(mainSource).not.toContain('label: copy.backupNow, click: () => sendDesktopCommand("backup-now")');
     expect(preloadSource).toContain("onImportScreenshot");
+    expect(preloadSource).toContain("screenshotImportListener");
     expect(preloadSource).toContain('value.type === "Buffer"');
     expect(workspaceSource).toContain("onImportScreenshot");
     expect(workspaceSource).toContain("createScreenshotMemo");
+    expect(workspaceSource).toContain("screenshotImportGate");
     expect(workspaceSource).toContain("screenshotFileFromImportPayload");
     expect(workspaceSource).not.toContain("setPendingEditorInsert");
   });

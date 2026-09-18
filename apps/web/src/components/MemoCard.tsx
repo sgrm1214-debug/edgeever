@@ -51,6 +51,7 @@ export const MemoCard = ({
   sortMode,
   multiSelectKeyDown,
   onOpen,
+  onPrefetch,
   onRestore,
   onDelete,
   onOpenContextMenu,
@@ -69,6 +70,7 @@ export const MemoCard = ({
   sortMode: MemoSortMode;
   multiSelectKeyDown: boolean;
   onOpen: () => void;
+  onPrefetch?: () => void;
   onRestore: () => void;
   onDelete: () => void;
   onOpenContextMenu: (event: MouseEvent<HTMLElement>) => void;
@@ -180,7 +182,12 @@ export const MemoCard = ({
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType !== "touch" || selectionMode) {
+    if (event.pointerType !== "touch") {
+      onPrefetch?.();
+      return;
+    }
+
+    if (selectionMode) {
       return;
     }
 

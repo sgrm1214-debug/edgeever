@@ -380,6 +380,7 @@ export const MemoListPane = ({
   onSortModeChange,
   onLoadMoreMemos,
   onOpenMemo,
+  onPrefetchMemo,
   onDeleteMemo,
   onRestoreMemo,
   onTogglePinMemo,
@@ -458,6 +459,7 @@ export const MemoListPane = ({
   onSortModeChange: (sortMode: MemoSortMode) => void;
   onLoadMoreMemos: () => void;
   onOpenMemo: (memoId: string) => void;
+  onPrefetchMemo?: (memoId: string) => void;
   onDeleteMemo: (memoId: string) => void;
   onRestoreMemo: (memoId: string) => void;
   onTogglePinMemo: (memo: MemoSummary) => void;
@@ -1495,6 +1497,7 @@ export const MemoListPane = ({
                   sortMode={view === "trash" ? "updated-desc" : sortMode}
                   multiSelectKeyDown={multiSelectKeyDown}
                   onOpen={() => onOpenMemo(memo.id)}
+                  onPrefetch={onPrefetchMemo ? () => onPrefetchMemo(memo.id) : undefined}
                   onRestore={() => onRestoreMemo(memo.id)}
                   onDelete={() => onDeleteMemo(memo.id)}
                   onOpenContextMenu={(event) => handleOpenMemoContextMenu(memo, event)}
@@ -1518,13 +1521,14 @@ export const MemoListPane = ({
           are not offset by the memo pane's backdrop-filter containing block. */}
       {memoContextMenu && typeof document !== "undefined" ? createPortal(
         <div style={{ position: "fixed", left: memoContextMenu.x, top: memoContextMenu.y, zIndex: 100 }}>
-          <DropdownMenu open={true} onOpenChange={(open) => { if (!open) setMemoContextMenu(null); }}>
+          <DropdownMenu modal={false} open={true} onOpenChange={(open) => { if (!open) setMemoContextMenu(null); }}>
             <DropdownMenuTrigger asChild>
               <span className="sr-only" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
-              className="max-h-[calc(100dvh-1.5rem)] w-56 max-w-[calc(100vw-1.5rem)] overflow-y-auto bg-card border border-slate-200 rounded-md py-1 shadow-md"
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              className="max-h-[calc(100dvh-1.5rem)] w-56 max-w-[calc(100vw-1.5rem)] overflow-y-auto bg-card border border-slate-200 rounded-md py-1 shadow-md duration-0 data-[state=open]:animate-none data-[state=closed]:animate-none"
               data-memo-actions-menu
             >
               <DropdownMenuItem

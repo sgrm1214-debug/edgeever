@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { shouldRetryCreatedMemoFocus } from "./editor-pane-helpers.ts";
 
 describe("created memo focus retry", () => {
@@ -41,5 +42,16 @@ describe("created memo focus retry", () => {
       editorFocused: false,
       hydratedForMemo: true,
     })).toBe(false);
+  });
+});
+
+describe("editor document reset", () => {
+  test("rebuilds EditorState from JSON so undo history does not follow a memo switch", () => {
+    const source = readFileSync(new URL("./editor-pane-helpers.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("export const resetEditorDocument");
+    expect(source).toContain("editor.view.updateState(EditorState.create({");
+    expect(source).toContain("doc: editor.schema.nodeFromJSON(content)");
+    expect(source).toContain("plugins: editor.state.plugins");
   });
 });

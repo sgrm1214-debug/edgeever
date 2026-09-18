@@ -256,6 +256,7 @@ import {
   isCreatedMemoEditorFocused,
   isEditorReady,
   MemoSaveRequestError,
+  resetEditorDocument,
   shouldRetryCreatedMemoFocus,
   MOBILE_DRAFT_PERSIST_DELAY_MS,
   MOBILE_EDITOR_QUERY,
@@ -1199,10 +1200,9 @@ const RichEditorPane = ({
       },
     },
   }, [
-    // A ProseMirror undo history belongs to exactly one logical memo. A newly
-    // created memo keeps the same instance while its local id is remapped to a
-    // durable id; an actual memo switch still receives a fresh undo history.
-    editorInstanceMemoKey,
+    // Keep one TipTap view for the pane lifetime. A newly created memo already
+    // reuses this instance across local→durable id remaps; switching notes now
+    // also reuses it and resets undo history via resetEditorDocument.
   ]);
 
   const {
@@ -2077,7 +2077,27 @@ const RichEditorPane = ({
       hydratedMemoIdRef.current = null;
       appliedEditorSourceKeyRef.current = null;
       clearMarkdownSnapshot();
-      setHydratedEditorMemoId(null);
+      const immediateDraft = resolveEditorDraftState({ memo, draft: null, queuedUpdate: null });
+      editingMemoIdRef.current = memo.id;
+      setHasUnsavedChanges(false);
+      setSaveState("idle");
+      setSaveConflictInfo(null);
+      setTitle(immediateDraft.title);
+      setTagsText(immediateDraft.tagsText);
+      setMobilePlainText(immediateDraft.contentMarkdown);
+      setMobilePlainTextElementValue(mobileTextAreaRef.current, immediateDraft.contentMarkdown);
+      hydrateMarkdownSource(memo.id, immediateDraft.contentJson, immediateDraft.contentMarkdown);
+      if (isEditorReady(currentEditor)) {
+        try {
+          resetEditorDocument(currentEditor, immediateDraft.contentJson);
+        } catch (err) {
+          console.error("Failed to reset TipTap document, falling back to setContent:", err);
+          currentEditor.commands.setContent(immediateDraft.contentJson);
+        }
+      }
+      appliedEditorSourceKeyRef.current = immediateDraft.sourceKey;
+      hydratedMemoIdRef.current = memo.id;
+      setHydratedEditorMemoId(memo.id);
     }
 
     // While the user still has unsaved keystrokes, ignore memo prop churn entirely
@@ -2180,7 +2200,7 @@ const RichEditorPane = ({
         title === nextTitle &&
         tagsText === nextTagsText
       );
-      const sourceAlreadyApplied = alreadyHydratedSameMemo && appliedEditorSourceKeyRef.current === sourceKey;
+      const sourceAlreadyApplied = appliedEditorSourceKeyRef.current === sourceKey;
 
       // Skip a full document replace when content already matches — setContent
       // always resets the selection and feels like a line jump / jump-to-end.
@@ -2238,7 +2258,11 @@ const RichEditorPane = ({
 
       if (isEditorReady(currentEditor) && shouldReplaceDocument && !keptLiveMarkdown) {
         try {
-          currentEditor.commands.setContent(nextContent);
+          if (sameMemo) {
+            currentEditor.commands.setContent(nextContent);
+          } else {
+            resetEditorDocument(currentEditor, nextContent);
+          }
         } catch (err) {
           console.error("Failed to set TipTap contentJson, falling back to markdownToDoc:", err);
           currentEditor.commands.setContent(markdownToDoc(nextMarkdown));

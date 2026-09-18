@@ -1120,6 +1120,12 @@ export const WorkspaceApp = ({
     queryFn: () => repository.getMemo(detailMemoId as string, memoView === "trash"),
     enabled: Boolean(detailMemoId),
   });
+  const prefetchMemoDetail = useCallback((memoId: string) => {
+    void queryClient.prefetchQuery({
+      queryKey: memoDetailQueryKey(memoId, memoView),
+      queryFn: () => repository.getMemo(memoId, memoView === "trash"),
+    });
+  }, [memoView, queryClient, repository]);
 
   useEffect(() => {
     const handleMemoDetailRefreshed = (event: Event) => {
@@ -2995,6 +3001,7 @@ export const WorkspaceApp = ({
                 setSelectedMemoId(memoId);
                 setActivePane("editor");
               }}
+              onPrefetchMemo={prefetchMemoDetail}
               onToggleMemo={(memoId, rangeMemoIds) => {
                 setMemoSelectionMode(true);
                 setSelectedMemoIds((current) => {

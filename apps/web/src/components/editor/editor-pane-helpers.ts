@@ -1,5 +1,6 @@
+import { EditorState } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
-import type { MemoDetail, MemoEditSession } from "@edgeever/shared";
+import type { MemoDetail, MemoEditSession, TiptapDoc } from "@edgeever/shared";
 import { isDesktopResourceRuntime } from "@/lib/desktop-resources";
 import { isBrowserOffline } from "@/lib/network-status";
 import { isLocalMemoId } from "@/lib/local-mirror";
@@ -76,6 +77,18 @@ export type MobilePlainTextElement = HTMLTextAreaElement | HTMLDivElement;
 
 export const isEditorReady = (editor: Editor | null | undefined): editor is Editor =>
   Boolean(editor && !editor.isDestroyed && (editor as { extensionManager?: unknown }).extensionManager);
+
+/**
+ * Replace the document with a fresh EditorState so undo/redo cannot leak
+ * across memos. Cheaper than destroying the TipTap view on every switch.
+ */
+export const resetEditorDocument = (editor: Editor, content: TiptapDoc) => {
+  editor.view.updateState(EditorState.create({
+    schema: editor.schema,
+    doc: editor.schema.nodeFromJSON(content),
+    plugins: editor.state.plugins,
+  }));
+};
 
 export const CREATED_MEMO_FOCUS_MAX_ATTEMPTS = 120;
 

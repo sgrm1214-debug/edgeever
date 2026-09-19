@@ -45,6 +45,7 @@ export const MemoCard = ({
   selected,
   checked,
   dragMemoIds,
+  isLast = false,
   isTrashView,
   selectionMode,
   listDensity,
@@ -64,6 +65,7 @@ export const MemoCard = ({
   selected: boolean;
   checked: boolean;
   dragMemoIds: string[];
+  isLast?: boolean;
   isTrashView: boolean;
   selectionMode: boolean;
   listDensity: MemoListDensity;
@@ -332,7 +334,8 @@ export const MemoCard = ({
       draggable={!isTrashView}
       onDragStart={handleDragStart}
       className={cn(
-        "edgeever-memo-divider group relative overflow-hidden border border-slate-100 bg-card transition lg:rounded-none lg:border-x-0 lg:border-t-0 lg:border-slate-200 lg:shadow-none lg:last:border-b-0 transition-all duration-200 select-none",
+        "edgeever-memo-divider group relative overflow-hidden border border-slate-100 bg-card transition lg:rounded-none lg:border-x-0 lg:border-t-0 lg:border-slate-200 lg:shadow-none transition-all duration-200 select-none",
+        isLast && "lg:border-b-0",
         listDensity === "compact" ? "rounded-md shadow-none" : "rounded-lg shadow-[0_4px_16px_rgba(15,23,42,0.045)]",
         !selectionMode && selected
           ? "edgeever-workspace-selection-desktop"

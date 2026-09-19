@@ -28,6 +28,17 @@ describe("desktop memo list spacing", () => {
   });
 });
 
+describe("memo list windowing", () => {
+  test("renders only virtualized memo cards instead of mapping the whole loaded list", () => {
+    const source = readFileSync(new URL("./MemoListPane.tsx", import.meta.url), "utf8");
+
+    expect(source).toContain("useVirtualizer");
+    expect(source).toContain("memoListVirtualizer.getVirtualItems()");
+    expect(source).toContain("memoListVirtualizer.measureElement");
+    expect(source).not.toContain("{memos.map((memo) => (");
+  });
+});
+
 describe("empty memo list creation", () => {
   test("does not forward the React click event as a memo kind", () => {
     const source = readFileSync(new URL("./MemoListPane.tsx", import.meta.url), "utf8");

@@ -5,11 +5,13 @@ import {
   useMemo,
   useRef,
   useEffect,
+  useCallback,
   type MouseEvent,
   type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import * as m from "motion/react-m";
@@ -88,6 +90,11 @@ import {
   readMemoListDensityPreference,
   writeMemoListDensityPreference,
 } from "@/lib/app-helpers";
+import {
+  estimateMemoListItemSize,
+  MEMO_LIST_MOBILE_ITEM_GAP_PX,
+  MEMO_LIST_VIRTUAL_OVERSCAN,
+} from "@/lib/memo-list-virtual";
 
 const isDesktopViewport = () => window.matchMedia("(min-width: 1024px)").matches;
 
@@ -522,9 +529,23 @@ export const MemoListPane = ({
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const listRootRef = useRef<HTMLDivElement | null>(null);
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const [listScrollElement, setListScrollElement] = useState<HTMLDivElement | null>(null);
+  const [isDesktopList, setIsDesktopList] = useState(isDesktopViewport);
   const moveTargetSelectRef = useRef<HTMLSelectElement | null>(null);
   const previousSelectionModeRef = useRef(selectionMode);
   const skipSelectedMemoAutoScrollRef = useRef(false);
+  const setListScrollNode = useCallback((node: HTMLDivElement | null) => {
+    listScrollRef.current = node;
+    setListScrollElement(node);
+  }, []);
+  const memoListVirtualizer = useVirtualizer({
+    count: memos.length,
+    getScrollElement: () => listScrollElement,
+    estimateSize: () => estimateMemoListItemSize(listDensity, isDesktopList),
+    overscan: MEMO_LIST_VIRTUAL_OVERSCAN,
+    gap: isDesktopList ? 0 : MEMO_LIST_MOBILE_ITEM_GAP_PX,
+    getItemKey: (index) => memos[index]?.id ?? index,
+  });
 
   const canEnterSelectionMode = visibleMemoIds.length > 0;
   const selectedVisibleMemoCount = visibleMemoIds.filter((memoId) => selectedMemoIds.has(memoId)).length;
@@ -666,6 +687,18 @@ export const MemoListPane = ({
   }, [filterMode, filterOptions, onFilterModeChange]);
 
   useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsDesktopList(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    memoListVirtualizer.measure();
+  }, [isDesktopList, listDensity, memoListVirtualizer]);
+
+  useEffect(() => {
     if (!hasMoreMemos || isLoadingMoreMemos) {
       return;
     }
@@ -739,26 +772,13 @@ export const MemoListPane = ({
       return;
     }
 
-    const escapedMemoId = CSS.escape(selectedMemoId);
-    const selectedNode = scrollContainer.querySelector<HTMLElement>(`[data-memo-id="${escapedMemoId}"]`);
-
-    if (!selectedNode) {
+    const selectedIndex = visibleMemoIds.indexOf(selectedMemoId);
+    if (selectedIndex < 0) {
       return;
     }
 
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const selectedRect = selectedNode.getBoundingClientRect();
-    const stickyHeaderOffset = 40;
-
-    if (selectedRect.top < containerRect.top + stickyHeaderOffset) {
-      scrollContainer.scrollTop -= containerRect.top + stickyHeaderOffset - selectedRect.top;
-      return;
-    }
-
-    if (selectedRect.bottom > containerRect.bottom) {
-      scrollContainer.scrollTop += selectedRect.bottom - containerRect.bottom;
-    }
-  }, [selectedMemoId, visibleMemoIds]);
+    memoListVirtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+  }, [memoListVirtualizer, selectedMemoId, visibleMemoIds]);
 
   useEffect(() => {
     const wasSelectionMode = previousSelectionModeRef.current;
@@ -785,6 +805,11 @@ export const MemoListPane = ({
       return;
     }
 
+    const focusIndex = visibleMemoIds.indexOf(memoIdToFocus);
+    if (focusIndex >= 0) {
+      memoListVirtualizer.scrollToIndex(focusIndex, { align: "auto" });
+    }
+
     window.setTimeout(() => {
       const scrollContainer = listScrollRef.current;
       if (!scrollContainer) {
@@ -793,11 +818,11 @@ export const MemoListPane = ({
 
       const escapedMemoId = CSS.escape(memoIdToFocus);
       const memoButton = scrollContainer.querySelector<HTMLButtonElement>(
-        `[data-memo-id="${escapedMemoId}"] button[title^="Ctrl/Cmd"]`
+        `[data-memo-id="${escapedMemoId}"] button`
       );
       memoButton?.focus({ preventScroll: true });
     }, 0);
-  }, [lastSelectedMemoId, selectedMemoId, selectionMode, visibleMemoIds]);
+  }, [lastSelectedMemoId, memoListVirtualizer, selectedMemoId, selectionMode, visibleMemoIds]);
 
   useEffect(() => {
     if (!selectionMode) {
@@ -1446,7 +1471,7 @@ export const MemoListPane = ({
       </header>
 
       <div
-        ref={listScrollRef}
+        ref={setListScrollNode}
         className="relative min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-0 lg:pb-3 lg:[scrollbar-gutter:stable_both-edges]"
       >
         {isLoading || (isRefreshing && memos.length === 0) ? (
@@ -1482,34 +1507,49 @@ export const MemoListPane = ({
             )}
           </div>
         ) : (
-          <div className="space-y-4 lg:space-y-0 lg:overflow-hidden lg:rounded-sm lg:border-y lg:border-slate-200 lg:bg-card">
-            <div className="space-y-3 lg:space-y-0">
-              {memos.map((memo) => (
-                <MemoCard
-                  key={memo.id}
-                  memo={memo}
-                  selected={memo.id === selectedMemoId}
-                  checked={selectedMemoIds.has(memo.id)}
-                  dragMemoIds={selectedMemoIds.has(memo.id) ? Array.from(selectedMemoIds) : [memo.id]}
-                  isTrashView={view === "trash"}
-                  selectionMode={selectionMode}
-                  listDensity={listDensity}
-                  sortMode={view === "trash" ? "updated-desc" : sortMode}
-                  multiSelectKeyDown={multiSelectKeyDown}
-                  onOpen={() => onOpenMemo(memo.id)}
-                  onPrefetch={onPrefetchMemo ? () => onPrefetchMemo(memo.id) : undefined}
-                  onRestore={() => onRestoreMemo(memo.id)}
-                  onDelete={() => onDeleteMemo(memo.id)}
-                  onOpenContextMenu={(event) => handleOpenMemoContextMenu(memo, event)}
-                  onOpenSelectionContextMenu={(event) => handleOpenSelectionContextMenu(memo, event)}
-                  onOpenSelectionKeyboardContextMenu={(target) => handleOpenSelectionKeyboardContextMenu(memo, target)}
-                  onOpenKeyboardContextMenu={(target) => handleOpenMemoKeyboardContextMenu(memo, target)}
-                  onToggle={(event) => handleToggleMemo(memo.id, event)}
-                />
-              ))}
+          <div className="lg:overflow-hidden lg:rounded-sm lg:border-y lg:border-slate-200 lg:bg-card">
+            <div className="relative w-full" style={{ height: `${memoListVirtualizer.getTotalSize()}px` }}>
+              {memoListVirtualizer.getVirtualItems().map((virtualRow) => {
+                const memo = memos[virtualRow.index];
+                if (!memo) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={(element) => memoListVirtualizer.measureElement(element)}
+                    className="absolute left-0 top-0 w-full"
+                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                  >
+                    <MemoCard
+                      memo={memo}
+                      selected={memo.id === selectedMemoId}
+                      checked={selectedMemoIds.has(memo.id)}
+                      dragMemoIds={selectedMemoIds.has(memo.id) ? Array.from(selectedMemoIds) : [memo.id]}
+                      isLast={virtualRow.index === memos.length - 1}
+                      isTrashView={view === "trash"}
+                      selectionMode={selectionMode}
+                      listDensity={listDensity}
+                      sortMode={view === "trash" ? "updated-desc" : sortMode}
+                      multiSelectKeyDown={multiSelectKeyDown}
+                      onOpen={() => onOpenMemo(memo.id)}
+                      onPrefetch={onPrefetchMemo ? () => onPrefetchMemo(memo.id) : undefined}
+                      onRestore={() => onRestoreMemo(memo.id)}
+                      onDelete={() => onDeleteMemo(memo.id)}
+                      onOpenContextMenu={(event) => handleOpenMemoContextMenu(memo, event)}
+                      onOpenSelectionContextMenu={(event) => handleOpenSelectionContextMenu(memo, event)}
+                      onOpenSelectionKeyboardContextMenu={(target) => handleOpenSelectionKeyboardContextMenu(memo, target)}
+                      onOpenKeyboardContextMenu={(target) => handleOpenMemoKeyboardContextMenu(memo, target)}
+                      onToggle={(event) => handleToggleMemo(memo.id, event)}
+                    />
+                  </div>
+                );
+              })}
             </div>
             {isLoadingMoreMemos && (
-              <div className="border-t border-slate-100 px-4 py-3 text-center text-xs font-medium text-slate-500">
+              <div className="mt-4 border-t border-slate-100 px-4 py-3 text-center text-xs font-medium text-slate-500 lg:mt-0">
                 {t("memoList.loadingMore")}
               </div>
             )}

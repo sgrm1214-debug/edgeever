@@ -256,6 +256,7 @@ import {
   isCreatedMemoEditorFocused,
   isEditorReady,
   MemoSaveRequestError,
+  releaseEditorMedia,
   resetEditorDocument,
   shouldRetryCreatedMemoFocus,
   MOBILE_DRAFT_PERSIST_DELAY_MS,
@@ -598,6 +599,9 @@ const RichEditorPane = ({
       "heading-1": "",
       "heading-2": "",
       "heading-3": "",
+      "heading-4": "",
+      "heading-5": "",
+      "heading-6": "",
       "bullet-list": "",
       "ordered-list": "",
       "task-list": "",
@@ -628,6 +632,9 @@ const RichEditorPane = ({
       "heading-1": t("editorToolbar.heading1"),
       "heading-2": t("editorToolbar.heading2"),
       "heading-3": t("editorToolbar.heading3"),
+      "heading-4": t("editorToolbar.heading4"),
+      "heading-5": t("editorToolbar.heading5"),
+      "heading-6": t("editorToolbar.heading6"),
       "bullet-list": t("editorToolbar.bulletList"),
       "ordered-list": t("editorToolbar.orderedList"),
       "task-list": t("editorToolbar.taskList"),
@@ -1747,10 +1754,10 @@ const RichEditorPane = ({
         hydratedMemoIdRef.current !== currentMemo.id ||
         (!useMobilePlainTextEditor && !isEditorReady(currentEditor))
       ) {
-        return;
+        return Promise.resolve();
       }
 
-      void localDb.drafts.put({
+      return localDb.drafts.put({
         memoId: currentMemo.id,
         title: nextTitle,
         tagsText: nextTagsText,
@@ -2065,6 +2072,7 @@ const RichEditorPane = ({
       setSaveState("idle");
       setStorageSaveError(false);
       if (isEditorReady(currentEditor)) {
+        releaseEditorMedia(currentEditor);
         currentEditor.commands.clearContent();
       }
       return;
@@ -2079,6 +2087,7 @@ const RichEditorPane = ({
       clearMarkdownSnapshot();
       const immediateDraft = resolveEditorDraftState({ memo, draft: null, queuedUpdate: null });
       editingMemoIdRef.current = memo.id;
+      setImagePreview(null);
       setHasUnsavedChanges(false);
       setSaveState("idle");
       setSaveConflictInfo(null);
@@ -2265,6 +2274,7 @@ const RichEditorPane = ({
           }
         } catch (err) {
           console.error("Failed to set TipTap contentJson, falling back to markdownToDoc:", err);
+          releaseEditorMedia(currentEditor);
           currentEditor.commands.setContent(markdownToDoc(nextMarkdown));
         }
 
@@ -2490,13 +2500,9 @@ const RichEditorPane = ({
   }, [memo]);
 
   useEffect(() => {
-    if (!useMobilePlainTextEditor) {
-      return;
-    }
-
     const persistBeforeSuspend = () => {
       if (hasUnsavedChangesRef.current) {
-        persistCurrentDraft(title, tagsText, getMobilePlainTextValue());
+        void persistCurrentDraft(title, tagsText, getMobilePlainTextValue());
       }
     };
     const persistWhenHidden = () => {
@@ -2507,12 +2513,16 @@ const RichEditorPane = ({
 
     window.addEventListener("pagehide", persistBeforeSuspend);
     document.addEventListener("visibilitychange", persistWhenHidden);
+    const stopHibernatePrepare = window.edgeeverDesktop?.onHibernatePrepare?.(async () => {
+      await persistCurrentDraft(title, tagsText, getMobilePlainTextValue());
+    });
 
     return () => {
       window.removeEventListener("pagehide", persistBeforeSuspend);
       document.removeEventListener("visibilitychange", persistWhenHidden);
+      stopHibernatePrepare?.();
     };
-  }, [getMobilePlainTextValue, persistCurrentDraft, tagsText, title, useMobilePlainTextEditor]);
+  }, [getMobilePlainTextValue, persistCurrentDraft, tagsText, title]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {

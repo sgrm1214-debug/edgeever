@@ -1,6 +1,7 @@
 import { EditorState } from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 import type { MemoDetail, MemoEditSession, TiptapDoc } from "@edgeever/shared";
+import { releaseHtmlMediaSources } from "@/lib/editor-media-release";
 import { isDesktopResourceRuntime } from "@/lib/desktop-resources";
 import { isBrowserOffline } from "@/lib/network-status";
 import { isLocalMemoId } from "@/lib/local-mirror";
@@ -78,11 +79,17 @@ export type MobilePlainTextElement = HTMLTextAreaElement | HTMLDivElement;
 export const isEditorReady = (editor: Editor | null | undefined): editor is Editor =>
   Boolean(editor && !editor.isDestroyed && (editor as { extensionManager?: unknown }).extensionManager);
 
+export const releaseEditorMedia = (editor: Editor) => {
+  releaseHtmlMediaSources(editor.view.dom);
+};
+
 /**
  * Replace the document with a fresh EditorState so undo/redo cannot leak
  * across memos. Cheaper than destroying the TipTap view on every switch.
+ * Releases decoded images from the previous document first.
  */
 export const resetEditorDocument = (editor: Editor, content: TiptapDoc) => {
+  releaseEditorMedia(editor);
   editor.view.updateState(EditorState.create({
     schema: editor.schema,
     doc: editor.schema.nodeFromJSON(content),

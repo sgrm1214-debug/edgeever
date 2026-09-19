@@ -50,6 +50,7 @@ describe("editor document reset", () => {
     const source = readFileSync(new URL("./editor-pane-helpers.ts", import.meta.url), "utf8");
 
     expect(source).toContain("export const resetEditorDocument");
+    expect(source).toContain("releaseEditorMedia(editor)");
     expect(source).toContain("editor.view.updateState(EditorState.create({");
     expect(source).toContain("doc: editor.schema.nodeFromJSON(content)");
     expect(source).toContain("plugins: editor.state.plugins");

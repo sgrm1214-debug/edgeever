@@ -38,10 +38,10 @@ final class ShareViewController: NSViewController {
             guard let url = shareURL(for: destination) else {
                 throw CocoaError(.fileWriteUnknown)
             }
-            if let context = extensionContext {
-                _ = await context.open(url)
-                context.completeRequest(returningItems: nil)
+            guard let context = extensionContext, await context.open(url) else {
+                throw CocoaError(.fileReadUnknown)
             }
+            context.completeRequest(returningItems: nil)
         } catch {
             extensionContext?.cancelRequest(withError: error)
         }

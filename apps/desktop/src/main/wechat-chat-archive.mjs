@@ -530,8 +530,7 @@ export const wechatChatNoteFromArchive = (bytes, archiveName = TRANSCRIPT_NAME) 
     })
     : [escapeMarkdownText(text.trim())];
   const unused = items.filter((item) => !item.used).map((item) => mediaMarkdown(item));
-  const summaryCard = buildSummaryCard(messages, items);
-  const markdown = [summaryCard, ...sections, ...unused].filter(Boolean).join("\n\n").trim();
+  const markdown = [...sections, ...unused].filter(Boolean).join("\n\n").trim();
   if (!markdown) throw new WeChatArchiveError("unrecognized");
   return {
     title: archiveTitle(archiveName, messages),

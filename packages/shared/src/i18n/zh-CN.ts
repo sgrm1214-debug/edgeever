@@ -1367,6 +1367,7 @@ export const zhCN = {
       proposalConfirmOther: "确认",
       proposalDismiss: "忽略",
       toolProgress: "{{name}} · {{status}}",
+      generatedImage: "生成的图片",
     },
     agentSource: {
       title: "Agent 运行模式",
@@ -1375,7 +1376,7 @@ export const zhCN = {
       builtin: "内置 Agent",
       builtinHint: "直接调用下方配置的模型服务与工具。",
       local: "本机 Agent (ACP)",
-      localHint: "连接本机安装的 Codex、Antigravity、Grok Build 或 WorkBuddy 等 Agent。EdgeEver 不通过 ACP 暴露文件系统或终端权限，具体工具权限由 Agent 自身配置决定。",
+      localHint: "连接本机安装的 Codex、Antigravity、Grok Build 或 WorkBuddy 等 Agent。",
       adapter: "Agent",
       codex: "Codex",
       antigravity: "Antigravity",

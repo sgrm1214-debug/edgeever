@@ -22,6 +22,7 @@ import {
   Attachments,
 } from "@/components/ai-elements/attachments";
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai-elements/conversation";
+import { Image } from "@/components/ai-elements/image";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -107,12 +108,18 @@ type PendingAttachment = PreparedAiAttachment & {
 
 type LocalToolRow = { id: string; name: string; status: string; title?: string };
 
+type LocalImage = { id: string; mediaType: string; base64: string };
+
+const EMPTY_IMAGE_BYTES = new Uint8Array();
+const MAX_LOCAL_IMAGES = 8;
+
 type LocalTurn = {
   id: string;
   message: string;
   response: string;
   reasoning: string;
   tools: LocalToolRow[];
+  images: LocalImage[];
   attachments: Array<{ id: string; filename: string; mediaType: string; byteLength: number }>;
   status: "running" | "completed" | "failed" | "cancelled";
 };
@@ -848,6 +855,22 @@ function AiSidebarSession({
       }));
       return;
     }
+    if (event.type === "image") {
+      setLocalTurns((previous) => previous.map((turn) => {
+        if (turn.id !== turnId || turn.status === "cancelled") return turn;
+        if (turn.images.some((image) => image.mediaType === event.mediaType && image.base64 === event.base64)) return turn;
+        const index = turn.images.findIndex((image) => image.id === event.id);
+        const next = { id: event.id, mediaType: event.mediaType, base64: event.base64 };
+        if (index >= 0) {
+          const images = turn.images.slice();
+          images[index] = next;
+          return { ...turn, images };
+        }
+        if (turn.images.length >= MAX_LOCAL_IMAGES) return turn;
+        return { ...turn, images: [...turn.images, next] };
+      }));
+      return;
+    }
     if (event.type === "error" || event.type === "done") {
       setLocalTurns((previous) => previous.map((turn) => turn.id === turnId && turn.status === "running"
         ? { ...turn, status: event.type === "error" ? "failed" : "completed" }
@@ -1024,6 +1047,7 @@ function AiSidebarSession({
           response: "",
           reasoning: "",
           tools: [],
+          images: [],
           attachments: localAttachments,
           status: "running",
         }]);
@@ -1487,6 +1511,20 @@ function AiSidebarSession({
                       <li key={tool.id}>{t("aiAssistant.sidebar.toolProgress", { name: tool.title || tool.name, status: tool.status })}</li>
                     ))}
                   </ul>
+                ) : null}
+                {turn.images.length ? (
+                  <div className="flex flex-col gap-2">
+                    {turn.images.map((image) => (
+                      <Image
+                        key={image.id}
+                        alt={t("aiAssistant.sidebar.generatedImage")}
+                        base64={image.base64}
+                        className="max-h-96"
+                        mediaType={image.mediaType}
+                        uint8Array={EMPTY_IMAGE_BYTES}
+                      />
+                    ))}
+                  </div>
                 ) : null}
                 {turn.response ? <AiSidebarMessage isAnimating={turn.status === "running"}>{turn.response}</AiSidebarMessage> : null}
                 {renderSelectionReply(turn.id, turn.response, turn.status)}

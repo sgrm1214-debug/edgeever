@@ -981,7 +981,10 @@ function AiSidebarSession({
         ? { ...turn, status: event.type === "error" ? "failed" : "completed" }
         : turn));
       if (event.type === "error" && event.message) {
-        setError(event.message === "note_access_unavailable" ? t("aiAssistant.sidebar.noteAccessUnavailable") : event.message);
+        setError(event.message === "note_access_unavailable" ? t("aiAssistant.sidebar.noteAccessUnavailable")
+          : event.message === "needs_login" ? t(localAdapterId === "workbuddyCn" || localAdapterId === "workbuddyIntl"
+            ? "aiAssistant.sidebar.workbuddyLoginRequired" : "aiAssistant.sidebar.localLoginRequired")
+            : event.message === "agent_refused" ? t("aiAssistant.sidebar.agentRefused") : event.message);
       }
       if (active.current?.requestId === event.requestId) {
         active.current = null;

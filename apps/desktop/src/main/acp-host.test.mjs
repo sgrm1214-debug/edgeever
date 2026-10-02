@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { RequestError } from "@agentclientprotocol/sdk";
 import {
   acpInitializeParams,
+  automaticAcpPermissionResponse,
   buildPromptContent,
   classifyAcpFailure,
   createAcpHostRuntime,
@@ -34,6 +35,21 @@ test("classifies ACP prompt refusals without exposing vendor error details", () 
   expect(promptResultFailure({ stopReason: "refusal" })).toBe("agent_refused");
   expect(promptResultFailure({ stopReason: "refusal", _meta: { "codebuddy.ai/errorMessage": "not-json" } })).toBe("agent_refused");
   expect(promptResultFailure({ stopReason: "refusal", _meta: { "codebuddy.ai/errorMessage": JSON.stringify({ data: { category: "auth" }, message: "private detail" }) } })).toBe("needs_login");
+});
+
+test("ACP tool permissions automatically select a one-time allow option", () => {
+  const options = [
+    { optionId: "always", kind: "allow_always" },
+    { optionId: "once", kind: "allow_once" },
+    { optionId: "deny", kind: "reject_once" },
+  ];
+  expect(automaticAcpPermissionResponse({ options })).toEqual({ outcome: { outcome: "selected", optionId: "once" } });
+  expect(automaticAcpPermissionResponse({ options: options.filter((option) => option.kind !== "allow_once") }))
+    .toEqual({ outcome: { outcome: "selected", optionId: "always" } });
+  expect(automaticAcpPermissionResponse({ options: [{ optionId: "deny", kind: "reject_once" }] }))
+    .toEqual({ outcome: { outcome: "cancelled" } });
+  expect(automaticAcpPermissionResponse({ options: [{ optionId: "", kind: "allow_once" }] }))
+    .toEqual({ outcome: { outcome: "cancelled" } });
 });
 
 const collector = () => {
@@ -656,6 +672,42 @@ describe("ACP stdio session", () => {
     }
   }, 15_000);
 
+  sessionTest("keeps infographic prompts from granting note write access", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "edgeever-acp-infographic-"));
+    const reportPath = path.join(directory, "report.json");
+    try {
+      const scriptPath = await writeFakeAgent(directory, {
+        reportPath,
+        secretPath: path.join(directory, "secret.txt"),
+        allowImage: false,
+        allowEmbedded: false,
+        hold: false,
+      });
+      const runtime = createAcpHostRuntime({
+        mcpAccess: () => { throw new Error("infographic prompts must not open note access"); },
+        startMcpBridge: () => { throw new Error("infographic prompts must not open note access"); },
+      });
+      const events = collector();
+      await runtime.prompt({
+        adapterId: "antigravity",
+        path: scriptPath,
+        prompt: "换成小米",
+        contextText: "Reply with one json proposal.",
+        noteAccess: false,
+      }, events.emit);
+      await events.waitFor((event) => event.type === "done");
+      const report = await readReport(reportPath);
+      expect(report.newSession.mcpServers).toEqual([]);
+      expect(JSON.stringify(report.prompt)).not.toContain("edgeever-current-workspace");
+      expect(report.prompt).toEqual([
+        { type: "text", text: "Reply with one json proposal." },
+        { type: "text", text: "换成小米" },
+      ]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   sessionTest("keeps OpenClaw ACP sessions free of unsupported session MCP servers", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "edgeever-openclaw-acp-"));
     const reportPath = path.join(directory, "report.json");
@@ -680,6 +732,7 @@ describe("ACP stdio session", () => {
       const report = await readReport(reportPath);
       expect(report.newSession.mcpServers).toEqual([]);
       expect(report.prompt).toEqual([{ type: "text", text: "Hello" }]);
+      expect(report.permission?.outcome).toEqual({ outcome: "selected", optionId: "allow" });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -755,7 +808,7 @@ describe("ACP stdio session", () => {
     }
   }, 15_000);
 
-  sessionTest("streams updates, cancels permission, and never reads a local file", async () => {
+  sessionTest("streams updates, auto-approves tools, and never reads a local file", async () => {
     const directory = await mkdtemp(path.join(tmpdir(), "edgeever-acp-prompt-"));
     const reportPath = path.join(directory, "report.json");
     const secretPath = path.join(directory, "secret.txt");
@@ -779,7 +832,7 @@ describe("ACP stdio session", () => {
       }, events.emit);
       await events.waitFor((event) => event.type === "done");
       const report = await readReport(reportPath);
-      expect(report.permission?.outcome?.outcome).toBe("cancelled");
+      expect(report.permission?.outcome).toEqual({ outcome: "selected", optionId: "allow" });
       expect(report.readResult).toBeNull();
       expect(JSON.stringify(report)).not.toContain("SENTINEL_SECRET_CONTENT");
       expect(path.resolve(report.newSession.cwd)).not.toBe(home);

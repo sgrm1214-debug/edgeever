@@ -1133,7 +1133,13 @@ function AiSidebarSession({
         }));
         const activeLocalThreadId = localThreadIdRef.current;
         const transcript = localAgentTranscript(localTurnsRef.current, activeLocalThreadId);
-        const noteContext = sidebarLocalContextText(focusAtSend, useCurrentNote);
+        const recentUserMessages = localTurnsRef.current
+          .filter((turn) => turn.threadId === activeLocalThreadId && turn.status === "completed")
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+          .slice(0, 6).map((turn) => turn.message);
+        const noteContext = sidebarLocalContextText(focusAtSend, useCurrentNote, {
+          message: text, recentUserMessages, fallbackLocale: companionLocale(i18n.resolvedLanguage),
+        });
         writeStorage(AI_SIDEBAR_LOCAL_THREAD_KEY, activeLocalThreadId);
         setLocalTurns((previous) => [...previous, {
           id,
@@ -1552,7 +1558,6 @@ function AiSidebarSession({
             <ConversationEmptyState
               icon={<Sparkles className="h-6 w-6" />}
               title={t("aiAssistant.sidebar.emptyTitle")}
-              description={t("aiAssistant.sidebar.emptyDescription")}
             />
           ) : null}
           {visibleCompanion ? threadTurns.map((turn) => (

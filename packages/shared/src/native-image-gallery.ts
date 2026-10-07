@@ -76,16 +76,6 @@ export const groupUploadedImages = (editor: Editor, sources: readonly string[]):
   return true;
 };
 
-const IMAGE_GALLERY_COPY = {
-  "zh-CN": { label: "图片画廊布局", auto: "自动", single: "单列", columns: (count: string) => `${count} 栏` },
-  "en-US": { label: "Image gallery layout", auto: "Auto", single: "Single", columns: (count: string) => `${count} columns` },
-  ja: { label: "画像ギャラリーのレイアウト", auto: "自動", single: "1列", columns: (count: string) => `${count}列` },
-  pl: { label: "Układ galerii obrazów", auto: "Auto", single: "1 kolumna", columns: (count: string) => `${count} kolumny` },
-};
-
-export const imageGalleryCopy = (locale: string) =>
-  IMAGE_GALLERY_COPY[locale as keyof typeof IMAGE_GALLERY_COPY] ?? IMAGE_GALLERY_COPY["zh-CN"];
-
 /** A shared touch-sized, in-flow toolbar for Android and iOS WebView editors. */
 export const createNativeImageGalleryView = (getLocale: () => string): NodeViewRenderer => (
   ({ editor, node, getPos }) => {
@@ -119,16 +109,16 @@ export const createNativeImageGalleryView = (getLocale: () => string): NodeViewR
     dom.appendChild(toolbar);
     dom.appendChild(contentDOM);
     const sync = () => {
-      const copy = imageGalleryCopy(getLocale());
+      const english = getLocale() === "en-US";
       const layout = resolveImageGalleryLayout(current.attrs.layout);
       dom.dataset.imageGalleryLayout = layout;
       dom.dataset.imageCount = String(current.childCount);
       toolbar.hidden = !editor.isEditable;
-      toolbar.setAttribute("aria-label", copy.label);
+      toolbar.setAttribute("aria-label", english ? "Image gallery layout" : "图片画廊布局");
       for (const item of buttons) {
-        item.button.textContent = item.layout === "auto" ? copy.auto
-          : item.layout === "1" ? copy.single
-          : copy.columns(item.layout);
+        item.button.textContent = item.layout === "auto" ? (english ? "Auto" : "自动")
+          : item.layout === "1" ? (english ? "Single" : "单列")
+          : `${item.layout} ${english ? "columns" : "栏"}`;
         item.button.setAttribute("aria-pressed", String(item.layout === layout));
       }
     };

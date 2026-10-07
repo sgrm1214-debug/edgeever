@@ -256,7 +256,6 @@ enum MemoPreviewDate {
         if calendar.isDateInYesterday(date) {
             switch language ?? (isEnglish ? .english : .chinese) {
             case .japanese: return "昨日"
-            case .polish: return "Wczoraj"
             case .english: return "Yesterday"
             case .chinese: return "昨天"
             }

@@ -103,7 +103,7 @@ struct MemoEditView: View {
                     ProgressView()
                         .controlSize(.large)
                         .tint(.white)
-                    Text(env.preferences.t("正在上传图片…", en: "Uploading image…", pl: "Przesyłanie obrazu…"))
+                    Text(env.preferences.t("正在上传图片…", en: "Uploading image…"))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                 }
@@ -118,11 +118,11 @@ struct MemoEditView: View {
                 VStack {
                     Spacer()
                     HStack(spacing: 12) {
-                        Text(env.preferences.t("AI 已更新选中内容。", en: "AI updated the selection.", pl: "AI zaktualizowało zaznaczenie."))
+                        Text(env.preferences.t("AI 已更新选中内容。", en: "AI updated the selection."))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.white)
                         Spacer(minLength: 0)
-                        Button(env.preferences.t("撤销", en: "Undo", pl: "Cofnij")) {
+                        Button(env.preferences.t("撤销", en: "Undo")) {
                             Task {
                                 guard await SharedTipTapRuntime.editor.undoAiSelectionDraft() else {
                                     aiUndoToken = nil
@@ -190,8 +190,7 @@ struct MemoEditView: View {
                         code: 1,
                         userInfo: [NSLocalizedDescriptionKey: env.preferences.t(
                             "选区已失效，请重新选择文本后再试。",
-                            en: "The selection expired. Select the text again and retry.",
-                            pl: "Zaznaczenie wygasło. Zaznacz tekst ponownie i spróbuj jeszcze raz."
+                            en: "The selection expired. Select the text again and retry."
                         )]
                     )
                 }
@@ -202,37 +201,36 @@ struct MemoEditView: View {
             .presentationDetents([.large])
         }
         .alert(
-            env.preferences.t("请先选择正文", en: "Select text first", pl: "Najpierw zaznacz tekst"),
+            env.preferences.t("请先选择正文", en: "Select text first"),
             isPresented: $showEmptyAiSelectionAlert
         ) {
-            Button(env.preferences.t("好的", en: "OK", pl: "OK"), role: .cancel) {}
+            Button(env.preferences.t("好的", en: "OK"), role: .cancel) {}
         } message: {
             Text(env.preferences.t(
                 "在正文中选中一段文字，然后再点 AI。",
-                en: "Select some text in the note body, then tap AI again.",
-                pl: "Zaznacz fragment tekstu w treści notatki, a potem ponownie dotknij AI."
+                en: "Select some text in the note body, then tap AI again."
             ))
         }
         .alert(smartTagAlertTitle, isPresented: $showSmartTagAlert) {
-            Button(env.preferences.t("好的", en: "OK", pl: "OK"), role: .cancel) {}
+            Button(env.preferences.t("好的", en: "OK"), role: .cancel) {}
         } message: {
             Text(smartTagAlertMessage)
         }
         .alert(
-            env.preferences.t("应用模板？", en: "Apply template?", pl: "Zastosować szablon?"),
+            env.preferences.t("应用模板？", en: "Apply template?"),
             isPresented: $showApplyTemplateConfirm
         ) {
-            Button(env.preferences.t("取消", en: "Cancel", pl: "Anuluj"), role: .cancel) {
+            Button(env.preferences.t("取消", en: "Cancel"), role: .cancel) {
                 pendingTemplateSeed = nil
             }
-            Button(env.preferences.t("替换", en: "Replace", pl: "Zastąp"), role: .destructive) {
+            Button(env.preferences.t("替换", en: "Replace"), role: .destructive) {
                 if let seed = pendingTemplateSeed {
                     applyTemplateSeed(seed)
                 }
                 pendingTemplateSeed = nil
             }
         } message: {
-            Text(env.preferences.t("当前内容将被模板内容替换。", en: "The current content will be replaced by the template.", pl: "Bieżąca treść zostanie zastąpiona szablonem."))
+            Text(env.preferences.t("当前内容将被模板内容替换。", en: "The current content will be replaced by the template."))
         }
         .sheet(item: $resourceTarget) { target in
             ResourceActionSheet(
@@ -249,19 +247,19 @@ struct MemoEditView: View {
             .presentationDragIndicator(.hidden)
         }
         .confirmationDialog(
-            env.preferences.t("添加图片", en: "Add image", pl: "Dodaj obraz"),
+            env.preferences.t("添加图片", en: "Add image"),
             isPresented: $showImageSourcePicker,
             titleVisibility: .visible
         ) {
-            Button(env.preferences.t("拍照", en: "Take photo", pl: "Zrób zdjęcie")) {
+            Button(env.preferences.t("拍照", en: "Take photo")) {
                 scheduleCameraCapture()
             }
-            Button(env.preferences.t("从相册选择", en: "Choose from library", pl: "Wybierz z biblioteki")) {
+            Button(env.preferences.t("从相册选择", en: "Choose from library")) {
                 scheduleImagePicker(.library)
             }
-            Button(env.preferences.t("取消", en: "Cancel", pl: "Anuluj"), role: .cancel) {}
+            Button(env.preferences.t("取消", en: "Cancel"), role: .cancel) {}
         } message: {
-            Text(env.preferences.t("直接拍照或选择已有照片", en: "Take a new photo or choose an existing one", pl: "Zrób nowe zdjęcie lub wybierz istniejące"))
+            Text(env.preferences.t("直接拍照或选择已有照片", en: "Take a new photo or choose an existing one"))
         }
         // fullScreenCover avoids nested-sheet bugs when MemoEditView itself is already a fullScreenCover.
         // PHPicker + NSItemProvider (not SwiftUI PhotosPicker/Transferable) is the reliable path.
@@ -277,12 +275,12 @@ struct MemoEditView: View {
             .ignoresSafeArea()
         }
         .alert(
-            env.preferences.t("无法使用相机", en: "Unable to use camera", pl: "Nie można użyć aparatu"),
+            env.preferences.t("无法使用相机", en: "Unable to use camera"),
             isPresented: $showCameraAccessAlert
         ) {
-            Button(env.preferences.t("取消", en: "Cancel", pl: "Anuluj"), role: .cancel) {}
+            Button(env.preferences.t("取消", en: "Cancel"), role: .cancel) {}
             if cameraAccessCanOpenSettings {
-                Button(env.preferences.t("前往设置", en: "Open settings", pl: "Otwórz ustawienia")) {
+                Button(env.preferences.t("前往设置", en: "Open settings")) {
                     guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                     UIApplication.shared.open(url)
                 }
@@ -291,12 +289,12 @@ struct MemoEditView: View {
             Text(cameraAccessMessage)
         }
         .alert(
-            env.preferences.t("图片上传失败", en: "Image upload failed", pl: "Nie udało się przesłać obrazu"),
+            env.preferences.t("图片上传失败", en: "Image upload failed"),
             isPresented: $showUploadError
         ) {
-            Button(env.preferences.t("好的", en: "OK", pl: "OK"), role: .cancel) {}
+            Button(env.preferences.t("好的", en: "OK"), role: .cancel) {}
         } message: {
-            Text(error ?? env.preferences.t("请重试", en: "Please try again", pl: "Spróbuj ponownie"))
+            Text(error ?? env.preferences.t("请重试", en: "Please try again"))
         }
         .task {
             await loadInitial()
@@ -344,7 +342,7 @@ struct MemoEditView: View {
             }
             .buttonStyle(.plain)
             .disabled(busyChrome)
-            .accessibilityLabel(env.preferences.t("返回", en: "Back", pl: "Wstecz"))
+            .accessibilityLabel(env.preferences.t("返回", en: "Back"))
             .accessibilityIdentifier(CreateMemoChrome.back)
 
             Spacer(minLength: 0)
@@ -364,7 +362,7 @@ struct MemoEditView: View {
                     Button {
                         showTemplatePicker = true
                     } label: {
-                        Text(env.preferences.t("模板", en: "Template", pl: "Szablon"))
+                        Text(env.preferences.t("模板", en: "Template"))
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(canUseTemplate ? AppTheme.title : AppTheme.secondary)
                             .frame(minHeight: 36)
@@ -375,7 +373,7 @@ struct MemoEditView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!canUseTemplate)
-                    .accessibilityLabel(env.preferences.t("模板", en: "Template", pl: "Szablon"))
+                    .accessibilityLabel(env.preferences.t("模板", en: "Template"))
                     .accessibilityIdentifier(CreateMemoChrome.template)
                 }
 
@@ -397,7 +395,7 @@ struct MemoEditView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!editorReady || busyChrome)
-                .accessibilityLabel(env.preferences.t("用 AI 处理选中内容", en: "Use AI on selection", pl: "Użyj AI na zaznaczeniu"))
+                .accessibilityLabel(env.preferences.t("用 AI 处理选中内容", en: "Use AI on selection"))
 
                 Button {
                     Task { await handleDone() }
@@ -408,7 +406,7 @@ struct MemoEditView: View {
                                 .controlSize(.small)
                                 .tint(AppTheme.secondary)
                         } else {
-                            Text(env.preferences.t("完成", en: "Done", pl: "Gotowe"))
+                            Text(env.preferences.t("完成", en: "Done"))
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(canSubmitDone ? Color.white : AppTheme.secondary)
                         }
@@ -420,7 +418,7 @@ struct MemoEditView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSubmitDone)
-                .accessibilityLabel(env.preferences.t("完成", en: "Done", pl: "Gotowe"))
+                .accessibilityLabel(env.preferences.t("完成", en: "Done"))
                 .accessibilityIdentifier(CreateMemoChrome.done)
             }
             .accessibilityIdentifier(CreateMemoChrome.header)
@@ -440,7 +438,7 @@ struct MemoEditView: View {
     private var createMain: some View {
         VStack(alignment: .leading, spacing: 0) {
             TextField(
-                env.preferences.t("无标题笔记", en: "Untitled note", pl: "Notatka bez tytułu"),
+                env.preferences.t("无标题笔记", en: "Untitled note"),
                 text: Binding(
                     get: { viewModel.title },
                     set: { viewModel.title = $0 }
@@ -453,7 +451,7 @@ struct MemoEditView: View {
             .padding(.top, 14)
             .padding(.bottom, 8)
             .onChange(of: title) { _, _ in markDirtyAndScheduleSave() }
-            .accessibilityLabel(env.preferences.t("笔记标题", en: "Note title", pl: "Tytuł notatki"))
+            .accessibilityLabel(env.preferences.t("笔记标题", en: "Note title"))
             .accessibilityIdentifier(CreateMemoChrome.title)
 
             HStack(spacing: 10) {
@@ -475,7 +473,7 @@ struct MemoEditView: View {
                 .frame(maxWidth: 160, alignment: .leading)
                 .frame(minHeight: 30)
                 .layoutPriority(1)
-                .accessibilityLabel(env.preferences.t("所在笔记本", en: "Notebook", pl: "Notatnik"))
+                .accessibilityLabel(env.preferences.t("所在笔记本", en: "Notebook"))
                 .accessibilityIdentifier(CreateMemoChrome.notebook)
 
                 Button {
@@ -486,7 +484,7 @@ struct MemoEditView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(viewModel.tags.isEmpty
-                             ? env.preferences.t("添加标签", en: "Add tags", pl: "Dodaj tagi")
+                             ? env.preferences.t("添加标签", en: "Add tags")
                              : viewModel.tags.map { "#\($0)" }.joined(separator: ", "))
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -498,7 +496,7 @@ struct MemoEditView: View {
                     .frame(minHeight: 36)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(env.preferences.t("笔记标签", en: "Tags", pl: "Tagi"))
+                .accessibilityLabel(env.preferences.t("笔记标签", en: "Tags"))
                 .accessibilityIdentifier(CreateMemoChrome.tags)
 
                 Button {
@@ -526,8 +524,7 @@ struct MemoEditView: View {
                 .opacity((busyChrome || viewModel.tags.count >= 24) ? 0.45 : 1)
                 .accessibilityLabel(env.preferences.t(
                     isSuggestingTags ? "正在生成智能标签" : smartTagsAdded ? "智能标签已添加" : "智能标签",
-                    en: isSuggestingTags ? "Generating smart tags" : smartTagsAdded ? "Smart tags added" : "Smart tags",
-                    pl: isSuggestingTags ? "Generowanie inteligentnych tagów" : smartTagsAdded ? "Dodano inteligentne tagi" : "Inteligentne tagi"
+                    en: isSuggestingTags ? "Generating smart tags" : smartTagsAdded ? "Smart tags added" : "Smart tags"
                 ))
                 .accessibilityIdentifier(CreateMemoChrome.smartTags)
 
@@ -547,7 +544,7 @@ struct MemoEditView: View {
                         token: env.session.session?.token,
                         locale: env.preferences.apiLocale,
                         theme: colorScheme == .dark ? "dark" : "light",
-                        placeholder: env.preferences.t("开始输入…", en: "Start writing…", pl: "Zacznij pisać…"),
+                        placeholder: env.preferences.t("开始输入…", en: "Start writing…"),
                         onChange: { md, json in
                             guard contentHydrated, !suppressPersistence else { return }
                             // Accept the JSON and Markdown emitted by the same TipTap transaction.
@@ -592,7 +589,7 @@ struct MemoEditView: View {
                     VStack(spacing: 10) {
                         ProgressView()
                             .tint(AppTheme.title)
-                        Text(env.preferences.t("正在启动本地编辑器", en: "Starting local editor", pl: "Uruchamianie lokalnego edytora"))
+                        Text(env.preferences.t("正在启动本地编辑器", en: "Starting local editor"))
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(AppTheme.secondary)
                     }
@@ -670,8 +667,7 @@ struct MemoEditView: View {
             cameraAccessCanOpenSettings = false
             cameraAccessMessage = env.preferences.t(
                 "此设备没有可用相机。",
-                en: "This device does not have an available camera.",
-                pl: "To urządzenie nie ma dostępnego aparatu."
+                en: "This device does not have an available camera."
             )
             showCameraAccessAlert = true
         }
@@ -682,8 +678,7 @@ struct MemoEditView: View {
         cameraAccessCanOpenSettings = true
         cameraAccessMessage = env.preferences.t(
             "请前往系统设置，允许 EdgeEver 使用相机后再试。",
-            en: "Open system settings and allow EdgeEver to use the camera, then try again.",
-            pl: "Otwórz ustawienia systemu i zezwól EdgeEver na używanie aparatu, a następnie spróbuj ponownie."
+            en: "Open system settings and allow EdgeEver to use the camera, then try again."
         )
         showCameraAccessAlert = true
     }
@@ -727,7 +722,7 @@ struct MemoEditView: View {
     }
 
     private var statusLabel: String {
-        env.preferences.t(saveStatus.labelZH, en: saveStatus.labelEN, pl: saveStatus.labelPL)
+        env.preferences.isEnglish ? saveStatus.labelEN : saveStatus.labelZH
     }
 
     private var canSubmitDone: Bool {
@@ -749,7 +744,7 @@ struct MemoEditView: View {
         if let name = availableNotebooks.first(where: { $0.id == notebookId })?.name {
             return name
         }
-        return env.preferences.t("选择笔记本", en: "Choose notebook", pl: "Wybierz notatnik")
+        return env.preferences.t("选择笔记本", en: "Choose notebook")
     }
 
     private var tags: [String] {
@@ -790,11 +785,10 @@ struct MemoEditView: View {
                     .prefix(availableSlots))
                 guard !additions.isEmpty else {
                     isSuggestingTags = false
-                    smartTagAlertTitle = env.preferences.t("智能标签", en: "Smart tags", pl: "Inteligentne tagi")
+                    smartTagAlertTitle = env.preferences.t("智能标签", en: "Smart tags")
                     smartTagAlertMessage = env.preferences.t(
                         "没有找到适合这篇笔记的新标签。",
-                        en: "No useful new tags were found for this note.",
-                        pl: "Nie znaleziono przydatnych nowych tagów dla tej notatki."
+                        en: "No useful new tags were found for this note."
                     )
                     showSmartTagAlert = true
                     smartTagTask = nil
@@ -812,17 +806,16 @@ struct MemoEditView: View {
                 isSuggestingTags = false
             } catch let apiError as APIError where apiError.code == "ai_not_configured" {
                 isSuggestingTags = false
-                smartTagAlertTitle = env.preferences.t("智能标签生成失败", en: "Couldn't generate smart tags", pl: "Nie udało się wygenerować inteligentnych tagów")
+                smartTagAlertTitle = env.preferences.t("智能标签生成失败", en: "Couldn't generate smart tags")
                 smartTagAlertMessage = env.preferences.t(
                     "请先在“模型与代理”中配置默认模型。",
-                    en: "Configure a model in Models and agents first.",
-                    pl: "Najpierw skonfiguruj model w sekcji „Modele i agenci”."
+                    en: "Configure a model in Models and agents first."
                 )
                 showSmartTagAlert = true
                 smartTagTask = nil
             } catch {
                 isSuggestingTags = false
-                smartTagAlertTitle = env.preferences.t("智能标签生成失败", en: "Couldn't generate smart tags", pl: "Nie udało się wygenerować inteligentnych tagów")
+                smartTagAlertTitle = env.preferences.t("智能标签生成失败", en: "Couldn't generate smart tags")
                 smartTagAlertMessage = error.localizedDescription
                 showSmartTagAlert = true
                 smartTagTask = nil
@@ -1054,7 +1047,7 @@ struct MemoEditView: View {
             NSLog("MemoEditView persist: mirror miss for \(memoId)")
             return
         }
-        memo.title = title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note", pl: "Notatka bez tytułu") : title
+        memo.title = title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note") : title
         memo.contentMarkdown = contentMarkdown
         memo.contentText = contentMarkdown
         memo.tags = tags
@@ -1115,7 +1108,7 @@ struct MemoEditView: View {
     private func commitCreate() async {
         guard let scope = env.session.dataScope else { return }
         guard !notebookId.isEmpty else {
-            error = env.preferences.t("请选择笔记本", en: "Choose a notebook", pl: "Wybierz notatnik")
+            error = env.preferences.t("请选择笔记本", en: "Choose a notebook")
             return
         }
         guard let finishedId = await viewModel.performCreateCommit(operation: {
@@ -1128,7 +1121,7 @@ struct MemoEditView: View {
                 expectedContentHash: expectedContentHash,
                 notebookId: notebookId,
                 title: title,
-                untitledTitle: env.preferences.t("无标题笔记", en: "Untitled note", pl: "Notatka bez tytułu"),
+                untitledTitle: env.preferences.t("无标题笔记", en: "Untitled note"),
                 contentMarkdown: contentMarkdown,
                 contentJSON: contentJSON,
                 tags: tags,
@@ -1208,7 +1201,7 @@ struct MemoEditView: View {
         viewModel.reconcileMarkdownWithJSON()
         let memo = try await env.session.client.createMemo(
             notebookId: notebookId.isEmpty ? (availableNotebooks.first?.id ?? "") : notebookId,
-            title: title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note", pl: "Notatka bez tytułu") : title,
+            title: title.isEmpty ? env.preferences.t("无标题笔记", en: "Untitled note") : title,
             contentMarkdown: contentMarkdown,
             tags: tags
         )
@@ -1290,8 +1283,7 @@ struct MemoEditView: View {
                     code: nil,
                     message: env.preferences.t(
                         "图片已上传，但插入编辑器失败，请重试。",
-                        en: "Upload succeeded but insert into editor failed. Please try again.",
-                        pl: "Przesłano obraz, ale nie udało się wstawić go do edytora. Spróbuj ponownie."
+                        en: "Upload succeeded but insert into editor failed. Please try again."
                     )
                 )
             }
@@ -1377,7 +1369,6 @@ struct MemoTagPickerSheet: View {
     let closeOnSelection: Bool
     let title: String
     let titleEN: String
-    let titlePL: String
     let onChange: ([String]) -> Void
 
     init(
@@ -1387,7 +1378,6 @@ struct MemoTagPickerSheet: View {
         closeOnSelection: Bool = false,
         title: String = "选择标签",
         titleEN: String = "Choose tags",
-        titlePL: String = "Wybierz tagi",
         onChange: @escaping ([String]) -> Void
     ) {
         _selection = State(initialValue: selectedTags)
@@ -1396,7 +1386,6 @@ struct MemoTagPickerSheet: View {
         self.closeOnSelection = closeOnSelection
         self.title = title
         self.titleEN = titleEN
-        self.titlePL = titlePL
         self.onChange = onChange
     }
 
@@ -1436,7 +1425,7 @@ struct MemoTagPickerSheet: View {
                                     .clipShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel(env.preferences.t("移除标签 \(tag)", en: "Remove tag \(tag)", pl: "Usuń tag \(tag)"))
+                                .accessibilityLabel(env.preferences.t("移除标签 \(tag)", en: "Remove tag \(tag)"))
                             }
                         }
                         .padding(.horizontal, 16)
@@ -1447,8 +1436,8 @@ struct MemoTagPickerSheet: View {
                     Image(systemName: "magnifyingglass").foregroundStyle(AppTheme.muted)
                     TextField(
                         allowCreate
-                            ? env.preferences.t("搜索或输入新标签", en: "Search or enter a new tag", pl: "Wyszukaj lub wpisz nowy tag")
-                            : env.preferences.t("搜索标签", en: "Search tags", pl: "Szukaj tagów"),
+                            ? env.preferences.t("搜索或输入新标签", en: "Search or enter a new tag")
+                            : env.preferences.t("搜索标签", en: "Search tags"),
                         text: $query
                     )
                         .textInputAutocapitalization(.never)
@@ -1457,7 +1446,7 @@ struct MemoTagPickerSheet: View {
                             if allowCreate { createTag() }
                         }
                     if allowCreate && !normalizedQuery.isEmpty && !hasExactMatch && selection.count < maxSelections {
-                        Button(env.preferences.t("新建", en: "Create", pl: "Utwórz"), action: createTag)
+                        Button(env.preferences.t("新建", en: "Create"), action: createTag)
                             .font(.system(size: 13, weight: .bold))
                     }
                 }
@@ -1481,7 +1470,7 @@ struct MemoTagPickerSheet: View {
                                 .foregroundStyle(selection.contains(tag.name) ? AppTheme.accent : AppTheme.muted)
                             Text("#\(tag.name)").foregroundStyle(AppTheme.title)
                             Spacer()
-                            Text(env.preferences.t("\(tag.memoCount) 条笔记", en: "\(tag.memoCount) notes", pl: "Notatki: \(tag.memoCount)"))
+                            Text(env.preferences.t("\(tag.memoCount) 条笔记", en: "\(tag.memoCount) notes"))
                                 .font(.system(size: 12))
                                 .foregroundStyle(AppTheme.muted)
                         }
@@ -1492,21 +1481,21 @@ struct MemoTagPickerSheet: View {
                 .overlay {
                     if visibleTags.isEmpty {
                         ContentUnavailableView(
-                            env.preferences.t("暂无匹配标签", en: "No matching tags", pl: "Brak pasujących tagów"),
+                            env.preferences.t("暂无匹配标签", en: "No matching tags"),
                             systemImage: "tag",
                             description: allowCreate
-                                ? Text(env.preferences.t("可以输入名称创建新标签。", en: "Enter a name to create a new tag.", pl: "Wpisz nazwę, aby utworzyć nowy tag."))
-                                : Text(env.preferences.t("换个关键词再试。", en: "Try another keyword.", pl: "Spróbuj innego słowa kluczowego."))
+                                ? Text(env.preferences.t("可以输入名称创建新标签。", en: "Enter a name to create a new tag."))
+                                : Text(env.preferences.t("换个关键词再试。", en: "Try another keyword."))
                         )
                     }
                 }
             }
             .padding(.top, 12)
-            .navigationTitle(env.preferences.t(title, en: titleEN, pl: titlePL))
+            .navigationTitle(env.preferences.t(title, en: titleEN))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(env.preferences.t("完成", en: "Done", pl: "Gotowe")) { dismiss() }
+                    Button(env.preferences.t("完成", en: "Done")) { dismiss() }
                 }
             }
             .task { loadTags() }
@@ -1557,11 +1546,11 @@ struct EditNotebookPickerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(env.preferences.t("选择笔记本", en: "Choose notebook", pl: "Wybierz notatnik"))
+                Text(env.preferences.t("选择笔记本", en: "Choose notebook"))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(AppTheme.title)
                 Spacer()
-                Button(env.preferences.t("关闭", en: "Close", pl: "Zamknij")) { dismiss() }
+                Button(env.preferences.t("关闭", en: "Close")) { dismiss() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.slate)
             }

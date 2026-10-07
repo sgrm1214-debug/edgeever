@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import {
   DEFAULT_SHORTCUT_SETTINGS,
   DESKTOP_FOCUS_MODE_STORAGE_KEY,
@@ -15,7 +14,6 @@ import {
   SHORTCUT_SETTINGS_STORAGE_KEY,
   getSearchShortcutScope,
   getShortcutActionForEvent,
-  canToggleNotebookSidebar,
   getNotebookSortComparator,
   readEditorContentAlignmentPreference,
   readNotebookSortPreference,
@@ -447,12 +445,6 @@ describe("workspace shortcut preferences", () => {
       shift: true,
       alt: false,
     });
-    expect(DEFAULT_SHORTCUT_SETTINGS.toggleSidebar).toEqual({
-      key: "\\",
-      ctrlOrMeta: true,
-      shift: false,
-      alt: false,
-    });
   });
 
   test("migrates the unreleased reading protection shortcut without replacing custom bindings", () => {
@@ -540,21 +532,6 @@ describe("workspace shortcut preferences", () => {
       keyboardEvent("!", { code: "Digit1", ctrlKey: true, shiftKey: true }),
       DEFAULT_SHORTCUT_SETTINGS,
     )).toBe("toggleOutline");
-    expect(getShortcutActionForEvent(
-      keyboardEvent("\\", { metaKey: true }),
-      DEFAULT_SHORTCUT_SETTINGS,
-    )).toBe("toggleSidebar");
-  });
-
-  test("toggles the sidebar only when it is visible", () => {
-    expect(canToggleNotebookSidebar({ isDesktop: true, focusModeActive: false })).toBe(true);
-    // Focus Mode hides the sidebar, so the shortcut must not change its saved state.
-    expect(canToggleNotebookSidebar({ isDesktop: true, focusModeActive: true })).toBe(false);
-    expect(canToggleNotebookSidebar({ isDesktop: false, focusModeActive: false })).toBe(false);
-    expect(canToggleNotebookSidebar({ isDesktop: false, focusModeActive: true })).toBe(false);
-    // The workspace checks the same flag that hides the sidebar in its layout.
-    const workspaceSource = readFileSync(new URL("../components/WorkspaceApp.tsx", import.meta.url), "utf8");
-    expect(workspaceSource).toContain("canToggleNotebookSidebar({ isDesktop, focusModeActive: desktopFocusModeActive })");
   });
 });
 

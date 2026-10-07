@@ -22,7 +22,6 @@ export default defineConfig({
           "zh-CN": "zh-CN",
           en: "en-US",
           ja: "ja",
-          pl: "pl",
         },
       },
     }),
@@ -39,9 +38,6 @@ export default defineConfig({
     "/ja/guides/evernote-migration": "/en/blog/evernote-migration-guide",
     "/ja/guides/memos-migration": "/en/blog/memos-migration-guide",
     "/ja/guides/notion-migration": "/en/blog/notion-migration-guide",
-    "/pl/guides/evernote-migration": "/en/blog/evernote-migration-guide",
-    "/pl/guides/memos-migration": "/en/blog/memos-migration-guide",
-    "/pl/guides/notion-migration": "/en/blog/notion-migration-guide",
   },
   vite: {
     plugins: [tailwindcss()],

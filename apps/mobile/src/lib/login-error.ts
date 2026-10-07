@@ -1,6 +1,6 @@
 import { ApiRequestError } from "@edgeever/client";
 
-export type MobileLoginLocale = "zh-CN" | "en-US" | "ja" | "pl";
+export type MobileLoginLocale = "zh-CN" | "en-US" | "ja";
 
 const appendDiagnostics = (
   message: string,

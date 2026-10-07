@@ -6,7 +6,6 @@ enum AppUILanguage: String {
     case chinese
     case english
     case japanese
-    case polish
 }
 
 enum AppUILocale {
@@ -16,13 +15,11 @@ enum AppUILocale {
         case "en-US": return .english
         case "zh-CN": return .chinese
         case "ja": return .japanese
-        case "pl": return .polish
         default:
             let code = (systemLanguageCode ?? "").lowercased()
             if code.isEmpty { return .english }
             if code.hasPrefix("zh") { return .chinese }
             if code.hasPrefix("ja") { return .japanese }
-            if code.hasPrefix("pl") { return .polish }
             return .english
         }
     }
@@ -37,7 +34,7 @@ enum AppUILocale {
 final class PreferencesStore {
     private let defaults: UserDefaults
 
-    /// system | zh-CN | en-US | ja | pl — matches Android locale preference.
+    /// system | zh-CN | en-US | ja — matches Android locale preference.
     var localeCode: String {
         didSet { defaults.set(localeCode, forKey: Keys.locale) }
     }
@@ -85,7 +82,6 @@ final class PreferencesStore {
         case "zh-CN": return Locale(identifier: "zh-Hans")
         case "en-US": return Locale(identifier: "en-US")
         case "ja": return Locale(identifier: "ja-JP")
-        case "pl": return Locale(identifier: "pl-PL")
         default: return .autoupdatingCurrent
         }
     }
@@ -97,14 +93,13 @@ final class PreferencesStore {
         )
     }
 
-    /// Leftover two-way UI branches: Japanese and Polish must not fall through to Chinese.
+    /// Leftover two-way UI branches: Japanese must not fall through to Chinese.
     var isEnglish: Bool { uiLanguage != .chinese }
 
     var apiLocale: String {
         switch uiLanguage {
         case .english: return "en-US"
         case .japanese: return "ja"
-        case .polish: return "pl"
         case .chinese: return "zh-CN"
         }
     }
@@ -117,11 +112,10 @@ final class PreferencesStore {
         }
     }
 
-    func t(_ zh: String, en: String, ja: String? = nil, pl: String? = nil) -> String {
+    func t(_ zh: String, en: String, ja: String? = nil) -> String {
         switch uiLanguage {
         case .english: return en
         case .japanese: return ja ?? en
-        case .polish: return pl ?? en
         case .chinese: return zh
         }
     }

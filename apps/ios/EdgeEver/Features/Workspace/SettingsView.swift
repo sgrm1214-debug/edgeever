@@ -27,14 +27,14 @@ struct SettingsView: View {
 
     private var title: String {
         switch tab {
-        case .general: return env.preferences.t("常规设置", en: "General", pl: "Ogólne")
-        case .account: return env.preferences.t("登录设置", en: "Account", pl: "Konto")
-        case .system: return env.preferences.t("系统信息", en: "System info", pl: "Informacje o systemie")
-        case .tags: return env.preferences.t("标签管理", en: "Tags", pl: "Tagi")
+        case .general: return env.preferences.t("常规设置", en: "General")
+        case .account: return env.preferences.t("登录设置", en: "Account")
+        case .system: return env.preferences.t("系统信息", en: "System info")
+        case .tags: return env.preferences.t("标签管理", en: "Tags")
         case .tokens: return "API Token"
-        case .devices: return env.preferences.t("登录设备", en: "Devices", pl: "Urządzenia")
-        case .users: return env.preferences.t("用户管理", en: "Users", pl: "Użytkownicy")
-        case nil: return env.preferences.t("我的", en: "Me", pl: "Profil")
+        case .devices: return env.preferences.t("登录设备", en: "Devices")
+        case .users: return env.preferences.t("用户管理", en: "Users")
+        case nil: return env.preferences.t("我的", en: "Me")
         }
     }
 
@@ -137,9 +137,9 @@ struct SettingsView: View {
     private var themeToggleLabel: String {
         // Android shows the *action* text: switch to light when dark, else switch to dark
         if resolvedDarkMode {
-            return env.preferences.t("切换到浅色模式", en: "Light mode", pl: "Tryb jasny")
+            return env.preferences.t("切换到浅色模式", en: "Light mode")
         }
-        return env.preferences.t("切换到深色模式", en: "Dark mode", pl: "Tryb ciemny")
+        return env.preferences.t("切换到深色模式", en: "Dark mode")
     }
 
     private var resolvedDarkMode: Bool {
@@ -156,7 +156,7 @@ struct SettingsView: View {
                     icon: "slider.horizontal.3",
                     iconTint: AppTheme.accent,
                     iconBg: AppTheme.accentSoft,
-                    title: env.preferences.t("常规设置", en: "General", pl: "Ogólne"),
+                    title: env.preferences.t("常规设置", en: "General"),
                     showBorder: false
                 ) {
                     withAnimation(Motion.chip) { tab = .general }
@@ -165,7 +165,7 @@ struct SettingsView: View {
                     icon: "shield.checkered",
                     iconTint: AppTheme.accent,
                     iconBg: AppTheme.accentSoft,
-                    title: env.preferences.t("登录设置", en: "Account", pl: "Konto"),
+                    title: env.preferences.t("登录设置", en: "Account"),
                     showBorder: true
                 ) {
                     withAnimation(Motion.chip) { tab = .account }
@@ -178,11 +178,10 @@ struct SettingsView: View {
                     icon: "info.circle",
                     iconTint: AppTheme.accent,
                     iconBg: AppTheme.accentSoft,
-                    title: env.preferences.t("系统信息", en: "System info", pl: "Informacje o systemie"),
+                    title: env.preferences.t("系统信息", en: "System info"),
                     subtitle: env.preferences.t(
                         "查看版本与运行环境信息。",
-                        en: "View version and runtime info.",
-                        pl: "Wyświetl informacje o wersji i środowisku uruchomieniowym."
+                        en: "View version and runtime info."
                     ),
                     showBorder: false
                 ) {
@@ -192,11 +191,10 @@ struct SettingsView: View {
                     icon: "bubble.left.and.bubble.right",
                     iconTint: AppTheme.secondary,
                     iconBg: AppTheme.searchFill,
-                    title: env.preferences.t("意见反馈", en: "Feedback", pl: "Opinia"),
+                    title: env.preferences.t("意见反馈", en: "Feedback"),
                     subtitle: env.preferences.t(
                         "报告问题或提出功能建议",
-                        en: "Report issues or suggest features",
-                        pl: "Zgłoś problem lub zaproponuj funkcję"
+                        en: "Report issues or suggest features"
                     ),
                     trailing: .external,
                     showBorder: true
@@ -295,19 +293,18 @@ struct SettingsView: View {
     private var generalContent: some View {
         VStack(spacing: 16) {
             settingsGroup(
-                title: env.preferences.t("偏好设置", en: "Preferences", pl: "Preferencje"),
+                title: env.preferences.t("偏好设置", en: "Preferences"),
                 icon: "photo"
             ) {
                 preferenceBlock(
-                    title: env.preferences.t("界面语言", en: "Language", pl: "Język"),
-                    description: env.preferences.t("切换产品界面的显示语言。", en: "Switch the product UI language.", pl: "Zmień język interfejsu aplikacji.")
+                    title: env.preferences.t("界面语言", en: "Language"),
+                    description: env.preferences.t("切换产品界面的显示语言。", en: "Switch the product UI language.")
                 ) {
                     Menu {
-                        Button(env.preferences.t("跟随系统", en: "System", ja: "システムに合わせる", pl: "Systemowy")) { env.preferences.localeCode = "system" }
+                        Button(env.preferences.t("跟随系统", en: "System", ja: "システムに合わせる")) { env.preferences.localeCode = "system" }
                         Button("简体中文") { env.preferences.localeCode = "zh-CN" }
                         Button("English") { env.preferences.localeCode = "en-US" }
                         Button("日本語") { env.preferences.localeCode = "ja" }
-                        Button("Polski") { env.preferences.localeCode = "pl" }
                     } label: {
                         HStack {
                             Text(localeLabel)
@@ -329,11 +326,10 @@ struct SettingsView: View {
                 }
 
                 preferenceBlock(
-                    title: env.preferences.t("压缩笔记内图片", en: "Compress note images", pl: "Kompresuj obrazy w notatkach"),
+                    title: env.preferences.t("压缩笔记内图片", en: "Compress note images"),
                     description: env.preferences.t(
                         "上传前将大图压缩为 WebP（最长边 2560），节省存储与流量。",
-                        en: "Compress large images to WebP (max edge 2560) before upload to save storage and bandwidth.",
-                        pl: "Przed przesłaniem kompresuj duże obrazy do WebP (najdłuższy bok 2560), aby oszczędzać miejsce i transfer."
+                        en: "Compress large images to WebP (max edge 2560) before upload to save storage and bandwidth."
                     ),
                     showTopBorder: true
                 ) {
@@ -344,7 +340,7 @@ struct SettingsView: View {
                 }
 
                 preferenceBlock(
-                    title: env.preferences.t("父笔记本中显示子笔记本笔记", en: "Show notes from sub-notebooks", ja: "サブノートブックのノートを表示", pl: "Pokazuj notatki z podnotatników"),
+                    title: env.preferences.t("父笔记本中显示子笔记本笔记", en: "Show notes from sub-notebooks", ja: "サブノートブックのノートを表示"),
                     showTopBorder: true
                 ) {
                     Toggle("", isOn: Bindable(env.preferences).showDescendantNotes)
@@ -353,8 +349,7 @@ struct SettingsView: View {
                         .accessibilityLabel(env.preferences.t(
                             "是否在父笔记本中显示子笔记本中的笔记",
                             en: "Show notes from sub-notebooks in parent notebooks",
-                            ja: "親ノートブックにサブノートブックのノートを表示する",
-                            pl: "Pokazuj notatki z podnotatników w notatnikach nadrzędnych"
+                            ja: "親ノートブックにサブノートブックのノートを表示する"
                         ))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -374,15 +369,15 @@ struct SettingsView: View {
                         .foregroundStyle(AppTheme.accentStrong)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(env.preferences.t("当前账户", en: "Current account", pl: "Bieżące konto"))
+                    Text(env.preferences.t("当前账户", en: "Current account"))
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(AppTheme.secondary)
                     Text(env.session.session?.user?.displayName ?? env.session.session?.user?.username ?? "—")
                         .font(.system(size: 15, weight: .heavy))
                         .foregroundStyle(AppTheme.title)
                     let role = env.session.session?.user?.role == "owner"
-                        ? env.preferences.t("实例管理员", en: "Owner", pl: "Właściciel")
-                        : env.preferences.t("成员", en: "Member", pl: "Członek")
+                        ? env.preferences.t("实例管理员", en: "Owner")
+                        : env.preferences.t("成员", en: "Member")
                     Text("@\(env.session.session?.user?.username ?? "—") · \(role)")
                         .font(.system(size: 12))
                         .foregroundStyle(AppTheme.secondary)
@@ -404,7 +399,7 @@ struct SettingsView: View {
             // Extended links (tokens/devices/users/tags) — compact rows, not on Android root Me
             settingsMenuCard {
                 menuRow(icon: "iphone", iconTint: AppTheme.accent, iconBg: AppTheme.accentSoft,
-                        title: env.preferences.t("登录设备", en: "Devices", pl: "Urządzenia"), showBorder: false) {
+                        title: env.preferences.t("登录设备", en: "Devices"), showBorder: false) {
                     withAnimation(Motion.chip) { tab = .devices }
                 }
                 menuRow(icon: "key", iconTint: AppTheme.accent, iconBg: AppTheme.accentSoft,
@@ -412,12 +407,12 @@ struct SettingsView: View {
                     withAnimation(Motion.chip) { tab = .tokens }
                 }
                 menuRow(icon: "tag", iconTint: AppTheme.accent, iconBg: AppTheme.accentSoft,
-                        title: env.preferences.t("标签管理", en: "Tags", pl: "Tagi"), showBorder: true) {
+                        title: env.preferences.t("标签管理", en: "Tags"), showBorder: true) {
                     withAnimation(Motion.chip) { tab = .tags }
                 }
                 if env.session.session?.user?.role == "owner" {
                     menuRow(icon: "person.2", iconTint: AppTheme.accent, iconBg: AppTheme.accentSoft,
-                            title: env.preferences.t("用户管理", en: "Users", pl: "Użytkownicy"), showBorder: true) {
+                            title: env.preferences.t("用户管理", en: "Users"), showBorder: true) {
                         withAnimation(Motion.chip) { tab = .users }
                     }
                 }
@@ -434,7 +429,7 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.system(size: 15, weight: .bold))
-                        Text(env.preferences.t("退出登录", en: "Sign out", pl: "Wyloguj się"))
+                        Text(env.preferences.t("退出登录", en: "Sign out"))
                             .font(.system(size: 14, weight: .heavy))
                     }
                     .foregroundStyle(.white)
@@ -458,7 +453,7 @@ struct SettingsView: View {
 
     private var systemContent: some View {
         VStack(spacing: 16) {
-            settingsGroup(title: env.preferences.t("系统信息", en: "System info", pl: "Informacje o systemie"), icon: "info.circle") {
+            settingsGroup(title: env.preferences.t("系统信息", en: "System info"), icon: "info.circle") {
                 Button {
                     UIPasteboard.general.string = systemInfoText
                     copiedSystemInfo = true
@@ -467,8 +462,8 @@ struct SettingsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: copiedSystemInfo ? "checkmark.shield" : "doc.on.doc")
                         Text(copiedSystemInfo
-                            ? env.preferences.t("已复制", en: "Copied", pl: "Skopiowano")
-                            : env.preferences.t("复制信息", en: "Copy info", pl: "Kopiuj informacje"))
+                            ? env.preferences.t("已复制", en: "Copied")
+                            : env.preferences.t("复制信息", en: "Copy info"))
                             .font(.system(size: 14, weight: .bold))
                         Spacer()
                     }
@@ -480,23 +475,23 @@ struct SettingsView: View {
             }
 
             systemInfoGroup(
-                title: env.preferences.t("云端实例", en: "Cloud instance", pl: "Instancja w chmurze"),
-                description: env.preferences.t("当前连接实例的版本与部署环境。", en: "Version and deployment environment for the connected instance.", pl: "Wersja i środowisko wdrożenia połączonej instancji."),
+                title: env.preferences.t("云端实例", en: "Cloud instance"),
+                description: env.preferences.t("当前连接实例的版本与部署环境。", en: "Version and deployment environment for the connected instance."),
                 icon: "cloud",
                 items: cloudSystemInfoItems,
                 notice: clientAheadOfInstanceNotice
             )
 
             systemInfoGroup(
-                title: env.preferences.t("当前客户端", en: "Current client", pl: "Bieżący klient"),
-                description: env.preferences.t("这台设备上的 EdgeEver 应用与运行环境。", en: "The EdgeEver app and runtime environment on this device.", pl: "Aplikacja EdgeEver i środowisko uruchomieniowe na tym urządzeniu."),
+                title: env.preferences.t("当前客户端", en: "Current client"),
+                description: env.preferences.t("这台设备上的 EdgeEver 应用与运行环境。", en: "The EdgeEver app and runtime environment on this device."),
                 icon: "iphone",
                 items: clientSystemInfoItems
             )
 
             systemInfoGroup(
-                title: env.preferences.t("连接与同步", en: "Connection and sync", pl: "Połączenie i synchronizacja"),
-                description: env.preferences.t("实例连接与本地同步队列状态。", en: "Connection and local sync queue status.", pl: "Stan połączenia i lokalnej kolejki synchronizacji."),
+                title: env.preferences.t("连接与同步", en: "Connection and sync"),
+                description: env.preferences.t("实例连接与本地同步队列状态。", en: "Connection and local sync queue status."),
                 icon: "arrow.triangle.2.circlepath",
                 items: connectionSystemInfoItems
             )
@@ -506,7 +501,7 @@ struct SettingsView: View {
             } label: {
                 HStack {
                     Image(systemName: "arrow.clockwise")
-                    Text(env.preferences.t("立即同步", en: "Sync now", pl: "Synchronizuj teraz"))
+                    Text(env.preferences.t("立即同步", en: "Sync now"))
                         .font(.system(size: 14, weight: .bold))
                     if env.isSyncing { ProgressView() }
                 }
@@ -535,8 +530,7 @@ struct SettingsView: View {
         case "zh-CN": return "简体中文"
         case "en-US": return "English"
         case "ja": return "日本語"
-        case "pl": return "Polski"
-        default: return env.preferences.t("跟随系统", en: "System", ja: "システムに合わせる", pl: "Systemowy")
+        default: return env.preferences.t("跟随系统", en: "System", ja: "システムに合わせる")
         }
     }
 
@@ -549,20 +543,17 @@ struct SettingsView: View {
         case "cloudflare-workers":
             return env.preferences.t(
                 "当前客户端版本高于云端实例。可等待每天自动更新，或手动运行 Update deployed EdgeEver 工作流。",
-                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or run the Update deployed EdgeEver workflow.",
-                pl: "Ten klient jest nowszy niż połączona instancja w chmurze. Możesz poczekać na codzienną automatyczną aktualizację instancji lub uruchomić workflow Update deployed EdgeEver."
+                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or run the Update deployed EdgeEver workflow."
             )
         case "self-hosted-bun":
             return env.preferences.t(
                 "当前客户端版本高于云端实例。可等待每天自动更新，或在安装目录执行 ./update.sh（默认 ~/edgeever）。",
-                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or run ./update.sh in the install directory (default ~/edgeever).",
-                pl: "Ten klient jest nowszy niż połączona instancja w chmurze. Możesz poczekać na codzienną automatyczną aktualizację instancji lub uruchomić ./update.sh w katalogu instalacji (domyślnie ~/edgeever)."
+                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or run ./update.sh in the install directory (default ~/edgeever)."
             )
         default:
             return env.preferences.t(
                 "当前客户端版本高于云端实例。可等待每天自动更新，也可手动更新实例。",
-                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or update the instance manually.",
-                pl: "Ten klient jest nowszy niż połączona instancja w chmurze. Możesz poczekać na codzienną automatyczną aktualizację instancji lub zaktualizować ją ręcznie."
+                en: "This client is newer than the connected cloud instance. You can wait for the daily automatic instance update, or update the instance manually."
             )
         }
     }
@@ -598,15 +589,14 @@ struct SettingsView: View {
         let screenWidth = Int(screen.bounds.width.rounded())
         let screenHeight = Int(screen.bounds.height.rounded())
         guard screenWidth > 0, screenHeight > 0, screen.scale > 0 else {
-            return env.preferences.t("未知", en: "Unknown", pl: "Nieznane")
+            return env.preferences.t("未知", en: "Unknown")
         }
         let screenText = "\(screenWidth)×\(screenHeight)"
         let dpr = Self.formatDevicePixelRatio(screen.scale)
         return env.preferences.t(
             "\(screenText) @\(dpr)x",
             en: "\(screenText) @\(dpr)x",
-            ja: "\(screenText) @\(dpr)x",
-            pl: "\(screenText) @\(dpr)x"
+            ja: "\(screenText) @\(dpr)x"
         )
     }
 
@@ -627,32 +617,32 @@ struct SettingsView: View {
             }
         }
         let trimmed = machine.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? env.preferences.t("未知", en: "Unknown", pl: "Nieznane") : trimmed
+        return trimmed.isEmpty ? env.preferences.t("未知", en: "Unknown") : trimmed
     }
 
     private var clientSystemInfoItems: [SystemInfoItem] {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
         let language = env.preferences.localeCode == "system"
-            ? "\(env.preferences.resolvedLocale.identifier) (\(env.preferences.t("跟随系统", en: "Follow system", pl: "Zgodnie z systemem")))"
+            ? "\(env.preferences.resolvedLocale.identifier) (\(env.preferences.t("跟随系统", en: "Follow system")))"
             : env.preferences.resolvedLocale.identifier
         return [
-            SystemInfoItem(label: env.preferences.t("版本", en: "Version", pl: "Wersja"), value: "v\(version)"),
-            SystemInfoItem(label: env.preferences.t("构建", en: "Build", pl: "Kompilacja"), value: build),
-            SystemInfoItem(label: env.preferences.t("客户端", en: "Client", pl: "Klient"), value: env.preferences.t("移动应用", en: "Mobile app", pl: "Aplikacja mobilna")),
-            SystemInfoItem(label: env.preferences.t("系统", en: "System", pl: "Systemowy"), value: "iOS"),
-            SystemInfoItem(label: env.preferences.t("系统版本", en: "System version", pl: "Wersja systemu"), value: UIDevice.current.systemVersion),
+            SystemInfoItem(label: env.preferences.t("版本", en: "Version"), value: "v\(version)"),
+            SystemInfoItem(label: env.preferences.t("构建", en: "Build"), value: build),
+            SystemInfoItem(label: env.preferences.t("客户端", en: "Client"), value: env.preferences.t("移动应用", en: "Mobile app")),
+            SystemInfoItem(label: env.preferences.t("系统", en: "System"), value: "iOS"),
+            SystemInfoItem(label: env.preferences.t("系统版本", en: "System version"), value: UIDevice.current.systemVersion),
             SystemInfoItem(
-                label: env.preferences.t("设备型号", en: "Device model", ja: "機種", pl: "Model urządzenia"),
+                label: env.preferences.t("设备型号", en: "Device model", ja: "機種"),
                 value: currentDeviceModel
             ),
             SystemInfoItem(
-                label: env.preferences.t("屏幕分辨率", en: "Screen resolution", ja: "画面解像度", pl: "Rozdzielczość ekranu"),
+                label: env.preferences.t("屏幕分辨率", en: "Screen resolution", ja: "画面解像度"),
                 value: currentClientDisplaySize
             ),
-            SystemInfoItem(label: env.preferences.t("语言", en: "Language", pl: "Język"), value: language),
-            SystemInfoItem(label: env.preferences.t("时区", en: "Time zone", pl: "Strefa czasowa"), value: TimeZone.current.identifier),
-            SystemInfoItem(label: env.preferences.t("安装形态", en: "Mode", pl: "Tryb"), value: env.preferences.t("原生 SwiftUI 应用", en: "Native SwiftUI app", pl: "Natywna aplikacja SwiftUI")),
+            SystemInfoItem(label: env.preferences.t("语言", en: "Language"), value: language),
+            SystemInfoItem(label: env.preferences.t("时区", en: "Time zone"), value: TimeZone.current.identifier),
+            SystemInfoItem(label: env.preferences.t("安装形态", en: "Mode"), value: env.preferences.t("原生 SwiftUI 应用", en: "Native SwiftUI app")),
         ]
     }
 
@@ -660,38 +650,38 @@ struct SettingsView: View {
         var items: [SystemInfoItem] = []
         if let instanceURL = env.session.session?.baseUrl, !instanceURL.isEmpty {
             items.append(SystemInfoItem(
-                label: env.preferences.t("实例地址", en: "Instance URL", ja: "インスタンス URL", pl: "Adres URL instancji"),
+                label: env.preferences.t("实例地址", en: "Instance URL", ja: "インスタンス URL"),
                 value: instanceURL,
                 localOnly: true
             ))
         }
         items.append(contentsOf: [
             SystemInfoItem(
-                label: env.preferences.t("实例版本", en: "Instance version", pl: "Wersja instancji"),
+                label: env.preferences.t("实例版本", en: "Instance version"),
                 value: instanceVersion.map { "v\($0.replacingOccurrences(of: "^v", with: "", options: .regularExpression))" } ?? unknownSystemInfoValue
             ),
-            SystemInfoItem(label: env.preferences.t("实例构建", en: "Instance build", pl: "Kompilacja instancji"), value: instanceHealth?.build ?? unknownSystemInfoValue),
+            SystemInfoItem(label: env.preferences.t("实例构建", en: "Instance build"), value: instanceHealth?.build ?? unknownSystemInfoValue),
             SystemInfoItem(
-                label: env.preferences.t("实例部署时间", en: "Instance deployment time", ja: "インスタンスのデプロイ時刻", pl: "Czas wdrożenia instancji"),
+                label: env.preferences.t("实例部署时间", en: "Instance deployment time", ja: "インスタンスのデプロイ時刻"),
                 value: deploymentVersionTimeLabel(instanceHealth?.deploymentVersionCreatedAt)
             ),
-            SystemInfoItem(label: env.preferences.t("数据库版本", en: "Database version", pl: "Wersja bazy danych"), value: instanceHealth?.migration ?? unknownSystemInfoValue),
-            SystemInfoItem(label: env.preferences.t("数据库后端", en: "Database backend", pl: "Backend bazy danych"), value: databaseBackendLabel(instanceHealth?.storage?.database)),
-            SystemInfoItem(label: env.preferences.t("新上传对象存储", en: "New upload object storage", pl: "Magazyn obiektów dla nowych przesyłanych plików"), value: objectStorageLabel(instanceHealth)),
+            SystemInfoItem(label: env.preferences.t("数据库版本", en: "Database version"), value: instanceHealth?.migration ?? unknownSystemInfoValue),
+            SystemInfoItem(label: env.preferences.t("数据库后端", en: "Database backend"), value: databaseBackendLabel(instanceHealth?.storage?.database)),
+            SystemInfoItem(label: env.preferences.t("新上传对象存储", en: "New upload object storage"), value: objectStorageLabel(instanceHealth)),
         ])
         if instanceHealth?.objectStorageProvider == "s3" {
             items.append(SystemInfoItem(
-                label: env.preferences.t("已有附件", en: "Existing attachments", pl: "Istniejące załączniki"),
-                value: env.preferences.t("继续从原存储读取", en: "Read from original storage", pl: "Odczyt z pierwotnego magazynu")
+                label: env.preferences.t("已有附件", en: "Existing attachments"),
+                value: env.preferences.t("继续从原存储读取", en: "Read from original storage")
             ))
         }
         items.append(SystemInfoItem(
-            label: env.preferences.t("部署平台", en: "Deployment platform", pl: "Platforma wdrożenia"),
+            label: env.preferences.t("部署平台", en: "Deployment platform"),
             value: deploymentPlatformLabel(instanceHealth?.runtime)
         ))
         if instanceHealth?.runtime == "self-hosted-bun" {
             items.append(SystemInfoItem(
-                label: env.preferences.t("容器镜像来源", en: "Container image source", pl: "Źródło obrazu kontenera"),
+                label: env.preferences.t("容器镜像来源", en: "Container image source"),
                 value: containerImageSourceLabel(instanceHealth?.containerImageSource)
             ))
         }
@@ -703,23 +693,23 @@ struct SettingsView: View {
         let pending = queueItems.filter { $0.status == .pending || $0.status == .syncing }.count
         let failed = queueItems.filter { $0.status == .error || $0.status == .conflict }.count
         let connection = instanceHealth != nil
-            ? env.preferences.t("连接正常", en: "Connected", pl: "Połączono")
+            ? env.preferences.t("连接正常", en: "Connected")
             : instanceDiagnosticsFailed
-                ? env.preferences.t("连接失败", en: "Connection failed", pl: "Błąd połączenia")
-                : env.preferences.t("正在检查", en: "Checking", pl: "Sprawdzanie")
+                ? env.preferences.t("连接失败", en: "Connection failed")
+                : env.preferences.t("正在检查", en: "Checking")
         return [
-            SystemInfoItem(label: env.preferences.t("实例连接", en: "Instance connection", pl: "Połączenie z instancją"), value: connection),
+            SystemInfoItem(label: env.preferences.t("实例连接", en: "Instance connection"), value: connection),
             SystemInfoItem(
-                label: env.preferences.t("健康检查耗时", en: "Health check time", ja: "ヘルスチェック時間", pl: "Czas sprawdzenia stanu"),
+                label: env.preferences.t("健康检查耗时", en: "Health check time", ja: "ヘルスチェック時間"),
                 value: instanceLatencyMilliseconds.map { "\($0) ms" } ?? unknownSystemInfoValue
             ),
-            SystemInfoItem(label: env.preferences.t("待同步", en: "Pending sync", pl: "Oczekuje na synchronizację"), value: String(pending)),
-            SystemInfoItem(label: env.preferences.t("失败或冲突", en: "Failed or conflicted", pl: "Błędy lub konflikty"), value: String(failed)),
+            SystemInfoItem(label: env.preferences.t("待同步", en: "Pending sync"), value: String(pending)),
+            SystemInfoItem(label: env.preferences.t("失败或冲突", en: "Failed or conflicted"), value: String(failed)),
         ]
     }
 
     private var unknownSystemInfoValue: String {
-        env.preferences.t("未知", en: "Unknown", pl: "Nieznane")
+        env.preferences.t("未知", en: "Unknown")
     }
 
     private func deploymentVersionTimeLabel(_ timestamp: String?) -> String {
@@ -745,13 +735,13 @@ struct SettingsView: View {
 
     private func objectStorageLabel(_ health: InstanceHealth?) -> String {
         if health?.objectStorageProvider == "s3" {
-            return env.preferences.t("第三方 S3 兼容 OSS", en: "Third-party S3-compatible OSS", pl: "Zewnętrzny magazyn OSS zgodny z S3")
+            return env.preferences.t("第三方 S3 兼容 OSS", en: "Third-party S3-compatible OSS")
         }
         guard health?.objectStorageProvider == "builtin" else { return unknownSystemInfoValue }
         switch health?.storage?.resources {
-        case "r2": return env.preferences.t("内置 R2", en: "Built-in R2", pl: "Wbudowany R2")
-        case "filesystem": return env.preferences.t("本地文件系统", en: "Local filesystem", pl: "Lokalny system plików")
-        case "s3": return env.preferences.t("实例内置 S3 兼容存储", en: "Instance-provided S3-compatible storage", pl: "Magazyn zgodny z S3 dostarczany przez instancję")
+        case "r2": return env.preferences.t("内置 R2", en: "Built-in R2")
+        case "filesystem": return env.preferences.t("本地文件系统", en: "Local filesystem")
+        case "s3": return env.preferences.t("实例内置 S3 兼容存储", en: "Instance-provided S3-compatible storage")
         default: return unknownSystemInfoValue
         }
     }
@@ -767,8 +757,8 @@ struct SettingsView: View {
     private func containerImageSourceLabel(_ source: String?) -> String {
         switch source {
         case "official-ghcr": return "GitHub Container Registry (GHCR)"
-        case "official-cn-mirror": return env.preferences.t("中国大陆官方镜像", en: "Official mainland China mirror", pl: "Oficjalny mirror dla Chin kontynentalnych")
-        case "custom": return env.preferences.t("自定义镜像", en: "Custom image", pl: "Własny obraz")
+        case "official-cn-mirror": return env.preferences.t("中国大陆官方镜像", en: "Official mainland China mirror")
+        case "custom": return env.preferences.t("自定义镜像", en: "Custom image")
         default: return unknownSystemInfoValue
         }
     }
@@ -780,9 +770,9 @@ struct SettingsView: View {
     private func systemInfoText(includeLocalOnly: Bool) -> String {
         let keep: (SystemInfoItem) -> Bool = includeLocalOnly ? { _ in true } : { !$0.localOnly }
         return [
-            systemInfoTextSection(env.preferences.t("云端实例", en: "Cloud instance", pl: "Instancja w chmurze"), items: cloudSystemInfoItems.filter(keep)),
-            systemInfoTextSection(env.preferences.t("当前客户端", en: "Current client", pl: "Bieżący klient"), items: clientSystemInfoItems.filter(keep)),
-            systemInfoTextSection(env.preferences.t("连接与同步", en: "Connection and sync", pl: "Połączenie i synchronizacja"), items: connectionSystemInfoItems.filter(keep)),
+            systemInfoTextSection(env.preferences.t("云端实例", en: "Cloud instance"), items: cloudSystemInfoItems.filter(keep)),
+            systemInfoTextSection(env.preferences.t("当前客户端", en: "Current client"), items: clientSystemInfoItems.filter(keep)),
+            systemInfoTextSection(env.preferences.t("连接与同步", en: "Connection and sync"), items: connectionSystemInfoItems.filter(keep)),
         ].joined(separator: "\n\n")
     }
 

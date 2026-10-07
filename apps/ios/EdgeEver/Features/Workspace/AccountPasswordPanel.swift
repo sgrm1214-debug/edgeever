@@ -17,13 +17,12 @@ struct AccountPasswordPanel: View {
                     .foregroundStyle(AppTheme.accentStrong)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(env.preferences.t("修改密码", en: "Change password", pl: "Zmień hasło"))
+                    Text(env.preferences.t("修改密码", en: "Change password"))
                         .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(AppTheme.title)
                     Text(env.preferences.t(
                         "修改后会保留当前设备登录，并退出其他设备上的登录会话。",
-                        en: "Keeps this device signed in and signs out other sessions.",
-                        pl: "To urządzenie pozostanie zalogowane, a pozostałe sesje zostaną wylogowane."
+                        en: "Keeps this device signed in and signs out other sessions."
                     ))
                     .font(.system(size: 12))
                     .foregroundStyle(AppTheme.secondary)
@@ -31,9 +30,9 @@ struct AccountPasswordPanel: View {
                 }
             }
 
-            passwordField(env.preferences.t("当前密码", en: "Current password", pl: "Bieżące hasło"), text: $currentPassword)
-            passwordField(env.preferences.t("新密码", en: "New password", pl: "Nowe hasło"), text: $newPassword)
-            passwordField(env.preferences.t("确认新密码", en: "Confirm password", pl: "Potwierdź hasło"), text: $confirmPassword)
+            passwordField(env.preferences.t("当前密码", en: "Current password"), text: $currentPassword)
+            passwordField(env.preferences.t("新密码", en: "New password"), text: $newPassword)
+            passwordField(env.preferences.t("确认新密码", en: "Confirm password"), text: $confirmPassword)
 
             if let message {
                 Text(message)
@@ -45,8 +44,8 @@ struct AccountPasswordPanel: View {
                 Task { await submit() }
             } label: {
                 Text(busy
-                    ? env.preferences.t("正在修改…", en: "Updating…", pl: "Aktualizowanie…")
-                    : env.preferences.t("修改密码", en: "Change password", pl: "Zmień hasło"))
+                    ? env.preferences.t("正在修改…", en: "Updating…")
+                    : env.preferences.t("修改密码", en: "Change password"))
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -91,12 +90,12 @@ struct AccountPasswordPanel: View {
         isError = false
         if newPassword.count < 8 {
             isError = true
-            message = env.preferences.t("新密码至少需要 8 个字符", en: "Password must be at least 8 characters", pl: "Hasło musi mieć co najmniej 8 znaków")
+            message = env.preferences.t("新密码至少需要 8 个字符", en: "Password must be at least 8 characters")
             return
         }
         if newPassword != confirmPassword {
             isError = true
-            message = env.preferences.t("两次输入的新密码不一致", en: "Passwords do not match", pl: "Hasła nie są zgodne")
+            message = env.preferences.t("两次输入的新密码不一致", en: "Passwords do not match")
             return
         }
         busy = true
@@ -111,7 +110,7 @@ struct AccountPasswordPanel: View {
             newPassword = ""
             confirmPassword = ""
             isError = false
-            message = env.preferences.t("密码已修改成功。", en: "Password updated.", pl: "Zaktualizowano hasło.")
+            message = env.preferences.t("密码已修改成功。", en: "Password updated.")
         } catch {
             isError = true
             message = error.localizedDescription

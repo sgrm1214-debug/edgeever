@@ -84,7 +84,6 @@ targets:
           - en
           - zh-Hans
           - ja
-          - pl
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

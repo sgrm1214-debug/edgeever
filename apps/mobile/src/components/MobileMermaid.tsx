@@ -84,7 +84,7 @@ export const MobileMermaidDiagram = ({
   source,
   theme,
 }: {
-  locale: "zh-CN" | "en-US" | "ja" | "pl";
+  locale: "zh-CN" | "en-US" | "ja";
   source: string;
   theme: "light" | "dark";
 }) => {

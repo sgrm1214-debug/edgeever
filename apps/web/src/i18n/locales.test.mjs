@@ -41,11 +41,6 @@ describe("web locale resolution", () => {
     expect(getBrowserLocale()).toBe("ja");
   });
 
-  test("keeps Polish browser languages on the shipped pl locale", () => {
-    setNavigatorLanguages(["pl-PL", "en-US"]);
-    expect(getBrowserLocale()).toBe("pl");
-  });
-
   test("falls unmatched browser languages back to English instead of Chinese", () => {
     setNavigatorLanguages(["fr-FR", "de-DE"]);
     expect(getBrowserLocale()).toBe("en-US");

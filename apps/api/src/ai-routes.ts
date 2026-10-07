@@ -18,7 +18,7 @@ import {
   type AiTone,
 } from "@edgeever/shared";
 import { zValidator } from "@hono/zod-validator";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { AppContext, AppEnv, Bindings } from "./api-context";
 import { AppError } from "./app-error";
 import { auditStatement } from "./audit";

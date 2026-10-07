@@ -1,4 +1,5 @@
 import {
+  clipNotebookId,
   edgeEverFormRequest,
   edgeEverRequest,
   getInstanceOrigin,
@@ -168,7 +169,7 @@ const describeSaveError = (error: unknown) => {
 
 const notebookForClip = async (settings: ExtensionSettings) => {
   const notebooks = await listNotebooks(settings);
-  const notebookId = settings.notebookId || notebooks.notebooks[0]?.id;
+  const notebookId = clipNotebookId(settings.notebookId, notebooks.notebooks);
   if (!notebookId) throw new Error(t("noAvailableNotebooks"));
   return notebookId;
 };
@@ -332,7 +333,7 @@ const persistImage = async (
 ) => {
   try {
     await saveCapturedImageNote(imageNoteClient(settings), {
-      notebookId: settings.notebookId,
+      notebookId: await notebookForClip(settings),
       title: noteTitleForImage(context.pageTitle, context.alt, t("imageNoteFallbackTitle")),
       alt: context.alt,
       filename: filenameForImage(context.srcUrl, image.mimeType),
@@ -693,7 +694,7 @@ const saveTweetFromMenu = async (
       if (stored) images.push(stored);
     }
     await saveCapturedTweetNote(imageNoteClient(settings), {
-      notebookId: settings.notebookId,
+      notebookId: await notebookForClip(settings),
       title: tweetNoteTitle({ ...tweet, fallback: t("tweetNoteFallbackTitle") }),
       displayName: tweet.displayName,
       handle: tweet.handle,
@@ -818,7 +819,7 @@ const saveXhsFromMenu = async (
       if (stored) images.push(stored);
     }
     await saveCapturedXhsNote(imageNoteClient(settings), {
-      notebookId: settings.notebookId,
+      notebookId: await notebookForClip(settings),
       title: xhsNoteTitle({ ...note, fallback: t("xhsNoteFallbackTitle") }),
       nickname: note.nickname,
       noteTitle: note.title,
@@ -924,7 +925,7 @@ const saveLocatedZhihu = async (
   }
   await saveCapturedZhihuNote(imageNoteClient(settings), {
     kind: note.kind,
-    notebookId: settings.notebookId,
+    notebookId: await notebookForClip(settings),
     title: zhihuNoteTitle({
       title: note.title,
       author: note.author,
@@ -1049,7 +1050,7 @@ const saveRedditFromMenu = async (
       if (stored) images.push({ ...stored, url: image.url });
     }
     await saveCapturedRedditPost(imageNoteClient(settings), post, {
-      notebookId: settings.notebookId,
+      notebookId: await notebookForClip(settings),
       sourceLabel: t("sourceLabel"),
       capturedAtLabel: t("capturedAtLabel"),
       timeLabel: t("tweetTimeLabel"),

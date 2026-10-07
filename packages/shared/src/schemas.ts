@@ -250,11 +250,12 @@ export const ObjectStorageConnectionTestSchema = z.object({
 
 export const AiProviderSchema = z.enum(["openai-compatible", "anthropic", "google"]);
 
-const AiBaseUrlSchema = z.string().trim().url().max(500).superRefine((value, context) => {
+const rejectUnsafeAiBaseUrl = (value: string, context: z.RefinementCtx) => {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
+    context.addIssue({ code: "custom", message: "AI Base URL must be a valid URL." });
     return;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -263,7 +264,9 @@ const AiBaseUrlSchema = z.string().trim().url().max(500).superRefine((value, con
   if (url.username || url.password) {
     context.addIssue({ code: "custom", message: "AI Base URL must not contain credentials." });
   }
-});
+};
+
+const AiBaseUrlSchema = z.string().trim().url().max(500).superRefine(rejectUnsafeAiBaseUrl);
 
 const AiProviderConfigFieldsSchema = z.object({
   provider: AiProviderSchema,

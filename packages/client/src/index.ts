@@ -1700,6 +1700,16 @@ export const createEdgeEverClient = (options: EdgeEverClientOptions = {}) => {
       return response.text();
     },
 
+    getCommunityPluginRegistry: async () => {
+      const { context, response } = await send("/api/v1/plugins/community-registry", undefined, { setJsonContentType: false });
+      if (response.status === 404) return null;
+      if (!response.ok) await throwRequestError(context, response, "Community registry request failed");
+      return {
+        bytes: await response.arrayBuffer(),
+        signatureBase64: response.headers.get("x-edgeever-community-registry-signature") ?? "",
+      };
+    },
+
     getGithubPluginRelease: async (owner: string, repository: string, releaseTag: string) => {
       const path = `/api/v1/plugins/github/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/releases/tags/${encodeURIComponent(releaseTag)}`;
       const { context, response } = await send(path, undefined, { setJsonContentType: false });

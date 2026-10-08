@@ -250,6 +250,8 @@ export const ObjectStorageConnectionTestSchema = z.object({
 
 export const AiProviderSchema = z.enum(["openai-compatible", "anthropic", "google"]);
 
+export const AiTranscriptionStandardSchema = z.enum(["openai-compatible"]);
+
 const rejectUnsafeAiBaseUrl = (value: string, context: z.RefinementCtx) => {
   let url: URL;
   try {
@@ -267,6 +269,40 @@ const rejectUnsafeAiBaseUrl = (value: string, context: z.RefinementCtx) => {
 };
 
 const AiBaseUrlSchema = z.string().trim().url().max(500).superRefine(rejectUnsafeAiBaseUrl);
+
+const AiTranscriptionProviderBaseUrlSchema = z.string().trim().min(1).max(500).superRefine((value, context) => {
+  if (!z.string().url().safeParse(value).success) {
+    context.addIssue({ code: "custom", message: "AI Base URL must be a valid URL." });
+    return;
+  }
+  rejectUnsafeAiBaseUrl(value, context);
+});
+
+export const AiTranscriptionProviderCreateSchema = z.object({
+  provider: AiTranscriptionStandardSchema.default("openai-compatible"),
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: AiTranscriptionProviderBaseUrlSchema,
+  apiKey: z.string().trim().min(1).max(4096),
+  isEnabled: z.boolean().default(true),
+  initialModelId: z.string().trim().min(1).max(200).optional(),
+});
+
+export const AiTranscriptionProviderUpdateSchema = z.object({
+  provider: AiTranscriptionStandardSchema.default("openai-compatible"),
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: AiTranscriptionProviderBaseUrlSchema,
+  apiKey: z.string().trim().min(1).max(4096).optional(),
+  isEnabled: z.boolean().default(true),
+});
+
+export const AiTranscriptionModelCreateSchema = z.object({
+  modelId: z.string().trim().min(1).max(200),
+  displayName: z.string().trim().min(1).max(80).optional(),
+});
+
+export const AiTranscriptionDefaultModelUpdateSchema = z.object({
+  modelConfigId: z.string().trim().min(1).nullable(),
+});
 
 const AiProviderConfigFieldsSchema = z.object({
   provider: AiProviderSchema,

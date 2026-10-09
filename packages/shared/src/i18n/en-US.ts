@@ -2015,6 +2015,12 @@ export const enUS = {
     previous: "Previous PDF",
     next: "Next PDF",
   },
+  wordViewer: {
+    loading: "Loading Word preview…",
+    unavailable: "This Word document cannot be previewed. You can still download it or open it externally.",
+    previewTooLarge: "Preview disabled over 10 MiB",
+    previewLabel: "Word preview: {{filename}}",
+  },
   audioPlayer: {
     label: "Audio player: {{filename}}",
     unavailable: "This audio format cannot be played on this device. You can still download it or open it externally.",
@@ -2162,7 +2168,6 @@ export const enUS = {
       theme: "Theme",
       background: "Background",
       themes: {
-        slate: "Classic Light",
         aurora: "Aurora",
         sunset: "Sunset",
         midnight: "Midnight",
@@ -2284,6 +2289,17 @@ export const enUS = {
     expandOutlineHeading: "Expand {{name}}",
   },
   sharing: {
+    managementTitle: "Share management",
+    managementDescription: "See notes currently accessible through public links and manage each share.",
+    managementLoading: "Loading shared notes",
+    managementLoadFailed: "Could not load the latest shares. Check your connection and try again.",
+    managementEmpty: "No notes are currently shared.",
+    viewAll: "View all shares",
+    retry: "Retry",
+    loadMore: "Load more",
+    sharedOn: "Shared {{date}}",
+    passwordProtected: "Password protected",
+    unknownNotebook: "Unknown notebook",
     action: "Share note",
     afterSync: "Share note after sync",
     active: "Shared",

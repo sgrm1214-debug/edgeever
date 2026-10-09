@@ -2015,6 +2015,12 @@ export const zhCN = {
     previous: "上一个 PDF",
     next: "下一个 PDF",
   },
+  wordViewer: {
+    loading: "正在加载 Word 预览…",
+    unavailable: "无法预览此 Word 文档，你仍可下载或在外部打开。",
+    previewTooLarge: "超过 10 MiB，不在笔记内预览",
+    previewLabel: "Word 预览：{{filename}}",
+  },
   audioPlayer: {
     label: "音频播放器：{{filename}}",
     unavailable: "当前设备无法播放此音频格式，你仍可下载或在外部打开。",
@@ -2160,7 +2166,6 @@ export const zhCN = {
       theme: "主题风格",
       background: "背景",
       themes: {
-        slate: "经典浅色",
         aurora: "极光渐变",
         sunset: "暮色晚霞",
         midnight: "暗夜曜石",
@@ -2282,6 +2287,17 @@ export const zhCN = {
     expandOutlineHeading: "展开 {{name}}",
   },
   sharing: {
+    managementTitle: "分享管理",
+    managementDescription: "查看当前仍可通过公开链接访问的笔记，并管理各自的分享设置。",
+    managementLoading: "正在读取分享列表",
+    managementLoadFailed: "无法获取最新分享列表，请检查网络后重试。",
+    managementEmpty: "当前没有正在分享的笔记。",
+    viewAll: "查看全部分享",
+    retry: "重试",
+    loadMore: "加载更多",
+    sharedOn: "分享于 {{date}}",
+    passwordProtected: "已设密码",
+    unknownNotebook: "未知笔记本",
     action: "分享笔记",
     afterSync: "同步后可分享笔记",
     active: "正在分享",

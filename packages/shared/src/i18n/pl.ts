@@ -2015,6 +2015,12 @@ export const pl = {
     previous: "Poprzedni PDF",
     next: "Następny PDF",
   },
+  wordViewer: {
+    loading: "Wczytywanie podglądu Word…",
+    unavailable: "Nie można wyświetlić podglądu tego dokumentu Word. Nadal możesz go pobrać lub otworzyć w innej aplikacji.",
+    previewTooLarge: "Podgląd wyłączony powyżej 10 MiB",
+    previewLabel: "Podgląd Word: {{filename}}",
+  },
   audioPlayer: {
     label: "Odtwarzacz audio: {{filename}}",
     unavailable: "Tego formatu audio nie można odtworzyć na tym urządzeniu. Nadal możesz go pobrać lub otworzyć w innej aplikacji.",
@@ -2162,7 +2168,6 @@ export const pl = {
       theme: "Motyw",
       background: "Tło",
       themes: {
-        slate: "Klasyczny jasny",
         aurora: "Zorza",
         sunset: "Zachód słońca",
         midnight: "Północ",
@@ -2284,6 +2289,17 @@ export const pl = {
     expandOutlineHeading: "Rozwiń {{name}}",
   },
   sharing: {
+    managementTitle: "Zarządzanie udostępnianiem",
+    managementDescription: "Zobacz notatki dostępne przez publiczne linki i zarządzaj ich udostępnianiem.",
+    managementLoading: "Wczytywanie udostępnionych notatek",
+    managementLoadFailed: "Nie udało się pobrać aktualnej listy. Sprawdź połączenie i spróbuj ponownie.",
+    managementEmpty: "Żadna notatka nie jest obecnie udostępniana.",
+    viewAll: "Zobacz wszystkie udostępnienia",
+    retry: "Spróbuj ponownie",
+    loadMore: "Wczytaj więcej",
+    sharedOn: "Udostępniono {{date}}",
+    passwordProtected: "Chroniona hasłem",
+    unknownNotebook: "Nieznany notatnik",
     action: "Udostępnij notatkę",
     afterSync: "Udostępnij notatkę po synchronizacji",
     active: "Udostępniona",

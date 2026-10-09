@@ -1487,6 +1487,15 @@ export const enUS = {
       imageSaveFailed: "The image could not be saved locally. Download it now; it may be lost when you close this page.",
     },
     agentSource: {
+      configure: "Configure models and agents",
+      switchNoteAgentHint: "The selected agent will handle subsequent edits to this infographic.",
+      optionUnavailable: "Unavailable",
+
+      switch: "Switch AI",
+      newAgentThread: "Switching to another agent starts a new chat. Previous chats remain in history.",
+      noModels: "Configure AI models in Settings.",
+      switchUnavailable: "Agent unavailable. Check its connection in Settings.",
+
       title: "Agent mode",
       description: "Use the built-in Agent, or connect to an Agent (ACP) running on this machine.",
       localDisabled: "Requires the desktop app.",

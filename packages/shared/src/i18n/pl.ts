@@ -1487,6 +1487,15 @@ export const pl = {
       imageSaveFailed: "Nie udało się zapisać obrazu lokalnie. Pobierz go teraz — może zostać utracony po zamknięciu tej strony.",
     },
     agentSource: {
+      configure: "Konfiguruj modele i agentów",
+      switchNoteAgentHint: "Wybrany agent obsłuży kolejne zmiany tej infografiki.",
+      optionUnavailable: "Niedostępny",
+
+      switch: "Zmień AI",
+      newAgentThread: "Zmiana na zewnętrznego agenta rozpoczyna nową rozmowę. Poprzednie rozmowy pozostają w historii.",
+      noModels: "Skonfiguruj modele AI w ustawieniach.",
+      switchUnavailable: "Agent jest niedostępny. Sprawdź połączenie w ustawieniach.",
+
       title: "Tryb agenta",
       description: "Użyj wbudowanego agenta lub połącz się z agentem (ACP) działającym na tym komputerze.",
       localDisabled: "Wymaga aplikacji desktopowej.",

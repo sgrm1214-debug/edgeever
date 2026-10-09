@@ -1487,6 +1487,15 @@ export const ja = {
       imageSaveFailed: "画像を端末に保存できませんでした。今すぐダウンロードしてください。ページを閉じると失われる可能性があります。",
     },
     agentSource: {
+      configure: "モデルと Agent を設定",
+      switchNoteAgentHint: "選択した Agent が、このインフォグラフィックの次の編集を処理します。",
+      optionUnavailable: "利用不可",
+
+      switch: "AI を切り替え",
+      newAgentThread: "外部 Agent への切り替えは新しい会話を開始します。以前の会話は履歴に残ります。",
+      noModels: "設定で AI モデルを構成してください。",
+      switchUnavailable: "Agent は利用できません。設定で接続を確認してください。",
+
       title: "エージェントの動作モード",
       description: "内蔵 Agent を使用するか、このマシンで動作する Agent (ACP) に接続します。",
       localDisabled: "デスクトップアプリが必要です。",

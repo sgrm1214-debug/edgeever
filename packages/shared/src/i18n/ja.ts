@@ -1556,6 +1556,7 @@ export const ja = {
       notProbed: "未確認",
       invalidPath: "実行ファイルの絶対パスを入力してください。",
       states: {
+        not_probed: "未確認",
         not_installed: "ACP 接続コンポーネントが見つかりません",
         installing: "ACP 接続コンポーネントを自動インストール中…",
         needs_login: "ログインが必要",

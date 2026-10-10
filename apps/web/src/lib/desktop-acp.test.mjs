@@ -75,3 +75,46 @@ test("agent selection reuses preference keys, preserves the custom path and noti
     else globalThis.window = previousWindow;
   }
 });
+
+test("older desktop hosts expose unchecked connectors as unchecked, not failed", async () => {
+  const { listDesktopAcpAdapters, desktopAcpAutomaticProbeInput } = await import("./desktop-acp.ts");
+  const previousWindow = globalThis.window;
+  const unchecked = { id: "codex", label: "Codex", state: "failed", detail: "not_probed", version: "2.1.1", managed: true };
+  const failed = { id: "hermesAgent", label: "Hermes Agent", state: "failed", detail: "connection_timeout" };
+  globalThis.window = { edgeeverDesktop: { listAcpAdapters: async () => [unchecked, failed] } };
+  try {
+    const listed = await listDesktopAcpAdapters();
+    expect(listed[0]).toEqual({ ...unchecked, state: "not_probed" });
+    expect(listed[1]).toEqual(failed);
+    expect(desktopAcpAutomaticProbeInput(listed[0], "")).toEqual({ id: "codex" });
+    expect(desktopAcpAutomaticProbeInput(listed[1], "")).toEqual({ id: "hermesAgent" });
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("automatic checks skip missing, installing, ready and login-required agents but honor custom Antigravity paths", async () => {
+  const { desktopAcpAutomaticProbeInput } = await import("./desktop-acp.ts");
+  const codex = { id: "codex", label: "Codex" };
+  for (const state of ["not_installed", "installing", "available", "needs_login"]) {
+    expect(desktopAcpAutomaticProbeInput({ ...codex, state }, " /custom/agy ")).toBeNull();
+  }
+  expect(desktopAcpAutomaticProbeInput({ ...codex, state: "not_probed" }, " /custom/agy ")).toEqual({ id: "codex" });
+  const antigravity = { id: "antigravity", label: "Antigravity", state: "not_installed" };
+  expect(desktopAcpAutomaticProbeInput(antigravity, " /custom/agy ")).toEqual({ id: "antigravity", path: "/custom/agy" });
+  expect(desktopAcpAutomaticProbeInput({ ...antigravity, state: "installing" }, "/custom/agy")).toBeNull();
+});
+
+test("the quick selector hides absent connectors while keeping detected agents and custom Antigravity paths", async () => {
+  const { desktopAcpSelectorVisible } = await import("./desktop-acp.ts");
+  const absent = { id: "claudeCode", label: "Claude Code", state: "not_installed" };
+  expect(desktopAcpSelectorVisible(absent, "")).toBe(false);
+  expect(desktopAcpSelectorVisible(absent, "/custom/agy")).toBe(false);
+  for (const state of ["not_probed", "installing", "needs_login", "available", "failed"]) {
+    expect(desktopAcpSelectorVisible({ ...absent, state }, "")).toBe(true);
+  }
+  const custom = { ...absent, id: "antigravity" };
+  expect(desktopAcpSelectorVisible(custom, " /custom/agy ")).toBe(true);
+  expect(desktopAcpSelectorVisible(custom, "  ")).toBe(false);
+});

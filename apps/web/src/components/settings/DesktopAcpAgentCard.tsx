@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bot, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ const desktopBridgeAvailable = () => (
 
 const DesktopAcpAgentCardBody = ({ bridge }: { bridge: boolean }) => {
   const { t } = useTranslation();
+  const instanceId = useId();
   const [source, setSource] = useState<AiSidebarSource>("builtin");
   const [adapterId, setAdapterId] = useState<DesktopAcpAdapterId>("codex");
   const [adapterPath, setAdapterPath] = useState("");
@@ -235,7 +236,7 @@ const DesktopAcpAgentCardBody = ({ bridge }: { bridge: boolean }) => {
                   <input
                     className="mt-0.5"
                     type="radio"
-                    name="edgeever-acp-source"
+                    name={`edgeever-acp-source-${instanceId}`}
                     value={option}
                     checked={checked}
                     disabled={disabled}
@@ -279,7 +280,7 @@ const DesktopAcpAgentCardBody = ({ bridge }: { bridge: boolean }) => {
                     <input
                       className="sr-only"
                       type="radio"
-                      name="edgeever-acp-adapter"
+                      name={`edgeever-acp-adapter-${instanceId}`}
                       value={id}
                       checked={checked}
                       onChange={() => selectAdapter(id)}

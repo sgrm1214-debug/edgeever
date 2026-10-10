@@ -1556,6 +1556,7 @@ export const enUS = {
       notProbed: "Not checked yet",
       invalidPath: "Enter an absolute path to an executable file.",
       states: {
+        not_probed: "Not checked yet",
         not_installed: "ACP connector not found",
         installing: "Installing the ACP connector automatically…",
         needs_login: "Needs login",

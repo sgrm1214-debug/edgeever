@@ -1556,6 +1556,7 @@ export const zhCN = {
       notProbed: "尚未检查",
       invalidPath: "请填写可执行文件的绝对路径。",
       states: {
+        not_probed: "尚未检查",
         not_installed: "未找到 ACP 连接组件",
         installing: "正在自动安装 ACP 连接组件…",
         needs_login: "需要登录",

@@ -1556,6 +1556,7 @@ export const pl = {
       notProbed: "Jeszcze nie sprawdzono",
       invalidPath: "Wpisz bezwzględną ścieżkę do pliku wykonywalnego.",
       states: {
+        not_probed: "Jeszcze nie sprawdzono",
         not_installed: "Nie znaleziono konektora ACP",
         installing: "Automatyczne instalowanie konektora ACP…",
         needs_login: "Wymaga zalogowania",

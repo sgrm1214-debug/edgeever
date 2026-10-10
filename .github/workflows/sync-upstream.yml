@@ -57,8 +57,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install Wrangler
+        run: npm install -g wrangler
       - name: Run D1 remote migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 5b0dc8433c33e625f83beae3ef49aa71
-        run: npx --yes wrangler d1 migrations apply edgeever --remote
+        run: wrangler d1 migrations apply edgeever --remote

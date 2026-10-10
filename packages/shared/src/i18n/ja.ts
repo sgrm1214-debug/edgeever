@@ -795,12 +795,6 @@ export const ja = {
       center: "読みやすさを優先（中央）",
       start: "左揃え",
     },
-    editorContentWidthTitle: "本文の幅",
-    editorContentWidthDescription: "この端末の編集領域だけを変えます。",
-    editorContentWidths: {
-      standard: "標準",
-      wide: "広め",
-    },
     editorBodyFontSizeTitle: "本文の文字サイズ",
     editorBodyLineHeightTitle: "行間",
     accountSyncDescription: "クラウドに同期します。",

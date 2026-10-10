@@ -795,12 +795,6 @@ export const enUS = {
       center: "Optimize readability (centered)",
       start: "Align left",
     },
-    editorContentWidthTitle: "Text width",
-    editorContentWidthDescription: "Changes the editor width on this device only.",
-    editorContentWidths: {
-      standard: "Standard",
-      wide: "Wider",
-    },
     editorBodyFontSizeTitle: "Text size",
     editorBodyLineHeightTitle: "Line height",
     accountSyncDescription: "Syncs to the cloud.",

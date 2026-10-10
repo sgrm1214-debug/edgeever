@@ -795,12 +795,6 @@ export const zhCN = {
       center: "优化可读性（居中）",
       start: "靠左显示",
     },
-    editorContentWidthTitle: "正文宽度",
-    editorContentWidthDescription: "只改变这台设备上的编辑区。",
-    editorContentWidths: {
-      standard: "标准",
-      wide: "较宽",
-    },
     editorBodyFontSizeTitle: "正文字号",
     editorBodyLineHeightTitle: "行高",
     accountSyncDescription: "支持云端同步。",

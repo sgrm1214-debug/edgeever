@@ -795,12 +795,6 @@ export const pl = {
       center: "Optymalna czytelność (wyśrodkowanie)",
       start: "Wyrównaj do lewej",
     },
-    editorContentWidthTitle: "Szerokość tekstu",
-    editorContentWidthDescription: "Zmienia szerokość edytora tylko na tym urządzeniu.",
-    editorContentWidths: {
-      standard: "Standardowa",
-      wide: "Szersza",
-    },
     editorBodyFontSizeTitle: "Rozmiar tekstu",
     editorBodyLineHeightTitle: "Interlinia",
     accountSyncDescription: "Synchronizowane z chmurą.",

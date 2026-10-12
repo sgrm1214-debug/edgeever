@@ -1,14 +1,9 @@
-import { parsePosterDocument, resizePosterDocument, type PosterDocument } from '@edgeever/shared';
+import { parsePosterDocument, type PosterDocument } from '@edgeever/shared';
 import { api, ApiRequestError } from './api';
 
 export async function applyClientPosterTemplate(document: PosterDocument, templateId: string, zh: boolean) {
-  const { buildPosterDesign, posterCopy, templatesFor } = await import('./poster-design/templates');
-  if (!templatesFor(undefined).some(template => template.id === templateId)) throw new Error('Unknown poster template');
-  if (document.elements.some(element => element.locked)) throw new Error('Locked poster elements');
-  const built = await buildPosterDesign({ id: templateId, ...posterCopy(document), width: document.width, height: document.height, zh });
-  const extras = document.elements.filter(element => !element.id.startsWith('design_') && !['heading', 'subtitle', 'accent'].includes(element.id));
-  return { ...built, sourceMemoId: document.sourceMemoId, platformId: document.platformId,
-    elements: [...built.elements, ...resizePosterDocument({ ...document, elements: extras }, document.width, document.height).elements] };
+  const { applyPosterDesign } = await import('./poster-design/templates');
+  return applyPosterDesign(document, templateId, zh);
 }
 
 // One task at a time per workspace window. Database claims serialize all windows

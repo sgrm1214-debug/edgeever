@@ -368,12 +368,16 @@ const MCP_TOOL_DEFINITIONS = [
   },
   {
     name: "create_poster_memo",
-    description: "Create an editable poster note (海报笔记). Use this when asked to generate a poster, not create_memo or update_memo with poster-style prose. Supply concise heading and subtitle; EdgeEver generates valid canvas geometry and encoded source using its built-in templates. Do not inspect other notes or local files to reverse-engineer the poster format. If this tool fails, report the error; never silently substitute an ordinary Markdown note. Use get_poster then update_poster only for subsequent edits.",
+    description: "Create an editable poster note (海报笔记). Use this when asked to generate a poster, not create_memo or update_memo with poster-style prose. First plan the takeaway and content hierarchy. For explanatory topics (industry layouts, knowledge summaries, comparisons or guides), supply 3–6 concise sections with heading/body and choose layout=grid for categories or layout=list for steps. Do not reduce an informative topic to a title and generic subtitle. Use supplied note content when referenced; do not invent statistics, sources or brand relationships. For quotes, slogans or an explicitly minimal cover, omit sections. Choose template deliberately (bold/minimal for technology or business, editorial/quote for literary copy); optional badge/footer require sections. EdgeEver compiles editable elements and fits text to the selected format. Do not inspect other notes or local files to reverse-engineer the poster format. If this tool fails, report the error; never silently substitute an ordinary Markdown note. Use get_poster then update_poster only for subsequent edits.",
     inputSchema: {
       type: "object", required: ["notebookId", "title", "heading"], additionalProperties: false,
       properties: {
         notebookId: { type: "string", minLength: 1 }, title: { type: "string", minLength: 1, maxLength: 160 },
         heading: { type: "string", minLength: 1, maxLength: 80 }, subtitle: { type: "string", maxLength: 240 },
+        layout: { type: "string", enum: ["auto", "grid", "list"], description: "With sections: grid for categories/comparisons, list for ordered steps; auto adapts to canvas aspect ratio." },
+        badge: { type: "string", maxLength: 24, description: "Optional short topic label; requires sections." },
+        footer: { type: "string", maxLength: 100, description: "Optional takeaway or supplied source; requires sections. Never invent attribution." },
+        sections: { type: "array", minItems: 2, maxItems: 6, description: "Main content for informative posters. Each section must convey a distinct useful point, not repeat the subtitle.", items: { type: "object", additionalProperties: false, required: ["heading", "body"], properties: { heading: { type: "string", minLength: 1, maxLength: 32 }, body: { type: "string", minLength: 1, maxLength: 120 } } } },
         template: { type: "string", enum: [...POSTER_TEMPLATES] },
         format: { type: "string", enum: POSTER_FORMATS.map(format => format.id) },
         tags: { type: "array", maxItems: 100, items: { type: "string" } },

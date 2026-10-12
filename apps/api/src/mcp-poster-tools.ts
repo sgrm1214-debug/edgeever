@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createPosterDocument, POSTER_FORMATS, POSTER_TEMPLATES, PosterDocumentSchema, PosterGradientSchema, PosterElementSchema, PosterPaintGradientSchema, resizePosterDocument, PLATFORMS, POSTER_FONTS, POSTER_DESIGN_TEMPLATES, type PosterDocument } from "@edgeever/shared";
 import { AppError } from "./app-error";
+import { layoutPosterContent } from "./poster-content-layout";
 
 const creation = z.object({
   notebookId: z.string().min(1),
@@ -9,6 +10,10 @@ const creation = z.object({
   subtitle: z.string().max(240).default(""),
   template: z.enum(POSTER_TEMPLATES).default("editorial"),
   format: z.enum(["portrait", "square", "wechat", "video", "story"]).default("portrait"),
+  badge: z.string().trim().max(24).default(""),
+  footer: z.string().trim().max(100).default(""),
+  layout: z.enum(["auto", "grid", "list"]).default("auto"),
+  sections: z.array(z.object({ heading: z.string().trim().min(1).max(32), body: z.string().trim().min(1).max(120) }).strict()).min(2).max(6).optional(),
   tags: z.array(z.string()).max(100).optional(),
 }).strict();
 
@@ -21,6 +26,11 @@ export function compilePosterMemo(input: unknown) {
   const document = createPosterDocument(args.heading, args.subtitle, args.template, format.width, format.height);
   document.templateId = args.template;
   document.copy = { title: args.heading, subtitle: args.subtitle, badge: "" };
+  if (args.sections) {
+    layoutPosterContent(document, { ...args, sections: args.sections });
+    return { args, document: PosterDocumentSchema.parse(document) };
+  }
+  if (args.badge || args.footer || args.layout !== "auto") throw new AppError("invalid_params", "Structured layout, badge and footer require sections. Omit them for a headline-only poster.", 400);
   for (const element of document.elements) {
     if (element.type !== "text") continue;
     element.role = element.id === "heading" ? "title" : "subtitle";
@@ -212,6 +222,7 @@ export function posterCapabilities() {
   return {
     templates: POSTER_TEMPLATES.map(id => ({ id, sourceBuilder: "server", imageRenderer: "client" })),
     browserDesignTemplates: POSTER_DESIGN_TEMPLATES.filter(template => template.available).map(template => ({ ...template, renderer: "browser", instruction: "Use request_poster_render with templateId and expectedRevision. This ID is not a server apply_template ID." })),
+    contentLayouts: { layouts: ["auto", "grid", "list"], sections: { min: 2, max: 6, headingMaxLength: 32, bodyMaxLength: 120 }, instruction: "For explanatory posters, plan 3–6 concise sections before creating. Use grid for categories/comparison, list for steps/ranked points. badge and footer are optional. Auto adapts columns to the aspect ratio. Headline-only posters may omit sections." },
     formats: POSTER_FORMATS,
     platforms: PLATFORMS,
     fonts: POSTER_FONTS.map(({ family, zh, en }) => ({ family, zh, en })),

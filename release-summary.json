@@ -1,23 +1,20 @@
 {
-  "version": "1.113.0",
+  "version": "1.114.0",
   "changes": {
     "en-US": [
-      "Let trusted plugins edit diagrams, tables, posters, and infographics with conflict checks that protect newer note changes.",
-      "Harden desktop template previews, resource handling, agent execution, and instance credentials against unsafe content and cross-instance credential exposure. (#546)",
-      "Improve update failure diagnostics so network connection problems are easier to investigate. (#513)",
-      "Refine note reading colors in light and dark modes, combine red and orange into vermilion orange, and keep inline code colors neutral."
+      "Show instance-wide and per-account attachment storage usage in member management, with clearer usage labels. (#553)",
+      "Improve inline code styling and the visibility of editor regions, including formatting copied to WeChat.",
+      "Show safe diagnostics for failed AI companion requests to help identify connection and provider errors. (#555)"
     ],
     "zh-CN": [
-      "受信插件可编辑图表、表格、海报和信息图，并通过冲突检查保护笔记中的较新改动。",
-      "加固桌面模板预览、资源处理、智能体执行及实例凭据边界，降低不安全内容和跨实例凭据泄露风险。（#546）",
-      "完善更新失败诊断，便于排查网络连接问题。（#513）",
-      "优化浅色与深色模式下的正文配色，将红色和橙色合并为朱橙，并统一行内代码的中性配色。"
+      "在成员管理中展示实例及各账号的附件存储占用，并明确已用空间标签。（#553）",
+      "优化行内代码样式和编辑区域辨识度，并改善复制到微信的格式。",
+      "AI 助手请求失败时显示安全的诊断信息，便于定位连接和服务商错误。（#555）"
     ],
     "ja": [
-      "信頼されたプラグインから図、表、ポスター、インフォグラフィックを編集でき、競合チェックで新しい変更を保護します。",
-      "デスクトップのテンプレート表示、リソース処理、エージェント実行、インスタンス認証情報の境界を強化します。",
-      "更新失敗時の診断を改善し、ネットワーク接続の問題を調べやすくしました。",
-      "ライト・ダークモードの本文配色を改善し、赤とオレンジを朱色に統合して、インラインコードを中立色に統一しました。"
+      "メンバー管理でインスタンス全体とアカウント別の添付ファイル使用量を表示し、使用済み容量の表記を明確にしました。",
+      "インラインコードと編集領域の視認性を改善し、WeChatへのコピー書式を調整しました。",
+      "AIアシスタントのリクエスト失敗時に安全な診断情報を表示し、接続やプロバイダーの問題を調べやすくしました。"
     ]
   }
 }

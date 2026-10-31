@@ -525,6 +525,7 @@ export const pl = {
     cloudflareChallenge: "Weryfikacja przeglądarki Cloudflare przechwyciła żądanie API logowania i nie może zostać wykonana na tej stronie. Poproś administratora instancji o dostosowanie reguły WAF Challenge dla logowania.",
     securityPolicyBlocked: "Zasada zabezpieczeń zablokowała żądanie, zanim dotarło do EdgeEver. Poproś administratora instancji o sprawdzenie Cloudflare Security Events, Access, WAF lub reguł odwrotnego serwera proxy.",
     requestForbidden: "Instancja odrzuciła żądanie logowania (HTTP 403). Poproś administratora instancji o sprawdzenie zasad dostępu.",
+    databaseDailyQuotaExceeded: "Wyczerpano dzienny limit bazy danych Cloudflare D1 tej instancji. Limit odnawia się o 00:00 UTC. Administrator może też przejść na płatny plan Workers.",
     instanceServerError: "Instancja jest tymczasowo niedostępna. Spróbuj ponownie później.",
     requestRejected: "Instancja odrzuciła żądanie logowania (HTTP {{status}}). Skontaktuj się z administratorem instancji.",
     invalidInstanceResponse: "To nie jest prawidłowa instancja EdgeEver. Sprawdź adres instancji.",

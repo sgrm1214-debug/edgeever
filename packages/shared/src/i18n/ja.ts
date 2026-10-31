@@ -525,6 +525,7 @@ export const ja = {
     cloudflareChallenge: "Cloudflare のブラウザチャレンジがログイン API を遮断し、このページでは完了できません。インスタンス管理者に、ログイン向けの WAF Challenge ルールの調整を依頼してください。",
     securityPolicyBlocked: "セキュリティポリシーが、リクエストが EdgeEver に届く前に遮断しました。インスタンス管理者に、Cloudflare Security Events、Access、WAF、またはリバースプロキシのルール確認を依頼してください。",
     requestForbidden: "インスタンスがログインリクエストを拒否しました（HTTP 403）。インスタンス管理者にアクセスポリシーの確認を依頼してください。",
+    databaseDailyQuotaExceeded: "インスタンスの Cloudflare D1 の1日のデータベース上限に達しました。UTC 00:00 にリセットされます。管理者は Workers プランをアップグレードすることもできます。",
     instanceServerError: "インスタンスで一時的なエラーが発生しています。しばらくしてから再試行してください。",
     requestRejected: "インスタンスがログインリクエストを拒否しました（HTTP {{status}}）。インスタンス管理者に連絡してください。",
     invalidInstanceResponse: "有効な EdgeEver インスタンスではありません。インスタンスアドレスを確認してください。",

@@ -536,6 +536,7 @@ export const enUS = {
     cloudflareChallenge: "A Cloudflare browser challenge intercepted the login API and cannot run in this page. Ask the instance administrator to adjust the WAF Challenge rule for login.",
     securityPolicyBlocked: "A security policy blocked the request before it reached EdgeEver. Ask the instance administrator to check Cloudflare Security Events, Access, WAF, or reverse-proxy rules.",
     requestForbidden: "The instance rejected the login request (HTTP 403). Ask the instance administrator to check its access policy.",
+    databaseDailyQuotaExceeded: "The instance’s Cloudflare D1 daily database quota is exhausted. It resets at 00:00 UTC. The instance owner can also upgrade the Workers plan.",
     instanceServerError: "The instance is temporarily unavailable. Try again later.",
     requestRejected: "The instance rejected the login request (HTTP {{status}}). Contact the instance administrator.",
     invalidInstanceResponse: "This is not a valid EdgeEver instance. Check the instance address.",

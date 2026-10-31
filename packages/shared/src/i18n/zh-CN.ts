@@ -536,6 +536,7 @@ export const zhCN = {
     cloudflareChallenge: "Cloudflare 人机验证拦截了登录接口，当前页面无法完成该验证。请实例管理员调整针对登录接口的 WAF Challenge 规则。",
     securityPolicyBlocked: "登录请求在到达 EdgeEver 前被安全策略拦截。请实例管理员检查 Cloudflare Security Events、Access、WAF 或反向代理规则。",
     requestForbidden: "实例拒绝了登录请求（HTTP 403）。请实例管理员检查访问策略。",
+    databaseDailyQuotaExceeded: "实例的 Cloudflare D1 当日数据库额度已耗尽，额度每天在北京时间 08:00 重置。实例管理员也可升级 Workers 套餐解除此限制。",
     instanceServerError: "实例暂时出错，请稍后再试。",
     requestRejected: "实例拒绝了登录请求（HTTP {{status}}）。请联系实例管理员。",
     invalidInstanceResponse: "这个地址不是有效的 EdgeEver 实例，请检查实例地址。",

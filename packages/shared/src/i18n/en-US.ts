@@ -1,7 +1,9 @@
+import { noteImportEnUS } from "./note-import";
 import { memoTemplateSeedTranslations } from "../memo-template-seeds";
 
 // Shared by the PWA and native mobile clients.
 export const enUS = {
+  noteImport: noteImportEnUS,
   notebookAppearance: {
     inversion: "Invert",
     invertOff: "Off",
@@ -2170,7 +2172,7 @@ export const enUS = {
     },
     errors: {
       backup_name_invalid: "Enter a valid filename without paths, reserved names or special characters.",
-      backup_name_exists: "A file with this name already exists. Choose another name; the existing file is unchanged.",
+      backup_name_exists: "A file with this name already exists. Try again in a moment; the existing file is unchanged.",
       backup_file_replaced: "The backup file was replaced. No action was taken.",
       backup_configuration_unavailable: "Could not read backup settings or clean private staging. Check the app data folder permissions and restart.",
       backup_too_large: "Encrypted backups are limited to 64 GiB minus 32 bytes. Choose an unencrypted backup for a larger archive.",
@@ -3078,6 +3080,24 @@ export const enUS = {
     publicUpdated: "Updated {{time}}",
     publicUnavailable: "This shared note is unavailable",
     publicUnavailableHint: "The link may be invalid, the owner may have revoked it, or the note may have been deleted.",
+    expiryLabel: "Link expiry",
+    expiryNever: "No expiry",
+    expiry1Day: "1 day",
+    expiry7Days: "7 days",
+    expiry30Days: "30 days",
+    expiryCustom: "Custom date",
+    expiryCustomLabel: "Expiry date",
+    expiryCustomSave: "Set date",
+    expiryInvalid: "Choose a date in the future.",
+    expiresOn: "Expires {{date}}",
+    expiredOn: "Expired {{date}}",
+    expiredNotice: "This link has expired. Visitors see an expiry message instead of the note. Extend it, remove the expiry or revoke sharing.",
+    expiredBadge: "Expired",
+    viewsCount: "Opened {{count}} times",
+    viewsLast: "last on {{date}}",
+    viewsNone: "Not opened yet",
+    publicExpired: "This shared link has expired",
+    publicExpiredHint: "The owner set this link to stop working after a certain date. Ask them for a new link.",
   },
   slashMenu: {
     menu: "Insert menu",

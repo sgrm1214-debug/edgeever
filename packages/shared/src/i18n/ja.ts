@@ -1,7 +1,9 @@
+import { noteImportJa } from "./note-import";
 import { memoTemplateSeedTranslations } from "../memo-template-seeds";
 
 // Shared by the PWA and native mobile clients.
 export const ja = {
+  noteImport: noteImportJa,
   notebookAppearance: {
     inversion: "反転",
     invertOff: "なし",
@@ -2159,7 +2161,7 @@ export const ja = {
     },
     errors: {
       backup_name_invalid: "パス、予約名、特殊文字を含まない有効なファイル名を入力してください。",
-      backup_name_exists: "同名のファイルがあります。別の名前を選んでください。既存のファイルは変更されていません。",
+      backup_name_exists: "同名のファイルがあります。少し待ってから再度バックアップしてください。既存のファイルは変更されていません。",
       backup_file_replaced: "バックアップファイルが置き換えられたため、操作を中止しました。",
       backup_configuration_unavailable: "バックアップ設定の読み取りか一時ファイルの削除に失敗しました。アプリのデータフォルダーの権限を確認し、再起動してください。",
       backup_too_large: "暗号化アーカイブの上限は 64 GiB から 32 バイトを引いたサイズです。より大きい場合は暗号化なしで保存してください。",
@@ -3067,6 +3069,24 @@ export const ja = {
     publicUpdated: "更新 {{time}}",
     publicUnavailable: "この共有ノートは利用できません",
     publicUnavailableHint: "リンクが無効か、所有者が取り消したか、ノートが削除された可能性があります。",
+    expiryLabel: "リンクの有効期限",
+    expiryNever: "無期限",
+    expiry1Day: "1 日",
+    expiry7Days: "7 日",
+    expiry30Days: "30 日",
+    expiryCustom: "日付を指定",
+    expiryCustomLabel: "有効期限の日付",
+    expiryCustomSave: "日付を設定",
+    expiryInvalid: "今日より後の日付を選択してください。",
+    expiresOn: "{{date}} に期限切れ",
+    expiredOn: "{{date}} に期限切れになりました",
+    expiredNotice: "このリンクは期限切れです。閲覧者にはノートではなく期限切れのメッセージが表示されます。期限を延長するか、期限を外すか、共有を取り消してください。",
+    expiredBadge: "期限切れ",
+    viewsCount: "{{count}} 回表示",
+    viewsLast: "最終 {{date}}",
+    viewsNone: "まだ表示されていません",
+    publicExpired: "この共有リンクは期限切れです",
+    publicExpiredHint: "所有者がこのリンクに有効期限を設定しています。新しいリンクを依頼してください。",
   },
   slashMenu: {
     menu: "挿入メニュー",

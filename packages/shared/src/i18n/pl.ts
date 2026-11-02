@@ -1,7 +1,9 @@
+import { noteImportPl } from "./note-import";
 import { memoTemplateSeedTranslations } from "../memo-template-seeds";
 
 // Shared by the PWA and native mobile clients.
 export const pl = {
+  noteImport: noteImportPl,
   notebookAppearance: {
     inversion: "Odwrócenie",
     invertOff: "Wyłączone",
@@ -2159,7 +2161,7 @@ export const pl = {
     },
     errors: {
       backup_name_invalid: "Wpisz prawidłową nazwę pliku bez ścieżek, nazw zastrzeżonych i znaków specjalnych.",
-      backup_name_exists: "Plik o tej nazwie już istnieje. Wybierz inną nazwę; istniejący plik nie został zmieniony.",
+      backup_name_exists: "Plik o tej nazwie już istnieje. Spróbuj ponownie za chwilę; istniejący plik nie został zmieniony.",
       backup_file_replaced: "Plik kopii został zastąpiony. Nie wykonano operacji.",
       backup_configuration_unavailable: "Nie można odczytać ustawień kopii lub usunąć plików tymczasowych. Sprawdź uprawnienia folderu danych aplikacji i uruchom ją ponownie.",
       backup_too_large: "Limit szyfrowanego archiwum wynosi 64 GiB minus 32 bajty. Dla większego pliku wybierz kopię bez szyfrowania.",
@@ -3067,6 +3069,24 @@ export const pl = {
     publicUpdated: "Zaktualizowano: {{time}}",
     publicUnavailable: "Ta udostępniona notatka jest niedostępna",
     publicUnavailableHint: "Link może być nieprawidłowy, właściciel mógł go unieważnić albo notatka mogła zostać usunięta.",
+    expiryLabel: "Ważność linku",
+    expiryNever: "Bez terminu",
+    expiry1Day: "1 dzień",
+    expiry7Days: "7 dni",
+    expiry30Days: "30 dni",
+    expiryCustom: "Własna data",
+    expiryCustomLabel: "Data wygaśnięcia",
+    expiryCustomSave: "Ustaw datę",
+    expiryInvalid: "Wybierz datę w przyszłości.",
+    expiresOn: "Wygasa {{date}}",
+    expiredOn: "Wygasł {{date}}",
+    expiredNotice: "Ten link wygasł. Odwiedzający widzą komunikat o wygaśnięciu zamiast notatki. Przedłuż go, usuń termin albo unieważnij udostępnianie.",
+    expiredBadge: "Wygasł",
+    viewsCount: "Otwarcia: {{count}}",
+    viewsLast: "ostatnio {{date}}",
+    viewsNone: "Jeszcze nie otwarto",
+    publicExpired: "Ten link udostępniania wygasł",
+    publicExpiredHint: "Właściciel ustawił termin ważności tego linku. Poproś go o nowy link.",
   },
   slashMenu: {
     menu: "Menu wstawiania",

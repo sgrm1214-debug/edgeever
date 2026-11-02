@@ -362,3 +362,55 @@ export const api = {
     return session;
   },
 };
+
+/** Freeze destination/authentication for this foreground import, not other callers. */
+export const createNoteImportClient = (signal: AbortSignal, accountId: string | null, isCurrent: () => boolean) => {
+  const baseUrl = getConfiguredDesktopApiBaseUrl();
+  const token = getDesktopSessionToken();
+  let importContext: string | undefined;
+  return createEdgeEverClient({
+    baseUrl,
+    token,
+    fetch: async (url, init) => {
+      if (!isCurrent() || getConfiguredDesktopApiBaseUrl() !== baseUrl || getDesktopSessionToken() !== token) {
+        throw new DOMException("importIdentityChanged", "AbortError");
+      }
+      const headers = new Headers(init?.headers);
+      if (importContext) headers.set("x-edgeever-import-context", importContext);
+      const response = await fetch(url, { ...init, headers, signal: init?.method === "DELETE" ? undefined : signal });
+      if (String(url).split("?")[0].endsWith("/api/v1/imports/capabilities") && response.ok) {
+        const capability = await response.clone().json() as { importContext?: string; accountId?: string | null };
+        if (capability.accountId !== accountId || !capability.importContext) throw new Error("importIdentityChanged");
+        importContext = capability.importContext;
+      }
+      return response;
+    },
+  });
+};
+
+/** Keep an established desktop account usable when its server is unavailable. */
+export const getWorkspaceSession = async (): Promise<AuthSession> => {
+  const baseUrl = getConfiguredDesktopApiBaseUrl();
+  const token = getDesktopSessionToken();
+  try {
+    const session = await api.getSession();
+    if (session.authenticated) await cacheDesktopSession(session);
+    else clearCachedDesktopSession();
+    return session;
+  } catch (error) {
+    const cached = getCachedDesktopSession();
+    // Let the session query finish normally on an explicit rejection instead
+    // of clearing the very query that is resolving it.
+    if (error instanceof ApiRequestError && error.status === 401
+      && baseUrl === getConfiguredDesktopApiBaseUrl() && !getDesktopSessionToken()) {
+      return { authRequired: true, authenticated: false, demoMode: false, user: null };
+    }
+    const unavailable = error instanceof TypeError || error instanceof SyntaxError
+      || (error instanceof ApiRequestError && (error.status >= 500 || error.status === 408 || error.status === 429));
+    if (unavailable && cached?.authenticated && isAuthSession(cached)
+      && baseUrl === getConfiguredDesktopApiBaseUrl() && token === getDesktopSessionToken()) {
+      return cached;
+    }
+    throw error;
+  }
+};

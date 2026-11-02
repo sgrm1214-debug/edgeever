@@ -1,7 +1,9 @@
+import { noteImportRu } from "./note-import";
 import { memoTemplateSeedTranslations } from "../memo-template-seeds";
 
 // Shared by the PWA and native mobile clients.
 export const ru = {
+  noteImport: noteImportRu,
   notebookAppearance: {
     inversion: "Инверсия",
     invertOff: "Выключена",
@@ -2170,7 +2172,7 @@ export const ru = {
     },
     errors: {
       backup_name_invalid: "Введите допустимое имя файла без пути, зарезервированных имён и специальных символов.",
-      backup_name_exists: "Файл с таким именем уже существует. Выберите другое имя; существующий файл не изменён.",
+      backup_name_exists: "Файл с таким именем уже существует. Повторите резервное копирование чуть позже; существующий файл не изменён.",
       backup_file_replaced: "Файл резервной копии был заменён. Действие не выполнено.",
       backup_configuration_unavailable: "Не удалось прочитать настройки или очистить временные файлы. Проверьте права доступа к папке данных приложения и перезапустите его.",
       backup_too_large: "Размер зашифрованной копии ограничен 64 ГиБ минус 32 байта. Для большего архива отключите шифрование.",
@@ -3078,6 +3080,24 @@ export const ru = {
     publicUpdated: "Обновлено {{time}}",
     publicUnavailable: "Общая заметка недоступна",
     publicUnavailableHint: "Ссылка может быть недействительной, владелец мог её отозвать, или заметка удалена.",
+    expiryLabel: "Срок действия ссылки",
+    expiryNever: "Без срока",
+    expiry1Day: "1 день",
+    expiry7Days: "7 дней",
+    expiry30Days: "30 дней",
+    expiryCustom: "Своя дата",
+    expiryCustomLabel: "Дата окончания",
+    expiryCustomSave: "Установить дату",
+    expiryInvalid: "Выберите дату в будущем.",
+    expiresOn: "Действует до {{date}}",
+    expiredOn: "Истекла {{date}}",
+    expiredNotice: "Срок действия ссылки истёк. Посетители видят сообщение об истечении вместо заметки. Продлите срок, снимите ограничение или отзовите доступ.",
+    expiredBadge: "Истекла",
+    viewsCount: "Открытий: {{count}}",
+    viewsLast: "последнее {{date}}",
+    viewsNone: "Ещё не открывали",
+    publicExpired: "Срок действия этой ссылки истёк",
+    publicExpiredHint: "Владелец ограничил срок действия ссылки. Попросите у него новую.",
   },
   slashMenu: {
     menu: "Меню вставки",

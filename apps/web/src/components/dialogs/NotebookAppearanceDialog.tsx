@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bold,
@@ -60,7 +60,6 @@ export const NotebookAppearanceDialog = ({
   const [visibleIconCount, setVisibleIconCount] = useState(40);
   const [iconQuery, setIconQuery] = useState("");
   const [iconOpen, setIconOpen] = useState(false);
-  const iconTriggerRef = useRef<HTMLButtonElement>(null);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const validColor = color === "" || isNotebookColor(color);
@@ -104,7 +103,6 @@ export const NotebookAppearanceDialog = ({
           if (iconOpen) {
             event.preventDefault();
             setIconOpen(false);
-            iconTriggerRef.current?.focus();
           }
         }}
       >
@@ -144,12 +142,11 @@ export const NotebookAppearanceDialog = ({
                         event.preventDefault();
                         event.stopPropagation();
                         setIconOpen(false);
-                        iconTriggerRef.current?.focus();
+                        event.currentTarget.querySelector("button")?.focus();
                       }
                     }}
                   >
                     <button
-                      ref={iconTriggerRef}
                       type="button"
                       aria-label={t("notebookAppearance.icon")}
                       aria-expanded={iconOpen}
@@ -179,10 +176,6 @@ export const NotebookAppearanceDialog = ({
                           <Input
                             autoFocus
                             value={iconQuery}
-                            onKeyDown={(event) => {
-                              // Searching must not submit the appearance form.
-                              if (event.key === "Enter") event.preventDefault();
-                            }}
                             onChange={(event) => {
                               setIconQuery(event.target.value);
                               setVisibleIconCount(40);
@@ -216,9 +209,6 @@ export const NotebookAppearanceDialog = ({
                                 type="button"
                                 role="option"
                                 aria-selected={icon === item.id}
-                                // Safari does not focus clicked buttons; keep the search
-                                // focused until the option's click handler has run.
-                                onMouseDown={(event) => event.preventDefault()}
                                 onClick={() => {
                                   setIcon(item.id);
                                   setIconOpen(false);

@@ -139,7 +139,6 @@ const triggerPayload = (workerTag, repoConnectionUuid, buildTokenUuid) => ({
   branch_excludes: [],
   path_includes: ["*"],
   path_excludes: [
-    "marketing/video/*",
     "apps/site/*",
     "apps/mobile/*",
     "apps/extension/*",

@@ -1504,6 +1504,8 @@ export const es = {
     }
   },
   "plugins": {
+    secureFeaturesUnavailable: "La instalación y la verificación de integridad están disponibles. Los ajustes secretos cifrados y los catálogos comunitarios firmados requieren HTTPS o localhost.",
+    restoreFailed: "No se pudieron restaurar algunos complementos o temas. Revisa los errores e inténtalo de nuevo.",
     "title": "Plugins y temas",
     "developerDocs": "Desarrollo de plugins",
     "manifestUrl": "URL del manifiesto de la extensión",
@@ -4018,6 +4020,7 @@ export const es = {
     "refreshNow": "Recargar ahora",
     "closeNotice": "Cerrar aviso de actualización",
     "sidebarDownloads": "Descargar clientes",
+    clientsAndExtensions: "Clientes y extensiones del navegador",
     "sidebarDownloadsTitle": "Descargar clientes y extensiones de navegador de EdgeEver",
     "sidebarGroupApps": "Apps y clientes",
     "sidebarGroupClippers": "Web Clipper para el navegador",

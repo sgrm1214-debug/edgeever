@@ -1504,6 +1504,8 @@ export const de = {
     }
   },
   "plugins": {
+    secureFeaturesUnavailable: "Plugin-Installation und Integritätsprüfung sind verfügbar. Verschlüsselte geheime Einstellungen und signierte Community-Kataloge erfordern HTTPS oder localhost.",
+    restoreFailed: "Einige Plugins oder Designs konnten nicht wiederhergestellt werden. Prüfe die folgenden Fehler und versuche es erneut.",
     "title": "Plugins und Designs",
     "developerDocs": "Plugin-Entwicklung",
     "manifestUrl": "Manifest-URL der Erweiterung",
@@ -4018,6 +4020,7 @@ export const de = {
     "refreshNow": "Jetzt aktualisieren",
     "closeNotice": "Update-Hinweis schließen",
     "sidebarDownloads": "Clients herunterladen",
+    clientsAndExtensions: "Apps und Browser-Erweiterungen",
     "sidebarDownloadsTitle": "EdgeEver-Clients und Browser-Erweiterungen herunterladen",
     "sidebarGroupApps": "Apps & Clients",
     "sidebarGroupClippers": "Browser Web Clipper",

@@ -1362,6 +1362,7 @@ export const zhCN = {
     },
   },
   plugins: {
+    secureFeaturesUnavailable: "当前可安装插件并校验完整性；加密密钥设置和签名社区目录需要通过 HTTPS 或 localhost 访问。",
     title: "插件与主题",
     developerDocs: "插件开发文档",
     manifestUrl: "扩展 Manifest 地址",
@@ -1369,6 +1370,7 @@ export const zhCN = {
     installSource: "GitHub 仓库或 Manifest 地址",
     sourcePlaceholder: "https://github.com/owner/edgeever-plugin",
     install: "安装",
+    restoreFailed: "部分插件或主题未能恢复，请查看错误原因后重试。",
     installing: "安装中…",
     empty: "这个工作区还没有安装插件或主题。",
     syncDescription: "安装清单会随这个工作区在 Web 和桌面端之间同步。设置和密钥仍只保存在当前设备。",
@@ -3830,6 +3832,7 @@ export const zhCN = {
     refreshNow: "立即刷新",
     closeNotice: "关闭更新通知",
     sidebarDownloads: "下载客户端",
+    clientsAndExtensions: "客户端与浏览器扩展",
     sidebarDownloadsTitle: "下载 EdgeEver 客户端与浏览器插件",
     sidebarGroupApps: "客户端应用",
     sidebarGroupClippers: "浏览器剪藏插件",

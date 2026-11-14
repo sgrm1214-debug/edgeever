@@ -1362,6 +1362,8 @@ export const ru = {
     },
   },
   plugins: {
+    secureFeaturesUnavailable: "Установка плагинов и проверка целостности доступны. Для зашифрованных секретных настроек и подписанных каталогов сообщества требуется HTTPS или localhost.",
+    restoreFailed: "Не удалось восстановить некоторые плагины или темы. Проверьте ошибки ниже и повторите попытку.",
     title: "Плагины и темы",
     developerDocs: "Разработка плагинов",
     manifestUrl: "URL манифеста расширения",
@@ -3831,6 +3833,7 @@ export const ru = {
     refreshNow: "Обновить сейчас",
     closeNotice: "Закрыть уведомление об обновлении",
     sidebarDownloads: "Скачать клиенты",
+    clientsAndExtensions: "Клиенты и расширения браузера",
     sidebarDownloadsTitle: "Скачать клиенты EdgeEver и расширения браузера",
     sidebarGroupApps: "Приложения и клиенты",
     sidebarGroupClippers: "Веб-клиппер",

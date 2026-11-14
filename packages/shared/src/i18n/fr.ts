@@ -1504,6 +1504,8 @@ export const fr = {
     }
   },
   plugins: {
+    secureFeaturesUnavailable: "L’installation et la vérification d’intégrité sont disponibles. Les paramètres secrets chiffrés et les catalogues communautaires signés nécessitent HTTPS ou localhost.",
+    restoreFailed: "Certains plugins ou thèmes n’ont pas pu être restaurés. Consultez les erreurs ci-dessous et réessayez.",
     title: "Plugins et thèmes",
     developerDocs: "Développement de plugins",
     manifestUrl: "URL du manifeste de l'extension",
@@ -4018,6 +4020,7 @@ export const fr = {
     refreshNow: "Actualiser maintenant",
     closeNotice: "Fermer l'avis de mise à jour",
     sidebarDownloads: "Télécharger les applications",
+    clientsAndExtensions: "Applications et extensions de navigateur",
     sidebarDownloadsTitle: "Télécharger les applications EdgeEver et les extensions pour navigateur",
     sidebarGroupApps: "Applications & clients",
     sidebarGroupClippers: "Web Clipper pour navigateur",

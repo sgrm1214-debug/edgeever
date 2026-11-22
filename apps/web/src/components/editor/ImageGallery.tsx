@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { autoUpdate, useFloating } from "@floating-ui/react-dom";
 import {
   NodeViewContent,
@@ -30,30 +30,12 @@ const ImageGalleryNodeView = ({ editor, node, selected, updateAttributes }: Node
   });
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [clicked, setClicked] = useState(false);
-  const active = isEditable && (hovered || focused || clicked);
-  const { refs, floatingStyles, placement, middlewareData, isPositioned } = useFloating<HTMLDivElement>({
+  const active = isEditable && (hovered || focused);
+  const { refs, floatingStyles, placement, middlewareData, isPositioned } = useFloating({
     ...imageGalleryToolbarPosition,
     open: active,
     whileElementsMounted: active ? autoUpdate : undefined,
   });
-  const visible = active && isPositioned && !middlewareData.hide?.referenceHidden;
-
-  useEffect(() => {
-    if (!isEditable) {
-      setClicked(false);
-      return;
-    }
-    const gallery = refs.reference.current;
-    if (!clicked || !gallery) return;
-
-    const dismissOnOutsidePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !gallery.contains(event.target)) setClicked(false);
-    };
-    const ownerDocument = gallery.ownerDocument;
-    ownerDocument.addEventListener("pointerdown", dismissOnOutsidePointerDown, true);
-    return () => ownerDocument.removeEventListener("pointerdown", dismissOnOutsidePointerDown, true);
-  }, [clicked, isEditable, refs.reference]);
 
   const setGalleryAttributes = useCallback((attributes: { layout?: ImageGalleryLayout; fit?: ImageGalleryFit }) => {
     updateAttributes(attributes);
@@ -70,9 +52,6 @@ const ImageGalleryNodeView = ({ editor, node, selected, updateAttributes }: Node
       tabIndex={isEditable ? 0 : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={(event: React.MouseEvent<HTMLDivElement>) => {
-        if (isEditable && event.target instanceof HTMLImageElement) setClicked(true);
-      }}
       onFocusCapture={() => setFocused(true)}
       onBlurCapture={(event: React.FocusEvent<HTMLDivElement>) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
@@ -83,8 +62,7 @@ const ImageGalleryNodeView = ({ editor, node, selected, updateAttributes }: Node
           ref={refs.setFloating}
           className="edgeever-image-gallery__toolbar"
           data-placement={placement}
-          data-visible={visible}
-          style={floatingStyles}
+          style={{ ...floatingStyles, visibility: !isPositioned || middlewareData.hide?.referenceHidden ? "hidden" : undefined }}
           contentEditable={false}
           aria-label={t("editor.imageGallery.toolbar")}
           role="toolbar"
